@@ -1,0 +1,16 @@
+{
+  "name": "korean-auto-translator",
+  "version": "1.0.0",
+  "description": "BetterDiscord plugin that auto-translates non-Korean messages in selected servers to Korean via an AI API",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "deploy": "node scripts/build.mjs --install",
+    "watch": "node scripts/build.mjs --watch --install",
+    "test": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
