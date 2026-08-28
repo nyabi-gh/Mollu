@@ -1,6 +1,5 @@
 import { MASK_PATTERN } from "./tokenizer.js";
-
-const HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
+import { getLanguage } from "../languages.js";
 
 // 호이스팅: needsTranslation() 은 대상 서버 모든 메시지의 매 렌더마다 실행되는데,
 // 호출마다 이 패턴을 재컴파일하는 것이 비용의 대부분이었다.
@@ -19,12 +18,16 @@ export class LanguageDetector {
         const letters = this._letters(text);
         if (letters.length < 2) return false;
 
-        let hangul = 0;
+        const { script } = getLanguage(this._settings.current.targetLanguage);
+        // 라틴 문자 대상 언어는 보내기 전에 구분할 수 없다. 모델에 맡기고,
+        // 원문과 같은 결과가 오면 표시하지 않는 경로로 처리한다.
+        if (!script) return true;
+
+        let inTarget = 0;
         for (const ch of letters) {
-            if (HANGUL.test(ch)) hangul += 1;
+            if (script.test(ch)) inTarget += 1;
         }
-        const ratio = hangul / letters.length;
-        return ratio < this._settings.current.koreanThreshold / 100;
+        return inTarget / letters.length < this._settings.current.skipThreshold / 100;
     }
 
     _letters(text) {

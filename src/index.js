@@ -7,6 +7,7 @@ import { findMessageContent, createStores } from "./discord.js";
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
 import { disconnectVisibility } from "./ui/visibility.js";
+import { t } from "./i18n.js";
 import { logger } from "./lib/logger.js";
 
 export default class Mollu {
@@ -36,18 +37,13 @@ export default class Mollu {
             this._translator.start();
 
             if (!hasNativeFetch()) {
-                this._toast(
-                    "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
-                    "warning",
-                );
+                this._toast(t("toast.outdatedBd"), "warning");
             }
 
             const target = findMessageContent();
             if (!target) {
-                logger.error(
-                    "MessageContent 모듈을 찾지 못했습니다. Discord 내부 구조가 바뀌었을 수 있습니다.",
-                );
-                this._toast("메시지 컴포넌트를 찾지 못했습니다. 콘솔 로그를 확인하세요.", "error");
+                logger.error("MessageContent not found; Discord's internals may have changed");
+                this._toast(t("toast.noMessageContent"), "error");
                 return;
             }
 
@@ -61,15 +57,15 @@ export default class Mollu {
             this._patch.install();
 
             if (!this._settings.current.apiKey) {
-                this._toast("설정에서 DeepSeek API 키를 입력하세요.", "info");
+                this._toast(t("toast.needApiKey"), "info");
             }
             if (this._settings.guildIdSet.size === 0) {
-                this._toast("설정에서 대상 서버 ID를 추가하세요.", "info");
+                this._toast(t("toast.needGuilds"), "info");
             }
 
-            logger.info(`시작됨 · 대상 서버 ${this._settings.guildIdSet.size}개`);
+            logger.info(`started · ${this._settings.guildIdSet.size} target server(s)`);
         } catch (e) {
-            logger.error("start 실패", e);
+            logger.error("start failed", e);
         }
     }
 
@@ -77,7 +73,7 @@ export default class Mollu {
         try {
             this._patch?.remove();
         } catch (e) {
-            logger.error("patch 해제 실패", e);
+            logger.error("unpatch failed", e);
         }
         // 패치는 걸렸는데 _patch 참조를 잃은 경우를 대비한 안전망.
         BdApi.Patcher.unpatchAll(NAME);
@@ -85,7 +81,7 @@ export default class Mollu {
         disconnectVisibility();
         this._translator.stop();
         this._patch = null;
-        logger.info("중지됨");
+        logger.info("stopped");
     }
 
     _notifyError(err) {
@@ -93,7 +89,7 @@ export default class Mollu {
         const now = Date.now();
         if (now - this._lastErrorToast < ERROR_TOAST_COOLDOWN_MS) return;
         this._lastErrorToast = now;
-        this._toast(`번역 실패 · ${(err && err.message) || "unknown"}`, "error");
+        this._toast(t("toast.failed", { message: (err && err.message) || "unknown" }), "error");
     }
 
     _toast(message, type) {

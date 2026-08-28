@@ -8,6 +8,7 @@ import {
     RATE_LIMIT_PAUSE_MS,
     MAX_RATE_LIMIT_PAUSE_MS,
 } from "../constants.js";
+import { t } from "../i18n.js";
 import { logger } from "../lib/logger.js";
 
 /** @typedef {import("./tokenizer.js").Segment} Segment */
@@ -58,9 +59,15 @@ export class Translator {
 
     peek(text) {
         const { masked, tokens } = mask(text);
-        if (this._cache.has(masked)) return this._restore(this._cache.get(masked), tokens);
+        const key = this._cacheKey(masked);
+        if (this._cache.has(key)) return this._restore(this._cache.get(key), tokens);
         if (text.length > this._settings.current.maxChars) return skip();
         return { status: "unknown" };
+    }
+
+    // 같은 원문이라도 대상 언어가 다르면 다른 번역이다.
+    _cacheKey(masked) {
+        return `${this._settings.current.targetLanguage}\u0001${masked}`;
     }
 
     // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
@@ -69,18 +76,19 @@ export class Translator {
     // 이 함수는 절대 reject 하지 않는다.
     translate(text, hooks = {}) {
         const { masked, tokens } = mask(text);
+        const key = this._cacheKey(masked);
 
-        if (this._cache.has(masked)) {
-            return Promise.resolve(this._restore(this._cache.get(masked), tokens));
+        if (this._cache.has(key)) {
+            return Promise.resolve(this._restore(this._cache.get(key), tokens));
         }
         // 캐시하지 않는다. maxChars 에 따라 달라지는 판정이라, 설정을 올리면
         // 다음 렌더에서 통과해야 한다.
         if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
-        if (this._isBackingOff(masked)) {
-            return Promise.resolve(error("최근 실패로 재시도를 미루는 중"));
+        if (this._isBackingOff(key)) {
+            return Promise.resolve(error(t("error.rateLimited")));
         }
 
-        let job = this._inflight.get(masked);
+        let job = this._inflight.get(key);
         if (!job) {
             job = this._queue
                 .run(async () => {
@@ -93,11 +101,11 @@ export class Translator {
                     return this._callProvider(masked);
                 }, hooks.shouldRun)
                 .then(
-                    (raw) => this._resolveSuccess(masked, raw),
-                    (err) => this._resolveFailure(masked, err),
+                    (raw) => this._resolveSuccess(key, masked, raw),
+                    (err) => this._resolveFailure(key, err),
                 )
-                .finally(() => this._inflight.delete(masked));
-            this._inflight.set(masked, job);
+                .finally(() => this._inflight.delete(key));
+            this._inflight.set(key, job);
         }
 
         return job.then((outcome) =>
@@ -144,13 +152,13 @@ export class Translator {
         }
     }
 
-    _resolveSuccess(maskedKey, raw) {
-        const maskedTranslation = stripWrappingQuotes(raw, maskedKey).trim();
-        if (!maskedTranslation || normalize(maskedTranslation) === normalize(maskedKey)) {
-            this._cache.set(maskedKey, null);
+    _resolveSuccess(key, masked, raw) {
+        const maskedTranslation = stripWrappingQuotes(raw, masked).trim();
+        if (!maskedTranslation || normalize(maskedTranslation) === normalize(masked)) {
+            this._cache.set(key, null);
             return skip();
         }
-        this._cache.set(maskedKey, maskedTranslation);
+        this._cache.set(key, maskedTranslation);
         return { status: "done", masked: maskedTranslation };
     }
 
@@ -168,7 +176,7 @@ export class Translator {
         if (err && err.status === 429) {
             const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
             this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
-            logger.warn(`rate limited: ${Math.round(after / 1000)}초 후 재시도`);
+            logger.warn(`rate limited; retrying in ${Math.round(after / 1000)}s`);
             return { status: "retry", after };
         }
 
@@ -189,13 +197,13 @@ export class Translator {
 }
 
 function aborted() {
-    const err = new Error("중지됨");
+    const err = new Error("stopped");
     err.name = "AbortError";
     return err;
 }
 
 function skipped() {
-    const err = new Error("건너뜀");
+    const err = new Error("skipped");
     err.name = "SkippedError";
     return err;
 }

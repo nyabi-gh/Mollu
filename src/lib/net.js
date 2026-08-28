@@ -1,5 +1,6 @@
 import { REQUEST_TIMEOUT_MS } from "../constants.js";
 import { logger } from "./logger.js";
+import { t } from "../i18n.js";
 
 // BdApi.Net.fetch 는 메인 프로세스의 Node http(s) 로 나가므로 렌더러 CSP 를 받지
 // 않고 임의의 API 호스트에 닿는다. 표준 fetch 는 아주 오래된 BD 빌드용 폴백이며
@@ -27,13 +28,13 @@ export function normalizeBaseUrl(raw, fallback = "") {
     try {
         url = new URL(withScheme);
     } catch {
-        throw new Error(`API Base URL이 올바르지 않습니다: ${input}`);
+        throw new Error(t("error.badBaseUrl", { url: input }));
     }
     if (url.protocol !== "https:" && url.protocol !== "http:") {
-        throw new Error(`지원하지 않는 프로토콜입니다: ${url.protocol}`);
+        throw new Error(t("error.badProtocol", { protocol: url.protocol }));
     }
     if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-        throw new Error("http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.");
+        throw new Error(t("error.insecureUrl"));
     }
     return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }

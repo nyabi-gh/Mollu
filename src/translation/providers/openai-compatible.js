@@ -1,13 +1,15 @@
 import { postJson, normalizeBaseUrl } from "../../lib/net.js";
 import { MAX_OUTPUT_TOKENS, OUTPUT_TOKEN_HEADROOM } from "../../constants.js";
-import { SYSTEM_PROMPT } from "../prompt.js";
+import { systemPrompt } from "../prompt.js";
+import { getLanguage } from "../../languages.js";
+import { t } from "../../i18n.js";
 
 // 여기 백엔드는 모두 OpenAI 의 /chat/completions 를 쓴다. 프로바이더 간 차이는
 // 기본값과 extend 로 덧붙이는 벤더 전용 필드뿐이다. 한 벤더가 요구하는 필드가
 // 다른 벤더에서는 400 이 된다.
 export async function chatCompletion({ text, settings, signal, defaults, extend }) {
     const apiKey = String(settings.apiKey || "").trim();
-    if (!apiKey) throw new Error("API 키가 설정되지 않았습니다");
+    if (!apiKey) throw new Error(t("error.noApiKey"));
 
     const base = normalizeBaseUrl(settings.baseUrl, defaults.baseUrl);
     const model = String(settings.model || defaults.model).trim();
@@ -15,7 +17,7 @@ export async function chatCompletion({ text, settings, signal, defaults, extend 
     const body = {
         model,
         messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: systemPrompt(getLanguage(settings.targetLanguage).name) },
             { role: "user", content: text },
         ],
         temperature: 0.2,
@@ -35,7 +37,9 @@ export async function chatCompletion({ text, settings, signal, defaults, extend 
     if (!output) {
         // Gemma 4 는 예산을 전부 <thought> 에 쓰고 번역문을 쓰기 전에 잘린다.
         // 오류로 처리해야 추론 과정이 메시지 목록에 노출되지 않는다.
-        throw new Error(choice?.finish_reason === "length" ? "응답이 추론으로 잘림" : "빈 응답");
+        throw new Error(
+            t(choice?.finish_reason === "length" ? "error.reasoningOnly" : "error.emptyResponse"),
+        );
     }
     return output;
 }

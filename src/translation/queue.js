@@ -22,7 +22,7 @@ export class TaskQueue {
         const dropped = this._pending;
         this._pending = [];
         for (const { reject } of dropped) {
-            const err = new Error("취소됨");
+            const err = new Error("cancelled");
             err.name = "AbortError";
             reject(err);
         }
@@ -33,7 +33,7 @@ export class TaskQueue {
             const { task, resolve, reject, shouldRun } = this._pending.shift();
 
             if (shouldRun && !shouldRun()) {
-                const err = new Error("건너뜀");
+                const err = new Error("skipped");
                 err.name = "SkippedError";
                 reject(err);
                 continue;

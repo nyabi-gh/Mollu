@@ -79,7 +79,7 @@ await checkAsync("queue: clear() rejects waiting tasks instead of hanging", asyn
     assert.equal(await first, "a");
 });
 
-const detector = new LanguageDetector({ current: { koreanThreshold: 30 } });
+const detector = new LanguageDetector({ current: { skipThreshold: 30 } });
 
 check("language detector: english needs translation", () => {
     assert.equal(detector.needsTranslation("Hello everyone, how are you?"), true);
@@ -403,7 +403,7 @@ check("settings: every panel field persists, not just the switches", () => {
         guildIds: "1339590547421007964",
         model: "deepseek-v4-pro",
         baseUrl: "https://api.example.com",
-        koreanThreshold: 55,
+        skipThreshold: 55,
         maxChars: 1200,
         maxConcurrent: 5,
         translateBots: false,
@@ -419,6 +419,81 @@ check("settings: every panel field persists, not just the switches", () => {
     }
 
     assert.deepEqual([...settings.guildIdSet], [edits.guildIds]);
+});
+
+const { setLocale, t } = await import("../src/i18n.js");
+const { getLanguage, LANGUAGE_OPTIONS } = await import("../src/languages.js");
+
+check("i18n: strings switch language and interpolate", () => {
+    setLocale("ko");
+    assert.equal(t("block.pending"), "번역 중…");
+    assert.equal(t("toast.failed", { message: "HTTP 429" }), "번역 실패 · HTTP 429");
+    setLocale("en");
+    assert.equal(t("block.pending"), "Translating…");
+    assert.ok(!/[가-힣]/.test(t("settings.provider.note")), "the English table must not leak Korean");
+    setLocale("xx");
+    assert.equal(t("block.pending"), "Translating…", "an unknown locale falls back to English");
+});
+
+check("i18n: every key exists in both tables", () => {
+    setLocale("en");
+    for (const { value } of LANGUAGE_OPTIONS) assert.ok(value, "language option needs a value");
+    const keys = ["block.pending", "block.error", "block.trigger", "toast.failed", "settings.provider"];
+    for (const key of keys) {
+        setLocale("ko");
+        const ko = t(key);
+        setLocale("en");
+        assert.notEqual(t(key), key, `${key} missing from en`);
+        assert.notEqual(ko, key, `${key} missing from ko`);
+    }
+});
+
+await checkAsync("target language: drives the prompt and the cache key", async () => {
+    const previous = BdApi.Net.fetch;
+    const prompts = [];
+    BdApi.Net.fetch = async (_url, options) => {
+        prompts.push(JSON.parse(options.body).messages[0].content);
+        return new Response(JSON.stringify({ choices: [{ message: { content: "translated" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        settings.current.targetLanguage = "en";
+        const translator = new Translator({ settings });
+        await translator.translate("안녕하세요 여러분");
+        assert.match(prompts[0], /into natural, colloquial English/);
+
+        // Same source, different target: must not reuse the English answer.
+        settings.current.targetLanguage = "ja";
+        assert.equal(translator.peek("안녕하세요 여러분").status, "unknown");
+        await translator.translate("안녕하세요 여러분");
+        assert.match(prompts[1], /into natural, colloquial Japanese/);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("detector: judges against the chosen target language", () => {
+    const settings = { current: { skipThreshold: 30, targetLanguage: "ko" } };
+    const detect = new LanguageDetector(settings);
+
+    assert.equal(detect.needsTranslation("Hello everyone"), true);
+    assert.equal(detect.needsTranslation("안녕하세요 여러분"), false);
+
+    settings.current.targetLanguage = "ja";
+    assert.equal(detect.needsTranslation("こんにちは、元気ですか"), false, "already Japanese");
+    assert.equal(detect.needsTranslation("안녕하세요 여러분"), true, "Korean needs translating now");
+
+    settings.current.targetLanguage = "en";
+    assert.equal(detect.needsTranslation("안녕하세요 여러분"), true);
+    assert.equal(
+        detect.needsTranslation("Hello everyone"),
+        true,
+        "a Latin-script target cannot be pre-filtered, so the model decides",
+    );
+
+    assert.equal(getLanguage("nope").code, "ko", "an unknown code falls back to the default");
 });
 
 check("settings: switching provider swaps defaults and keeps both keys", () => {

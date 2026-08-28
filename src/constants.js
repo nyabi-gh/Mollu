@@ -12,10 +12,14 @@ export const DEFAULT_SETTINGS = Object.freeze({
     model: "deepseek-v4-flash",
     baseUrl: "https://api.deepseek.com",
     guildIds: "",
+    // 번역 결과 언어. languages.js 의 code.
+    targetLanguage: "ko",
+    // "auto" 면 Discord 로캘을 따른다.
+    uiLanguage: "auto",
     // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
     // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
     profiles: {},
-    koreanThreshold: 30,
+    skipThreshold: 30,
     maxChars: 3000,
     maxConcurrent: 3,
     autoTranslate: true,
@@ -27,10 +31,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 export const CACHE_LIMIT = 3000;
 
-// -v2 로 올린 이유: 이전 버전은 토큰이 치환된 번역문을 저장해서, 캐시가 맞으면
-// 다른 메시지의 멘션이나 링크가 표시될 수 있었다.
-export const CACHE_KEY = "cache-v2";
-export const LEGACY_CACHE_KEYS = ["cache"];
+// 캐시 키에는 대상 언어가 들어간다. 언어를 바꾸면 옛 항목은 자연히 무효가 된다.
+// -v2 이전 항목은 토큰이 치환된 번역문을 저장해서 다른 메시지의 멘션이나 링크가
+// 표시될 수 있었으므로 이관하지 않고 버린다.
+export const CACHE_KEY = "cache-v3";
+export const LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
 
 export const ERROR_TOAST_COOLDOWN_MS = 15000;
 

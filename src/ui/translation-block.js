@@ -2,6 +2,7 @@ import { React } from "../discord.js";
 import { renderSegments } from "./rich-text.js";
 import { observeVisibility } from "./visibility.js";
 import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
+import { t } from "../i18n.js";
 
 // 이 시간만큼 실제로 화면에 머문 메시지만 번역한다. 스크롤로 스쳐 지나간
 // 메시지는 요청을 만들지 않는다.
@@ -57,7 +58,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                             rateLimitRetries += 1;
                             dwell = setTimeout(run, res.after + jitter());
                         } else {
-                            setResult({ status: "error", message: "rate limited" });
+                            setResult({ status: "error", message: t("error.rateLimited") });
                         }
                         return;
                     }
@@ -121,6 +122,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stores,
             guildId,
             autoTranslate,
+            badge: settings.current.targetLanguage.toUpperCase(),
             onTrigger: () => triggerRef.current?.(),
         }),
     );
@@ -132,12 +134,13 @@ function jitter() {
     return Math.floor(Math.random() * 2000);
 }
 
-function renderBody(status, result, { showPending, showErrors, stores, guildId, autoTranslate, onTrigger }) {
+function renderBody(status, result, ctx) {
+    const { showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
     if (status === "idle" && !autoTranslate) {
         return React.createElement(
             "button",
             { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
-            "번역",
+            t("block.trigger"),
         );
     }
     if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
@@ -147,7 +150,7 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId, 
             ? React.createElement(
                   "div",
                   { className: "mollu-translation mollu-translation--pending" },
-                  "번역 중…",
+                  t("block.pending"),
               )
             : null;
     }
@@ -156,14 +159,14 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId, 
             ? React.createElement(
                   "div",
                   { className: "mollu-translation mollu-translation--error" },
-                  "번역 실패",
+                  t("block.error"),
               )
             : null;
     }
     return React.createElement(
         "div",
         { className: "mollu-translation" },
-        React.createElement("span", { className: "mollu-translation__badge" }, "KO"),
+        React.createElement("span", { className: "mollu-translation__badge" }, badge),
         React.createElement(
             "span",
             { className: "mollu-translation__text" },

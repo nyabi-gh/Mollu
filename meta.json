@@ -2,6 +2,6 @@
     "name": "Mollu",
     "author": "Nyabi",
     "version": "1.0.0",
-    "description": "지정한 서버에서 한국어가 아닌 메시지를 AI API로 자동 번역해 원문 아래에 표시합니다.",
+    "description": "Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.",
     "source": "https://github.com/Nyabi/mollu"
 }

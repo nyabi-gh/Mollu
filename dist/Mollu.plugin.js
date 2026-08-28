@@ -2,7 +2,7 @@
  * @name Mollu
  * @author Nyabi
  * @version 1.0.0
- * @description 지정한 서버에서 한국어가 아닌 메시지를 AI API로 자동 번역해 원문 아래에 표시합니다.
+ * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/Nyabi/mollu
  */
 
@@ -40,10 +40,14 @@ var DEFAULT_SETTINGS = Object.freeze({
   model: "deepseek-v4-flash",
   baseUrl: "https://api.deepseek.com",
   guildIds: "",
+  // 번역 결과 언어. languages.js 의 code.
+  targetLanguage: "ko",
+  // "auto" 면 Discord 로캘을 따른다.
+  uiLanguage: "auto",
   // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
   // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
   profiles: {},
-  koreanThreshold: 30,
+  skipThreshold: 30,
   maxChars: 3e3,
   maxConcurrent: 3,
   autoTranslate: true,
@@ -53,8 +57,8 @@ var DEFAULT_SETTINGS = Object.freeze({
   showErrors: false
 });
 var CACHE_LIMIT = 3e3;
-var CACHE_KEY = "cache-v2";
-var LEGACY_CACHE_KEYS = ["cache"];
+var CACHE_KEY = "cache-v3";
+var LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
 var ERROR_TOAST_COOLDOWN_MS = 15e3;
 var REQUEST_TIMEOUT_MS = 3e4;
 var RATE_LIMIT_PAUSE_MS = 2e4;
@@ -89,6 +93,125 @@ var logger = {
   error: (...args) => call("error", args)
 };
 
+// src/i18n.js
+var STRINGS = {
+  en: {
+    "block.pending": "Translating…",
+    "block.error": "Translation failed",
+    "block.trigger": "Translate",
+    "toast.outdatedBd": "BetterDiscord is out of date; API requests may be blocked. Please update.",
+    "toast.noMessageContent": "Could not find the message component. Check the console log.",
+    "toast.needApiKey": "Enter an API key in the settings.",
+    "toast.needGuilds": "Add at least one target server id in the settings.",
+    "toast.failed": "Translation failed · {message}",
+    "error.noApiKey": "No API key configured",
+    "error.emptyResponse": "Empty response",
+    "error.reasoningOnly": "Response was cut off while the model was still reasoning",
+    "error.badBaseUrl": "API Base URL is not valid: {url}",
+    "error.badProtocol": "Unsupported protocol: {protocol}",
+    "error.insecureUrl": "An http:// address sends the API key in the clear. Use https://.",
+    "error.rateLimited": "Rate limited; retry delayed",
+    "settings.provider": "Translation backend",
+    "settings.provider.note": "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately. The fields below only refresh after you close and reopen this panel.",
+    "settings.apiKey": "{provider} API key",
+    "settings.apiKey.note": "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
+    "settings.apiKey.saved": "saved · {fingerprint}",
+    "settings.model": "Model",
+    "settings.baseUrl": "API base URL",
+    "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
+    "settings.guildIds": "Target server ids",
+    "settings.guildIds.note": "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
+    "settings.targetLanguage": "Translate into",
+    "settings.targetLanguage.note": "Messages not already in this language are translated into it. Languages written in the Latin alphabet cannot be told apart before sending, so every message is sent once and skipped if it comes back unchanged.",
+    "settings.uiLanguage": "Plugin language",
+    "settings.uiLanguage.note": "Language of this panel and the plugin's own messages.",
+    "settings.threshold": "Treat as already translated above",
+    "settings.threshold.note": "A message is skipped when this share of its letters is already in the target language's script.",
+    "settings.maxChars": "Maximum characters to translate",
+    "settings.maxChars.note": "Longer messages are skipped.",
+    "settings.maxConcurrent": "Concurrent requests",
+    "settings.autoTranslate": "Automatic translation",
+    "settings.autoTranslate.note": "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
+    "settings.translateBots": "Translate bot messages",
+    "settings.translateOwnMessages": "Translate my own messages",
+    "settings.showPending": "Show while translating",
+    "settings.showErrors": "Show translation failures",
+    "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
+    "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
+    "modelHint.deepseek": "e.g. deepseek-v4-flash (cheap), deepseek-v4-pro (higher quality)",
+    "modelHint.gemini": "e.g. gemini-3.1-flash-lite (default, ~1s). gemma-4-* reasons and cannot be told not to, so it takes 9-12s and returns its reasoning instead of a translation.",
+    "language.auto": "Match Discord"
+  },
+  ko: {
+    "block.pending": "번역 중…",
+    "block.error": "번역 실패",
+    "block.trigger": "번역",
+    "toast.outdatedBd": "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
+    "toast.noMessageContent": "메시지 컴포넌트를 찾지 못했습니다. 콘솔 로그를 확인하세요.",
+    "toast.needApiKey": "설정에서 API 키를 입력하세요.",
+    "toast.needGuilds": "설정에서 대상 서버 ID를 추가하세요.",
+    "toast.failed": "번역 실패 · {message}",
+    "error.noApiKey": "API 키가 설정되지 않았습니다",
+    "error.emptyResponse": "빈 응답",
+    "error.reasoningOnly": "모델이 추론하는 도중에 응답이 잘렸습니다",
+    "error.badBaseUrl": "API Base URL이 올바르지 않습니다: {url}",
+    "error.badProtocol": "지원하지 않는 프로토콜입니다: {protocol}",
+    "error.insecureUrl": "http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.",
+    "error.rateLimited": "한도 초과로 재시도를 미루는 중",
+    "settings.provider": "번역 백엔드",
+    "settings.provider.note": "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+    "settings.apiKey": "{provider} API 키",
+    "settings.apiKey.note": "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
+    "settings.apiKey.saved": "저장됨 · {fingerprint}",
+    "settings.model": "모델 이름",
+    "settings.baseUrl": "API Base URL",
+    "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
+    "settings.guildIds": "대상 서버 ID",
+    "settings.guildIds.note": "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+    "settings.targetLanguage": "번역할 언어",
+    "settings.targetLanguage.note": "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어끼리는 보내기 전에 구분할 수 없어, 메시지마다 한 번은 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
+    "settings.uiLanguage": "플러그인 언어",
+    "settings.uiLanguage.note": "이 설정 패널과 플러그인 표시 문구의 언어입니다.",
+    "settings.threshold": "번역 생략 기준 비율",
+    "settings.threshold.note": "메시지의 글자 중 이 비율 이상이 대상 언어 문자면 번역하지 않습니다.",
+    "settings.maxChars": "번역할 최대 글자 수",
+    "settings.maxChars.note": "이보다 긴 메시지는 건너뜁니다.",
+    "settings.maxConcurrent": "동시 번역 요청 수",
+    "settings.autoTranslate": "자동 번역",
+    "settings.autoTranslate.note": "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+    "settings.translateBots": "봇 메시지도 번역",
+    "settings.translateOwnMessages": "내 메시지도 번역",
+    "settings.showPending": "번역 중 표시",
+    "settings.showErrors": "번역 실패 시 표시",
+    "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
+    "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+    "modelHint.deepseek": "예: deepseek-v4-flash(저렴), deepseek-v4-pro(고품질)",
+    "modelHint.gemini": "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
+    "language.auto": "Discord 설정에 맞춤"
+  }
+};
+var UI_LANGUAGES = ["en", "ko"];
+var active = "en";
+function setLocale(preference) {
+  const wanted = preference === "auto" || !preference ? detect() : preference;
+  active = STRINGS[wanted] ? wanted : "en";
+}
+function t(key, vars) {
+  const table = STRINGS[active] || STRINGS.en;
+  const template = table[key] ?? STRINGS.en[key] ?? key;
+  if (!vars) return template;
+  return template.replace(/\{(\w+)\}/g, (whole, name) => name in vars ? String(vars[name]) : whole);
+}
+function detect() {
+  try {
+    const tag = typeof navigator !== "undefined" && navigator.language;
+    return tag ? String(tag).split("-")[0].toLowerCase() : "en";
+  } catch {
+    return "en";
+  }
+}
+setLocale("auto");
+
 // src/lib/net.js
 function resolveFetch() {
   if (typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function") {
@@ -107,13 +230,13 @@ function normalizeBaseUrl(raw, fallback = "") {
   try {
     url = new URL(withScheme);
   } catch {
-    throw new Error(`API Base URL이 올바르지 않습니다: ${input}`);
+    throw new Error(t("error.badBaseUrl", { url: input }));
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(`지원하지 않는 프로토콜입니다: ${url.protocol}`);
+    throw new Error(t("error.badProtocol", { protocol: url.protocol }));
   }
   if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error("http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.");
+    throw new Error(t("error.insecureUrl"));
   }
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
@@ -164,28 +287,67 @@ async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIM
 }
 
 // src/translation/prompt.js
-var SYSTEM_PROMPT = [
-  "You are a translation engine embedded in a Discord chat client.",
-  "Translate the user's message into natural, colloquial Korean (한국어).",
-  "",
-  "Rules:",
-  "- Output ONLY the translated text. No explanations, no notes, no surrounding quotes, no romanization.",
-  "- Preserve Markdown (*, _, ~~, `, #, >, lists), emoji, line breaks and spacing exactly as in the source.",
-  "- Tokens shaped like 【0】 or 【1】 are placeholders. Copy each one verbatim, keep it in the same position, and never translate or renumber it.",
-  "- Keep the register of the source: casual stays casual, formal stays formal. Render internet slang naturally in Korean.",
-  "- If the message is already written in Korean, return it unchanged."
-].join("\n");
+function systemPrompt(languageName) {
+  return [
+    "You are a translation engine embedded in a Discord chat client.",
+    `Translate the user's message into natural, colloquial ${languageName}.`,
+    "",
+    "Rules:",
+    "- Output ONLY the translated text. No explanations, no notes, no surrounding quotes, no romanization.",
+    "- Preserve Markdown (*, _, ~~, `, #, >, lists), emoji, line breaks and spacing exactly as in the source.",
+    "- Tokens shaped like 【0】 or 【1】 are placeholders. Copy each one verbatim, keep it in the same position, and never translate or renumber it.",
+    "- Keep the register of the source: casual stays casual, formal stays formal. Render internet slang naturally.",
+    `- If the message is already written in ${languageName}, return it unchanged.`
+  ].join("\n");
+}
+
+// src/languages.js
+var HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
+var KANA = /[぀-ヿㇰ-ㇿｦ-ﾝ]/;
+var HAN = /[㐀-䶿一-鿿豈-﫿]/;
+var CYRILLIC = /[Ѐ-ӿԀ-ԯ]/;
+var ARABIC = /[؀-ۿݐ-ݿ]/;
+var THAI = /[฀-๿]/;
+var DEVANAGARI = /[ऀ-ॿ]/;
+var LANGUAGES = [
+  { code: "ko", label: "한국어 (Korean)", name: "Korean", script: HANGUL },
+  { code: "en", label: "English", name: "English", script: null },
+  { code: "ja", label: "日本語 (Japanese)", name: "Japanese", script: combine(KANA, HAN) },
+  { code: "zh", label: "中文 (Chinese)", name: "Simplified Chinese", script: HAN },
+  { code: "es", label: "Español (Spanish)", name: "Spanish", script: null },
+  { code: "fr", label: "Français (French)", name: "French", script: null },
+  { code: "de", label: "Deutsch (German)", name: "German", script: null },
+  { code: "pt", label: "Português (Portuguese)", name: "Portuguese", script: null },
+  { code: "ru", label: "Русский (Russian)", name: "Russian", script: CYRILLIC },
+  { code: "vi", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese", script: null },
+  { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI },
+  { code: "id", label: "Bahasa Indonesia", name: "Indonesian", script: null },
+  { code: "ar", label: "العربية (Arabic)", name: "Arabic", script: ARABIC },
+  { code: "hi", label: "हिन्दी (Hindi)", name: "Hindi", script: DEVANAGARI }
+];
+var DEFAULT_LANGUAGE = "ko";
+var BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));
+function getLanguage(code) {
+  return BY_CODE.get(code) || BY_CODE.get(DEFAULT_LANGUAGE);
+}
+var LANGUAGE_OPTIONS = LANGUAGES.map((language) => ({
+  label: language.label,
+  value: language.code
+}));
+function combine(...patterns) {
+  return new RegExp(patterns.map((pattern) => pattern.source).join("|"));
+}
 
 // src/translation/providers/openai-compatible.js
 async function chatCompletion({ text, settings, signal, defaults: defaults3, extend: extend3 }) {
   const apiKey = String(settings.apiKey || "").trim();
-  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다");
+  if (!apiKey) throw new Error(t("error.noApiKey"));
   const base = normalizeBaseUrl(settings.baseUrl, defaults3.baseUrl);
   const model = String(settings.model || defaults3.model).trim();
   const body = {
     model,
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt(getLanguage(settings.targetLanguage).name) },
       { role: "user", content: text }
     ],
     temperature: 0.2,
@@ -201,7 +363,9 @@ async function chatCompletion({ text, settings, signal, defaults: defaults3, ext
   const choice = json?.choices?.[0];
   const output = stripReasoning(choice?.message?.content);
   if (!output) {
-    throw new Error(choice?.finish_reason === "length" ? "응답이 추론으로 잘림" : "빈 응답");
+    throw new Error(
+      t(choice?.finish_reason === "length" ? "error.reasoningOnly" : "error.emptyResponse")
+    );
   }
   return output;
 }
@@ -282,6 +446,7 @@ var Settings = class {
     this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
     this._guildIdSet = parseGuildIds(this._values.guildIds);
     this._listeners = /* @__PURE__ */ new Set();
+    setLocale(this._values.uiLanguage);
     if (!BdApi.Data.load(NAME, "settings")) this._persist();
   }
   get current() {
@@ -306,6 +471,7 @@ var Settings = class {
       if (CREDENTIAL_FIELDS.has(id3)) this._stashProfile();
     }
     if (id3 === "guildIds") this._guildIdSet = parseGuildIds(next);
+    if (id3 === "uiLanguage") setLocale(next);
     this._persist();
     for (const listener of this._listeners) {
       try {
@@ -330,7 +496,7 @@ var Settings = class {
     try {
       BdApi.Data.save(NAME, "settings", { ...this._values });
     } catch (e) {
-      logger.error("설정 저장 실패", e);
+      logger.error("failed to save settings", e);
     }
   }
   buildPanel() {
@@ -346,48 +512,67 @@ var Settings = class {
         {
           type: "dropdown",
           id: "provider",
-          name: "번역 백엔드",
-          note: "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억하므로 되돌아와도 다시 입력할 필요가 없습니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+          name: t("settings.provider"),
+          note: t("settings.provider.note"),
           value: v.provider,
           options: PROVIDER_OPTIONS
         },
         {
           type: "text",
           id: "apiKey",
-          name: `${getProvider(v.provider).label} API 키`,
+          name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
           // 저장된 키는 렌더하지 않는다. BD 텍스트 입력에는 마스킹
           // 모드가 없고, 화면 공유 중 이 패널은 실제 노출 위험이다.
-          note: v.apiKey ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.` : KEY_SOURCE[v.provider] || "제공사 콘솔에서 API 키를 발급하세요.",
-          placeholder: v.apiKey ? `저장됨 · ${fingerprint(v.apiKey)}` : "sk-...",
+          note: v.apiKey ? t("settings.apiKey.note", { clear: CLEAR_TOKEN }) : t(`keySource.${v.provider}`),
+          placeholder: v.apiKey ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) }) : "sk-...",
           value: ""
+        },
+        {
+          type: "dropdown",
+          id: "targetLanguage",
+          name: t("settings.targetLanguage"),
+          note: t("settings.targetLanguage.note"),
+          value: v.targetLanguage,
+          options: LANGUAGE_OPTIONS
         },
         {
           type: "text",
           id: "model",
-          name: "모델 이름",
-          note: MODEL_HINT[v.provider] || "OpenAI 호환 모델 이름",
+          name: t("settings.model"),
+          note: t(`modelHint.${v.provider}`),
           value: v.model
         },
         {
           type: "text",
           id: "baseUrl",
-          name: "API Base URL",
-          note: "OpenAI 호환 엔드포인트. 보통 그대로 둡니다.",
+          name: t("settings.baseUrl"),
+          note: t("settings.baseUrl.note"),
           value: v.baseUrl
         },
         {
           type: "text",
           id: "guildIds",
-          name: "대상 서버 ID",
-          note: "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+          name: t("settings.guildIds"),
+          note: t("settings.guildIds.note"),
           value: v.guildIds
         },
         {
+          type: "dropdown",
+          id: "uiLanguage",
+          name: t("settings.uiLanguage"),
+          note: t("settings.uiLanguage.note"),
+          value: v.uiLanguage,
+          options: [
+            { label: t("language.auto"), value: "auto" },
+            ...UI_LANGUAGES.map((code) => ({ label: code.toUpperCase(), value: code }))
+          ]
+        },
+        {
           type: "slider",
-          id: "koreanThreshold",
-          name: "한국어로 간주할 한글 비율",
-          note: "메시지의 글자 중 한글 비율이 이 값 이상이면 번역하지 않습니다.",
-          value: v.koreanThreshold,
+          id: "skipThreshold",
+          name: t("settings.threshold"),
+          note: t("settings.threshold.note"),
+          value: v.skipThreshold,
           min: 5,
           max: 95,
           step: 5,
@@ -397,8 +582,8 @@ var Settings = class {
         {
           type: "number",
           id: "maxChars",
-          name: "번역할 최대 글자 수",
-          note: "이보다 긴 메시지는 건너뜁니다.",
+          name: t("settings.maxChars"),
+          note: t("settings.maxChars.note"),
           value: v.maxChars,
           min: 200,
           max: 8e3,
@@ -407,7 +592,7 @@ var Settings = class {
         {
           type: "number",
           id: "maxConcurrent",
-          name: "동시 번역 요청 수",
+          name: t("settings.maxConcurrent"),
           value: v.maxConcurrent,
           min: 1,
           max: 10
@@ -415,32 +600,32 @@ var Settings = class {
         {
           type: "switch",
           id: "autoTranslate",
-          name: "자동 번역",
-          note: "끄면 수동 모드가 됩니다. 번역 대상 메시지 아래에 '번역' 버튼만 나오고, 누른 것만 API 로 보냅니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+          name: t("settings.autoTranslate"),
+          note: t("settings.autoTranslate.note"),
           value: v.autoTranslate
         },
         {
           type: "switch",
           id: "translateBots",
-          name: "봇 메시지도 번역",
+          name: t("settings.translateBots"),
           value: v.translateBots
         },
         {
           type: "switch",
           id: "translateOwnMessages",
-          name: "내 메시지도 번역",
+          name: t("settings.translateOwnMessages"),
           value: v.translateOwnMessages
         },
         {
           type: "switch",
           id: "showPending",
-          name: "번역 중 표시",
+          name: t("settings.showPending"),
           value: v.showPending
         },
         {
           type: "switch",
           id: "showErrors",
-          name: "번역 실패 시 표시",
+          name: t("settings.showErrors"),
           value: v.showErrors
         }
       ])
@@ -455,19 +640,15 @@ function withChangeHandlers(settings, items) {
 }
 var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
 var CREDENTIAL_FIELDS = /* @__PURE__ */ new Set(["apiKey", "model", "baseUrl"]);
-var KEY_SOURCE = {
-  deepseek: "platform.deepseek.com → API Keys 에서 발급합니다.",
-  gemini: "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다."
-};
-var MODEL_HINT = {
-  deepseek: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
-  gemini: "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다."
-};
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");
 function normalize(values) {
   for (const field of TRIMMED_FIELDS) {
     if (typeof values[field] === "string") values[field] = values[field].trim();
+  }
+  if (typeof values.koreanThreshold === "number") {
+    values.skipThreshold = values.koreanThreshold;
+    delete values.koreanThreshold;
   }
   return values;
 }
@@ -484,10 +665,10 @@ function fingerprint(key) {
 function safeLoad() {
   try {
     const loaded = BdApi.Data.load(NAME, "settings") || loadLegacy();
-    logger.info("설정 로드:", loaded ? `apiKey=${!!loaded.apiKey}` : "저장된 값 없음");
+    logger.info("settings loaded:", loaded ? `apiKey=${!!loaded.apiKey}` : "none stored");
     return loaded || {};
   } catch (e) {
-    logger.error("설정 로드 실패", e);
+    logger.error("failed to load settings", e);
     return {};
   }
 }
@@ -495,7 +676,7 @@ function loadLegacy() {
   for (const legacy of LEGACY_NAMES) {
     const stored = BdApi.Data.load(legacy, "settings");
     if (stored) {
-      logger.info(`이전 이름(${legacy})의 설정을 가져왔습니다`);
+      logger.info(`carried settings over from "${legacy}"`);
       return stored;
     }
   }
@@ -656,7 +837,7 @@ var TaskQueue = class {
     const dropped = this._pending;
     this._pending = [];
     for (const { reject } of dropped) {
-      const err = new Error("취소됨");
+      const err = new Error("cancelled");
       err.name = "AbortError";
       reject(err);
     }
@@ -665,7 +846,7 @@ var TaskQueue = class {
     while (this._active < Math.max(1, this._limit() | 0) && this._pending.length > 0) {
       const { task, resolve, reject, shouldRun } = this._pending.shift();
       if (shouldRun && !shouldRun()) {
-        const err = new Error("건너뜀");
+        const err = new Error("skipped");
         err.name = "SkippedError";
         reject(err);
         continue;
@@ -717,9 +898,14 @@ var Translator = class {
   }
   peek(text) {
     const { masked, tokens } = mask(text);
-    if (this._cache.has(masked)) return this._restore(this._cache.get(masked), tokens);
+    const key = this._cacheKey(masked);
+    if (this._cache.has(key)) return this._restore(this._cache.get(key), tokens);
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
+  }
+  // 같은 원문이라도 대상 언어가 다르면 다른 번역이다.
+  _cacheKey(masked) {
+    return `${this._settings.current.targetLanguage}${masked}`;
   }
   // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
   // 이때 "번역 중" 을 띄워야 스크롤 중 화면이 밀리지 않는다. shouldRun 은 그
@@ -727,14 +913,15 @@ var Translator = class {
   // 이 함수는 절대 reject 하지 않는다.
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
-    if (this._cache.has(masked)) {
-      return Promise.resolve(this._restore(this._cache.get(masked), tokens));
+    const key = this._cacheKey(masked);
+    if (this._cache.has(key)) {
+      return Promise.resolve(this._restore(this._cache.get(key), tokens));
     }
     if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
-    if (this._isBackingOff(masked)) {
-      return Promise.resolve(error("최근 실패로 재시도를 미루는 중"));
+    if (this._isBackingOff(key)) {
+      return Promise.resolve(error(t("error.rateLimited")));
     }
-    let job = this._inflight.get(masked);
+    let job = this._inflight.get(key);
     if (!job) {
       job = this._queue.run(async () => {
         await this._awaitResume();
@@ -743,10 +930,10 @@ var Translator = class {
         if (hooks.onStart) hooks.onStart();
         return this._callProvider(masked);
       }, hooks.shouldRun).then(
-        (raw) => this._resolveSuccess(masked, raw),
-        (err) => this._resolveFailure(masked, err)
-      ).finally(() => this._inflight.delete(masked));
-      this._inflight.set(masked, job);
+        (raw) => this._resolveSuccess(key, masked, raw),
+        (err) => this._resolveFailure(key, err)
+      ).finally(() => this._inflight.delete(key));
+      this._inflight.set(key, job);
     }
     return job.then(
       (outcome) => outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome
@@ -784,13 +971,13 @@ var Translator = class {
       this._aborters.delete(controller);
     }
   }
-  _resolveSuccess(maskedKey, raw) {
-    const maskedTranslation = stripWrappingQuotes(raw, maskedKey).trim();
-    if (!maskedTranslation || normalize2(maskedTranslation) === normalize2(maskedKey)) {
-      this._cache.set(maskedKey, null);
+  _resolveSuccess(key, masked, raw) {
+    const maskedTranslation = stripWrappingQuotes(raw, masked).trim();
+    if (!maskedTranslation || normalize2(maskedTranslation) === normalize2(masked)) {
+      this._cache.set(key, null);
       return skip();
     }
-    this._cache.set(maskedKey, maskedTranslation);
+    this._cache.set(key, maskedTranslation);
     return { status: "done", masked: maskedTranslation };
   }
   _resolveFailure(maskedKey, err) {
@@ -800,7 +987,7 @@ var Translator = class {
     if (err && err.status === 429) {
       const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
       this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
-      logger.warn(`rate limited: ${Math.round(after / 1e3)}초 후 재시도`);
+      logger.warn(`rate limited; retrying in ${Math.round(after / 1e3)}s`);
       return { status: "retry", after };
     }
     this._rememberFailure(maskedKey);
@@ -818,12 +1005,12 @@ var Translator = class {
   }
 };
 function aborted() {
-  const err = new Error("중지됨");
+  const err = new Error("stopped");
   err.name = "AbortError";
   return err;
 }
 function skipped() {
-  const err = new Error("건너뜀");
+  const err = new Error("skipped");
   err.name = "SkippedError";
   return err;
 }
@@ -864,7 +1051,6 @@ function trimEdges(segments) {
 }
 
 // src/translation/language-detector.js
-var HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
 var MASK_RE2 = new RegExp(MASK_PATTERN, "g");
 var NON_LETTER = /[^\p{L}]/gu;
 var LanguageDetector = class {
@@ -875,12 +1061,13 @@ var LanguageDetector = class {
     if (typeof text !== "string") return false;
     const letters = this._letters(text);
     if (letters.length < 2) return false;
-    let hangul = 0;
+    const { script } = getLanguage(this._settings.current.targetLanguage);
+    if (!script) return true;
+    let inTarget = 0;
     for (const ch of letters) {
-      if (HANGUL.test(ch)) hangul += 1;
+      if (script.test(ch)) inTarget += 1;
     }
-    const ratio = hangul / letters.length;
-    return ratio < this._settings.current.koreanThreshold / 100;
+    return inTarget / letters.length < this._settings.current.skipThreshold / 100;
   }
   _letters(text) {
     MASK_RE2.lastIndex = 0;
@@ -1134,7 +1321,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
             rateLimitRetries += 1;
             dwell = setTimeout(run, res.after + jitter());
           } else {
-            setResult({ status: "error", message: "rate limited" });
+            setResult({ status: "error", message: t("error.rateLimited") });
           }
           return;
         }
@@ -1185,6 +1372,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stores,
       guildId,
       autoTranslate,
+      badge: settings.current.targetLanguage.toUpperCase(),
       onTrigger: () => triggerRef.current?.()
     })
   );
@@ -1192,12 +1380,13 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
 function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
-function renderBody(status, result, { showPending, showErrors, stores, guildId, autoTranslate, onTrigger }) {
+function renderBody(status, result, ctx) {
+  const { showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
   if (status === "idle" && !autoTranslate) {
     return React.createElement(
       "button",
       { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
-      "번역"
+      t("block.trigger")
     );
   }
   if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
@@ -1206,20 +1395,20 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId, 
     return showPending ? React.createElement(
       "div",
       { className: "mollu-translation mollu-translation--pending" },
-      "번역 중…"
+      t("block.pending")
     ) : null;
   }
   if (status === "error") {
     return showErrors ? React.createElement(
       "div",
       { className: "mollu-translation mollu-translation--error" },
-      "번역 실패"
+      t("block.error")
     ) : null;
   }
   return React.createElement(
     "div",
     { className: "mollu-translation" },
-    React.createElement("span", { className: "mollu-translation__badge" }, "KO"),
+    React.createElement("span", { className: "mollu-translation__badge" }, badge),
     React.createElement(
       "span",
       { className: "mollu-translation__text" },
@@ -1415,17 +1604,12 @@ var Mollu = class {
       BdApi.DOM.addStyle(NAME, STYLES);
       this._translator.start();
       if (!hasNativeFetch()) {
-        this._toast(
-          "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
-          "warning"
-        );
+        this._toast(t("toast.outdatedBd"), "warning");
       }
       const target = findMessageContent();
       if (!target) {
-        logger.error(
-          "MessageContent 모듈을 찾지 못했습니다. Discord 내부 구조가 바뀌었을 수 있습니다."
-        );
-        this._toast("메시지 컴포넌트를 찾지 못했습니다. 콘솔 로그를 확인하세요.", "error");
+        logger.error("MessageContent not found; Discord's internals may have changed");
+        this._toast(t("toast.noMessageContent"), "error");
         return;
       }
       this._patch = new MessagePatch({
@@ -1437,35 +1621,35 @@ var Mollu = class {
       });
       this._patch.install();
       if (!this._settings.current.apiKey) {
-        this._toast("설정에서 DeepSeek API 키를 입력하세요.", "info");
+        this._toast(t("toast.needApiKey"), "info");
       }
       if (this._settings.guildIdSet.size === 0) {
-        this._toast("설정에서 대상 서버 ID를 추가하세요.", "info");
+        this._toast(t("toast.needGuilds"), "info");
       }
-      logger.info(`시작됨 · 대상 서버 ${this._settings.guildIdSet.size}개`);
+      logger.info(`started · ${this._settings.guildIdSet.size} target server(s)`);
     } catch (e) {
-      logger.error("start 실패", e);
+      logger.error("start failed", e);
     }
   }
   stop() {
     try {
       this._patch?.remove();
     } catch (e) {
-      logger.error("patch 해제 실패", e);
+      logger.error("unpatch failed", e);
     }
     BdApi.Patcher.unpatchAll(NAME);
     BdApi.DOM.removeStyle(NAME);
     disconnectVisibility();
     this._translator.stop();
     this._patch = null;
-    logger.info("중지됨");
+    logger.info("stopped");
   }
   _notifyError(err) {
     if (!this._settings.current.showErrors) return;
     const now = Date.now();
     if (now - this._lastErrorToast < ERROR_TOAST_COOLDOWN_MS) return;
     this._lastErrorToast = now;
-    this._toast(`번역 실패 · ${err && err.message || "unknown"}`, "error");
+    this._toast(t("toast.failed", { message: err && err.message || "unknown" }), "error");
   }
   _toast(message, type) {
     try {
