@@ -8,7 +8,7 @@
 - 한글 비율이 임계값 이상인 메시지는 번역하지 않습니다.
 - 번역문은 원문을 그대로 둔 채 바로 아래 회색 텍스트로 표시됩니다.
 - 같은 문장은 캐시해서 재요청하지 않습니다.
-- 기본 백엔드는 DeepSeek(`/chat/completions`, OpenAI 호환)이며, `baseUrl` / `model` 만 바꾸면 다른 OpenAI 호환 API도 사용할 수 있습니다.
+- 백엔드는 **DeepSeek**(유료·저렴)과 **Google Gemini / Gemma**(무료 티어 있음) 중 설정에서 고릅니다. 둘 다 OpenAI 호환 `/chat/completions` 를 쓰므로, `baseUrl` / `model` 만 바꾸면 다른 호환 API도 붙습니다.
 
 ## 동작 방식
 
@@ -17,6 +17,12 @@
 3. 번역 컴포넌트는 캐시를 먼저 확인하고, 캐시에 없으면 **그 메시지가 화면에 0.35초 이상 보일 때** 동시 실행 수 제한이 걸린 큐를 통해 API를 호출합니다. 결과가 오면 해당 메시지만 다시 렌더합니다. 스크롤로 빠르게 지나간 메시지는 번역하지 않으며, 큐에서 차례를 기다리는 동안 화면 밖으로 나간 메시지는 호출 직전에 취소되고 다시 보일 때 재시도합니다. "번역 중…" 은 큐에 들어간 시점이 아니라 **실제 요청이 시작된 메시지에만** 표시되므로, 스크롤 중 화면이 밀리지 않습니다.
 4. 멘션·커스텀 이모지·코드·링크·타임스탬프는 `【0】` 형태 placeholder로 치환해 모델에 보내고, 번역 후 원래대로 복원합니다. 복원된 토큰은 원문과 같은 모습(멘션 이름, 이모지 이미지, 코드 배경, 현지 시각)으로 렌더됩니다.
 5. `deepseek-v4-*` 는 thinking(추론) 모드가 기본 ON이라 응답이 15~20초 걸립니다. 이 플러그인은 `thinking: {"type": "disabled"}` 를 보내 꺼 둡니다.
+
+### 무료로 쓰기 — Google Gemini / Gemma
+
+설정에서 백엔드를 `Google Gemini / Gemma` 로 바꾸고 [aistudio.google.com](https://aistudio.google.com) 에서 발급한 키를 넣으면 됩니다. 모델·URL 은 자동으로 채워집니다.
+
+> **주의: 무료 티어는 보낸 데이터가 Google 제품 개선에 사용됩니다.** 이 플러그인은 대상 서버에 있는 **다른 사람의 메시지 본문**을 전송하므로, 서버 구성원의 대화가 학습 데이터가 된다는 뜻입니다. 유료 티어에는 해당하지 않습니다.
 
 ## 요구 사항
 
@@ -60,9 +66,10 @@ npm run format         # Prettier 적용 (검사만 하려면 npm run format:che
 
 | 항목 | 설명 |
 | --- | --- |
-| DeepSeek API 키 | 필수. 없으면 아무 동작도 하지 않습니다. 저장된 키는 패널에 표시되지 않고 뒤 4자리만 보입니다. 비워 두면 유지되고, `-` 를 입력하면 삭제됩니다. |
-| 모델 이름 | `deepseek-v4-flash`(기본·저렴, 1M 컨텍스트) 또는 `deepseek-v4-pro`(고품질). 구 `deepseek-chat`/`deepseek-reasoner`는 2026-07-24 폐기됨 |
-| API Base URL | OpenAI 호환 엔드포인트. 기본값은 `https://api.deepseek.com` |
+| 번역 백엔드 | `DeepSeek` 또는 `Google Gemini / Gemma`. 바꾸면 모델·URL 이 기본값으로 맞춰지고, 각 백엔드의 키는 따로 기억됩니다. |
+| API 키 | 필수. 없으면 아무 동작도 하지 않습니다. 저장된 키는 패널에 표시되지 않고 뒤 4자리만 보입니다. 비워 두면 유지되고, `-` 를 입력하면 삭제됩니다. |
+| 모델 이름 | DeepSeek: `deepseek-v4-flash`(기본·저렴) / `deepseek-v4-pro`(고품질). Gemini: `gemma-4-31b-it`(기본) / `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` — 모두 무료 티어 |
+| API Base URL | OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다 |
 | 대상 서버 ID | 쉼표/공백 구분. **개발자 모드**를 켠 뒤 서버 아이콘 우클릭 → *서버 ID 복사* |
 | 한국어로 간주할 한글 비율 | 이 비율 이상 한글이면 번역 생략 (기본 30%) |
 | 번역할 최대 글자 수 | 이보다 긴 메시지는 건너뜀 (비용 보호) |
@@ -96,7 +103,9 @@ src/
     prompt.js                  시스템 프롬프트
     providers/
       index.js                 프로바이더 레지스트리
-      deepseek.js              DeepSeek(OpenAI 호환) 호출
+      openai-compatible.js     /chat/completions 공통 호출
+      deepseek.js              DeepSeek 고유 설정
+      gemini.js                Gemini / Gemma 고유 설정
 scripts/
   build.mjs                    esbuild 번들 + 메타 배너 + 선택적 설치
   smoke.mjs                    스모크 체크

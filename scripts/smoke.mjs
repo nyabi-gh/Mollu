@@ -360,6 +360,77 @@ check("settings: every panel field persists, not just the switches", () => {
     assert.deepEqual([...settings.guildIdSet], [edits.guildIds]);
 });
 
+check("settings: switching provider swaps defaults and keeps both keys", () => {
+    const settings = new Settings();
+    settings._set("apiKey", "sk-deepseek");
+
+    settings._set("provider", "gemini");
+    assert.equal(settings.current.baseUrl, "https://generativelanguage.googleapis.com/v1beta/openai");
+    assert.equal(settings.current.model, "gemma-4-31b-it");
+    assert.equal(settings.current.apiKey, "", "a provider with no saved key starts empty");
+
+    settings._set("apiKey", "gemini-key");
+    settings._set("provider", "deepseek");
+    assert.equal(settings.current.apiKey, "sk-deepseek", "the first key was remembered");
+    assert.equal(settings.current.baseUrl, "https://api.deepseek.com");
+
+    settings._set("provider", "gemini");
+    assert.equal(settings.current.apiKey, "gemini-key", "so was the second");
+});
+
+await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint", async () => {
+    const previous = BdApi.Net.fetch;
+    let seen = null;
+    BdApi.Net.fetch = async (url, options) => {
+        seen = { url, options };
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        Object.assign(settings.current, {
+            provider: "gemini",
+            model: "gemma-4-31b-it",
+            baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        });
+        await new Translator({ settings }).translate("hello there");
+
+        assert.equal(seen.url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
+        assert.equal(seen.options.headers.Authorization, "Bearer test-key");
+        const body = JSON.parse(seen.options.body);
+        assert.equal(body.model, "gemma-4-31b-it");
+        assert.equal(body.messages[0].role, "system", "Gemma 4 supports the system role");
+        assert.ok(!("thinking" in body), "the DeepSeek-only field must not leak to Google");
+        assert.ok(!("reasoning_effort" in body), "Gemma is not a reasoning model");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("gemini: reasoning is turned off for gemini-* models only", async () => {
+    const previous = BdApi.Net.fetch;
+    let body = null;
+    BdApi.Net.fetch = async (_url, options) => {
+        body = JSON.parse(options.body);
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        Object.assign(settings.current, {
+            provider: "gemini",
+            model: "gemini-3.1-flash-lite",
+            baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+        });
+        await new Translator({ settings }).translate("hello there");
+        assert.equal(body.reasoning_effort, "none");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 check("settings: the stored api key is never rendered into the panel", () => {
     const settings = new Settings();
     settings._set("apiKey", "  sk-abcdefgh1234  ");

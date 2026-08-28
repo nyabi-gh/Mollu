@@ -16,6 +16,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
     baseUrl: "https://api.deepseek.com",
     // Comma/space separated guild ids. Translation only runs in these servers.
     guildIds: "",
+    // Per-provider {apiKey, model, baseUrl}, so switching providers does not
+    // throw away the credentials of the one being left. Always replaced, never
+    // mutated in place: DEFAULT_SETTINGS is shared.
+    profiles: {},
     // A message is treated as Korean (and skipped) when its share of Hangul
     // letters is at least this percentage.
     koreanThreshold: 30,

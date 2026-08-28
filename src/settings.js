@@ -1,4 +1,5 @@
 import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
+import { getProvider, PROVIDER_OPTIONS } from "./translation/providers/index.js";
 import { logger } from "./lib/logger.js";
 
 /**
@@ -35,7 +36,15 @@ export class Settings {
         // KEEP is an edit that must not apply; an unchanged value means the
         // same edit arrived twice (see buildPanel) and needs no second write.
         if (next === KEEP || next === this._values[id]) return;
-        this._values[id] = next;
+
+        if (id === "provider") {
+            this._stashProfile();
+            this._values.provider = next;
+            this._restoreProfile(next);
+        } else {
+            this._values[id] = next;
+            if (CREDENTIAL_FIELDS.has(id)) this._stashProfile();
+        }
         if (id === "guildIds") this._guildIdSet = parseGuildIds(next);
         this._persist();
         for (const listener of this._listeners) {
@@ -45,6 +54,20 @@ export class Settings {
                 /* a listener error must not block persistence */
             }
         }
+    }
+
+    /** Remember the active provider's credentials before leaving it. */
+    _stashProfile() {
+        const { provider, apiKey, model, baseUrl } = this._values;
+        this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
+    }
+
+    _restoreProfile(providerId) {
+        const { defaults } = getProvider(providerId);
+        const saved = this._values.profiles?.[providerId] ?? {};
+        this._values.apiKey = saved.apiKey || "";
+        this._values.model = saved.model || defaults.model;
+        this._values.baseUrl = saved.baseUrl || defaults.baseUrl;
     }
 
     _persist() {
@@ -68,15 +91,23 @@ export class Settings {
             onChange: (_categoryId, settingId, value) => this._set(settingId, value),
             settings: withChangeHandlers(this, [
                 {
+                    type: "dropdown",
+                    id: "provider",
+                    name: "번역 백엔드",
+                    note: "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억하므로 되돌아와도 다시 입력할 필요가 없습니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+                    value: v.provider,
+                    options: PROVIDER_OPTIONS,
+                },
+                {
                     type: "text",
                     id: "apiKey",
-                    name: "DeepSeek API 키",
+                    name: `${getProvider(v.provider).label} API 키`,
                     // The stored key is never rendered: BetterDiscord's text
                     // input has no masked mode, and this panel is a real
                     // exposure risk while screen sharing.
                     note: v.apiKey
                         ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.`
-                        : "platform.deepseek.com → API Keys 에서 발급합니다.",
+                        : KEY_SOURCE[v.provider] || "제공사 콘솔에서 API 키를 발급하세요.",
                     placeholder: v.apiKey ? `저장됨 · ${fingerprint(v.apiKey)}` : "sk-...",
                     value: "",
                 },
@@ -84,7 +115,7 @@ export class Settings {
                     type: "text",
                     id: "model",
                     name: "모델 이름",
-                    note: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
+                    note: MODEL_HINT[v.provider] || "OpenAI 호환 모델 이름",
                     value: v.model,
                 },
                 {
@@ -171,6 +202,18 @@ function withChangeHandlers(settings, items) {
 // Pasted keys and URLs routinely carry stray whitespace, which turns into a 401
 // or a malformed endpoint.
 const TRIMMED_FIELDS = new Set(["apiKey", "baseUrl", "model"]);
+
+const CREDENTIAL_FIELDS = new Set(["apiKey", "model", "baseUrl"]);
+
+const KEY_SOURCE = {
+    deepseek: "platform.deepseek.com → API Keys 에서 발급합니다.",
+    gemini: "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+};
+
+const MODEL_HINT = {
+    deepseek: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
+    gemini: "예: gemma-4-31b-it(기본), gemini-3.5-flash-lite, gemini-3.1-flash-lite — 모두 무료 티어",
+};
 
 // Typed into the (always blank) API key field to erase the stored key, since an
 // empty field means "keep what is saved".

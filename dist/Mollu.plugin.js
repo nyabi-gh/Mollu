@@ -41,6 +41,10 @@ var DEFAULT_SETTINGS = Object.freeze({
   baseUrl: "https://api.deepseek.com",
   // Comma/space separated guild ids. Translation only runs in these servers.
   guildIds: "",
+  // Per-provider {apiKey, model, baseUrl}, so switching providers does not
+  // throw away the credentials of the one being left. Always replaced, never
+  // mutated in place: DEFAULT_SETTINGS is shared.
+  profiles: {},
   // A message is treated as Korean (and skipped) when its share of Hangul
   // letters is at least this percentage.
   koreanThreshold: 30,
@@ -62,6 +66,15 @@ var FAILURE_RECORD_LIMIT = 500;
 var MAX_OUTPUT_TOKENS = 4096;
 var OUTPUT_TOKEN_HEADROOM = 256;
 
+// src/translation/providers/deepseek.js
+var deepseek_exports = {};
+__export(deepseek_exports, {
+  defaults: () => defaults,
+  id: () => id,
+  label: () => label,
+  translate: () => translate
+});
+
 // src/lib/logger.js
 function call(level, args) {
   const api = typeof BdApi !== "undefined" && BdApi.Logger;
@@ -76,6 +89,169 @@ var logger = {
   warn: (...args) => call("warn", args),
   error: (...args) => call("error", args)
 };
+
+// src/lib/net.js
+function resolveFetch() {
+  if (typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function") {
+    return BdApi.Net.fetch.bind(BdApi.Net);
+  }
+  return typeof fetch === "function" ? fetch : null;
+}
+function hasNativeFetch() {
+  return typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function";
+}
+var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
+function normalizeBaseUrl(raw, fallback = "") {
+  const input = String(raw ?? "").trim() || String(fallback);
+  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
+  let url;
+  try {
+    url = new URL(withScheme);
+  } catch {
+    throw new Error(`API Base URL이 올바르지 않습니다: ${input}`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error(`지원하지 않는 프로토콜입니다: ${url.protocol}`);
+  }
+  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error("http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.");
+  }
+  return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+}
+function withDeadline(signal, timeout) {
+  if (!(timeout > 0) || typeof AbortSignal?.timeout !== "function") return signal;
+  const deadline = AbortSignal.timeout(timeout);
+  if (!signal) return deadline;
+  return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, deadline]) : signal;
+}
+async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIMEOUT_MS } = {}) {
+  const doFetch = resolveFetch();
+  if (!doFetch) throw new Error("no fetch implementation available");
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: typeof body === "string" ? body : JSON.stringify(body),
+    // The `timeout` option is BdApi.Net.fetch's; standard fetch ignores it,
+    // so the fallback path gets the same deadline through its signal.
+    signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
+    timeout
+  });
+  const text = await res.text().catch(() => "");
+  const ok = typeof res.ok === "boolean" ? res.ok : res.status >= 200 && res.status < 300;
+  if (!ok) {
+    if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
+    const err = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error("invalid JSON in response");
+  }
+}
+
+// src/translation/prompt.js
+var SYSTEM_PROMPT = [
+  "You are a translation engine embedded in a Discord chat client.",
+  "Translate the user's message into natural, colloquial Korean (한국어).",
+  "",
+  "Rules:",
+  "- Output ONLY the translated text. No explanations, no notes, no surrounding quotes, no romanization.",
+  "- Preserve Markdown (*, _, ~~, `, #, >, lists), emoji, line breaks and spacing exactly as in the source.",
+  "- Tokens shaped like 【0】 or 【1】 are placeholders. Copy each one verbatim, keep it in the same position, and never translate or renumber it.",
+  "- Keep the register of the source: casual stays casual, formal stays formal. Render internet slang naturally in Korean.",
+  "- If the message is already written in Korean, return it unchanged."
+].join("\n");
+
+// src/translation/providers/openai-compatible.js
+async function chatCompletion({ text, settings, signal, defaults: defaults3, extend: extend3 }) {
+  const apiKey = String(settings.apiKey || "").trim();
+  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다");
+  const base = normalizeBaseUrl(settings.baseUrl, defaults3.baseUrl);
+  const model = String(settings.model || defaults3.model).trim();
+  const body = {
+    model,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: text }
+    ],
+    temperature: 0.2,
+    stream: false,
+    max_tokens: outputBudget(text)
+  };
+  if (extend3) extend3(body, { base, model });
+  const json = await postJson(`${base}/chat/completions`, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal,
+    body
+  });
+  const output = json?.choices?.[0]?.message?.content;
+  if (typeof output !== "string" || !output.trim()) throw new Error("빈 응답");
+  return output.trim();
+}
+function outputBudget(text) {
+  return Math.min(MAX_OUTPUT_TOKENS, text.length + OUTPUT_TOKEN_HEADROOM);
+}
+
+// src/translation/providers/deepseek.js
+var id = "deepseek";
+var label = "DeepSeek";
+var defaults = Object.freeze({
+  model: "deepseek-v4-flash",
+  baseUrl: "https://api.deepseek.com"
+});
+function translate(params) {
+  return chatCompletion({ ...params, defaults, extend });
+}
+function extend(body, { base }) {
+  if (/(^|\.)deepseek\.com$/i.test(hostOf(base))) body.thinking = { type: "disabled" };
+}
+function hostOf(base) {
+  try {
+    return new URL(base).hostname;
+  } catch {
+    return "";
+  }
+}
+
+// src/translation/providers/gemini.js
+var gemini_exports = {};
+__export(gemini_exports, {
+  defaults: () => defaults2,
+  id: () => id2,
+  label: () => label2,
+  translate: () => translate2
+});
+var id2 = "gemini";
+var label2 = "Google Gemini / Gemma";
+var defaults2 = Object.freeze({
+  // Gemma 4 31B is an instruction-tuned non-reasoning model with native
+  // system-role support, which is all a translation needs.
+  model: "gemma-4-31b-it",
+  baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
+});
+function translate2(params) {
+  return chatCompletion({ ...params, defaults: defaults2, extend: extend2 });
+}
+function extend2(body, { model }) {
+  if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
+}
+
+// src/translation/providers/index.js
+var PROVIDERS = {
+  [id]: deepseek_exports,
+  [id2]: gemini_exports
+};
+var DEFAULT_PROVIDER = id;
+function getProvider(providerId) {
+  return PROVIDERS[providerId] || PROVIDERS[DEFAULT_PROVIDER];
+}
+var PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
+  label: provider.label,
+  value: provider.id
+}));
 
 // src/settings.js
 var Settings = class {
@@ -96,18 +272,37 @@ var Settings = class {
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
-  _set(id2, value) {
-    const next = coerce(id2, value, this._values[id2]);
-    if (next === KEEP || next === this._values[id2]) return;
-    this._values[id2] = next;
-    if (id2 === "guildIds") this._guildIdSet = parseGuildIds(next);
+  _set(id3, value) {
+    const next = coerce(id3, value, this._values[id3]);
+    if (next === KEEP || next === this._values[id3]) return;
+    if (id3 === "provider") {
+      this._stashProfile();
+      this._values.provider = next;
+      this._restoreProfile(next);
+    } else {
+      this._values[id3] = next;
+      if (CREDENTIAL_FIELDS.has(id3)) this._stashProfile();
+    }
+    if (id3 === "guildIds") this._guildIdSet = parseGuildIds(next);
     this._persist();
     for (const listener of this._listeners) {
       try {
-        listener(id2, next);
+        listener(id3, next);
       } catch {
       }
     }
+  }
+  /** Remember the active provider's credentials before leaving it. */
+  _stashProfile() {
+    const { provider, apiKey, model, baseUrl } = this._values;
+    this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
+  }
+  _restoreProfile(providerId) {
+    const { defaults: defaults3 } = getProvider(providerId);
+    const saved = this._values.profiles?.[providerId] ?? {};
+    this._values.apiKey = saved.apiKey || "";
+    this._values.model = saved.model || defaults3.model;
+    this._values.baseUrl = saved.baseUrl || defaults3.baseUrl;
   }
   _persist() {
     try {
@@ -129,13 +324,21 @@ var Settings = class {
       onChange: (_categoryId, settingId, value) => this._set(settingId, value),
       settings: withChangeHandlers(this, [
         {
+          type: "dropdown",
+          id: "provider",
+          name: "번역 백엔드",
+          note: "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억하므로 되돌아와도 다시 입력할 필요가 없습니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+          value: v.provider,
+          options: PROVIDER_OPTIONS
+        },
+        {
           type: "text",
           id: "apiKey",
-          name: "DeepSeek API 키",
+          name: `${getProvider(v.provider).label} API 키`,
           // The stored key is never rendered: BetterDiscord's text
           // input has no masked mode, and this panel is a real
           // exposure risk while screen sharing.
-          note: v.apiKey ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.` : "platform.deepseek.com → API Keys 에서 발급합니다.",
+          note: v.apiKey ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.` : KEY_SOURCE[v.provider] || "제공사 콘솔에서 API 키를 발급하세요.",
           placeholder: v.apiKey ? `저장됨 · ${fingerprint(v.apiKey)}` : "sk-...",
           value: ""
         },
@@ -143,7 +346,7 @@ var Settings = class {
           type: "text",
           id: "model",
           name: "모델 이름",
-          note: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
+          note: MODEL_HINT[v.provider] || "OpenAI 호환 모델 이름",
           value: v.model
         },
         {
@@ -225,6 +428,15 @@ function withChangeHandlers(settings, items) {
   }));
 }
 var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
+var CREDENTIAL_FIELDS = /* @__PURE__ */ new Set(["apiKey", "model", "baseUrl"]);
+var KEY_SOURCE = {
+  deepseek: "platform.deepseek.com → API Keys 에서 발급합니다.",
+  gemini: "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다."
+};
+var MODEL_HINT = {
+  deepseek: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
+  gemini: "예: gemma-4-31b-it(기본), gemini-3.5-flash-lite, gemini-3.1-flash-lite — 모두 무료 티어"
+};
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");
 function normalize(values) {
@@ -233,10 +445,10 @@ function normalize(values) {
   }
   return values;
 }
-function coerce(id2, value, previous) {
-  if (!TRIMMED_FIELDS.has(id2) || typeof value !== "string") return value;
+function coerce(id3, value, previous) {
+  if (!TRIMMED_FIELDS.has(id3) || typeof value !== "string") return value;
   const trimmed = value.trim();
-  if (id2 !== "apiKey") return trimmed;
+  if (id3 !== "apiKey") return trimmed;
   if (!trimmed) return previous ? KEEP : "";
   return trimmed === CLEAR_TOKEN ? "" : trimmed;
 }
@@ -446,138 +658,6 @@ var TaskQueue = class {
     }
   }
 };
-
-// src/translation/providers/deepseek.js
-var deepseek_exports = {};
-__export(deepseek_exports, {
-  id: () => id,
-  label: () => label,
-  translate: () => translate
-});
-
-// src/lib/net.js
-function resolveFetch() {
-  if (typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function") {
-    return BdApi.Net.fetch.bind(BdApi.Net);
-  }
-  return typeof fetch === "function" ? fetch : null;
-}
-function hasNativeFetch() {
-  return typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function";
-}
-var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
-function normalizeBaseUrl(raw, fallback = "") {
-  const input = String(raw ?? "").trim() || String(fallback);
-  const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
-  let url;
-  try {
-    url = new URL(withScheme);
-  } catch {
-    throw new Error(`API Base URL이 올바르지 않습니다: ${input}`);
-  }
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(`지원하지 않는 프로토콜입니다: ${url.protocol}`);
-  }
-  if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error("http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.");
-  }
-  return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
-}
-function withDeadline(signal, timeout) {
-  if (!(timeout > 0) || typeof AbortSignal?.timeout !== "function") return signal;
-  const deadline = AbortSignal.timeout(timeout);
-  if (!signal) return deadline;
-  return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, deadline]) : signal;
-}
-async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIMEOUT_MS } = {}) {
-  const doFetch = resolveFetch();
-  if (!doFetch) throw new Error("no fetch implementation available");
-  const res = await doFetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", ...headers },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-    // The `timeout` option is BdApi.Net.fetch's; standard fetch ignores it,
-    // so the fallback path gets the same deadline through its signal.
-    signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
-    timeout
-  });
-  const text = await res.text().catch(() => "");
-  const ok = typeof res.ok === "boolean" ? res.ok : res.status >= 200 && res.status < 300;
-  if (!ok) {
-    if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
-    const err = new Error(`HTTP ${res.status}`);
-    err.status = res.status;
-    throw err;
-  }
-  if (!text) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("invalid JSON in response");
-  }
-}
-
-// src/translation/prompt.js
-var SYSTEM_PROMPT = [
-  "You are a translation engine embedded in a Discord chat client.",
-  "Translate the user's message into natural, colloquial Korean (한국어).",
-  "",
-  "Rules:",
-  "- Output ONLY the translated text. No explanations, no notes, no surrounding quotes, no romanization.",
-  "- Preserve Markdown (*, _, ~~, `, #, >, lists), emoji, line breaks and spacing exactly as in the source.",
-  "- Tokens shaped like 【0】 or 【1】 are placeholders. Copy each one verbatim, keep it in the same position, and never translate or renumber it.",
-  "- Keep the register of the source: casual stays casual, formal stays formal. Render internet slang naturally in Korean.",
-  "- If the message is already written in Korean, return it unchanged."
-].join("\n");
-
-// src/translation/providers/deepseek.js
-var id = "deepseek";
-var label = "DeepSeek";
-var DEFAULT_BASE_URL = "https://api.deepseek.com";
-var DEFAULT_MODEL = "deepseek-v4-flash";
-async function translate({ text, settings, signal }) {
-  const apiKey = String(settings.apiKey || "").trim();
-  if (!apiKey) throw new Error("API 키가 설정되지 않았습니다");
-  const base = normalizeBaseUrl(settings.baseUrl, DEFAULT_BASE_URL);
-  const body = {
-    model: settings.model || DEFAULT_MODEL,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: text }
-    ],
-    temperature: 0.2,
-    stream: false,
-    max_tokens: outputBudget(text)
-  };
-  if (isDeepSeekHost(base)) body.thinking = { type: "disabled" };
-  const json = await postJson(`${base}/chat/completions`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-    body
-  });
-  const output = json?.choices?.[0]?.message?.content;
-  if (typeof output !== "string" || !output.trim()) throw new Error("빈 응답");
-  return output.trim();
-}
-function outputBudget(text) {
-  return Math.min(MAX_OUTPUT_TOKENS, text.length + OUTPUT_TOKEN_HEADROOM);
-}
-function isDeepSeekHost(base) {
-  try {
-    return /(^|\.)deepseek\.com$/i.test(new URL(base).hostname);
-  } catch {
-    return false;
-  }
-}
-
-// src/translation/providers/index.js
-var PROVIDERS = {
-  [id]: deepseek_exports
-};
-var DEFAULT_PROVIDER = id;
-function getProvider(providerId) {
-  return PROVIDERS[providerId] || PROVIDERS[DEFAULT_PROVIDER];
-}
 
 // src/translation/translator.js
 var skip = () => ({ status: "skip" });
@@ -875,11 +955,11 @@ function renderSegments(segments, stores, guildId) {
 function renderToken(token, stores, guildId, key) {
   const emoji = CUSTOM_EMOJI.exec(token);
   if (emoji) {
-    const [, animated, name, id2] = emoji;
+    const [, animated, name, id3] = emoji;
     return React.createElement("img", {
       key,
       className: "mollu-translation__emoji",
-      src: `${EMOJI_CDN}/${id2}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
+      src: `${EMOJI_CDN}/${id3}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
       alt: `:${name}:`,
       title: `:${name}:`,
       draggable: false
@@ -1075,8 +1155,8 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId }
 function useDisplaySettings(settings) {
   const [display, setDisplay] = React.useState(() => pickDisplay(settings));
   React.useEffect(() => {
-    const unsubscribe = settings.onChange((id2) => {
-      if (id2 === "showPending" || id2 === "showErrors") setDisplay(pickDisplay(settings));
+    const unsubscribe = settings.onChange((id3) => {
+      if (id3 === "showPending" || id3 === "showErrors") setDisplay(pickDisplay(settings));
     });
     return () => {
       unsubscribe();
