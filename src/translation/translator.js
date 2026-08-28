@@ -1,19 +1,26 @@
-import { mask, unmask } from "./tokenizer.js";
+import { mask, unmaskSegments } from "./tokenizer.js";
 import { TranslationCache } from "./cache.js";
 import { TaskQueue } from "./queue.js";
 import { getProvider } from "./providers/index.js";
+import { FAILURE_BACKOFF_MS, FAILURE_RECORD_LIMIT } from "../constants.js";
 import { logger } from "../lib/logger.js";
 
-/** @typedef {{status: "done", text: string} | {status: "skip"} | {status: "error", message: string} | {status: "pending"} | {status: "unknown"}} TranslationResult */
+/** @typedef {import("./tokenizer.js").Segment} Segment */
+/** @typedef {{status: "done", text: string, segments: Segment[]} | {status: "skip"} | {status: "error", message: string} | {status: "pending"} | {status: "unknown"}} TranslationResult */
 
 const skip = () => ({ status: "skip" });
-const done = (text) => ({ status: "done", text });
+const done = (text, segments) => ({ status: "done", text, segments });
 const error = (message) => ({ status: "error", message });
 
 /**
  * Owns the cache, the concurrency-limited queue and provider dispatch.
  * Callers use `peek()` for a synchronous cache read and `translate()` for the
  * async path (deduplicated per masked source text).
+ *
+ * Cached and in-flight values are kept in **masked** form. Two different
+ * messages can share one masked key ("hi 【0】"), so the placeholders must only
+ * be resolved against the tokens of the message being rendered — otherwise a
+ * cache hit shows another message's mention or link.
  */
 export class Translator {
     constructor({ settings, onError }) {
@@ -21,7 +28,8 @@ export class Translator {
         this._onError = onError || (() => {});
         this._cache = new TranslationCache();
         this._queue = new TaskQueue(() => this._settings.current.maxConcurrent);
-        this._inflight = new Map(); // masked key -> Promise<TranslationResult>
+        this._inflight = new Map(); // masked key -> Promise<masked outcome>
+        this._failures = new Map(); // masked key -> timestamp of last failure
         this._aborters = new Set();
     }
 
@@ -40,6 +48,7 @@ export class Translator {
         }
         this._aborters.clear();
         this._inflight.clear();
+        this._failures.clear();
         this._cache.save();
     }
 
@@ -48,38 +57,70 @@ export class Translator {
      * @returns {TranslationResult}
      */
     peek(text) {
-        const { masked } = mask(text);
-        if (!this._cache.has(masked)) return { status: "unknown" };
-        const value = this._cache.get(masked);
-        return value == null ? skip() : done(value);
+        const { masked, tokens } = mask(text);
+        if (this._cache.has(masked)) return this._restore(this._cache.get(masked), tokens);
+        if (text.length > this._settings.current.maxChars) return skip();
+        return { status: "unknown" };
     }
 
     /**
+     * @param {string} text
+     * @param {{onStart?: () => void, shouldRun?: () => boolean}} [hooks]
+     *   `onStart` fires when the request actually leaves the queue, so the UI
+     *   can show "번역 중" for in-flight work only. `shouldRun` is re-checked at
+     *   that moment and drops work whose message has scrolled away.
      * @returns {Promise<TranslationResult>} never rejects.
      */
-    translate(text) {
+    translate(text, hooks = {}) {
         const { masked, tokens } = mask(text);
 
         if (this._cache.has(masked)) {
-            const value = this._cache.get(masked);
-            return Promise.resolve(value == null ? skip() : done(value));
+            return Promise.resolve(this._restore(this._cache.get(masked), tokens));
         }
-        if (text.length > this._settings.current.maxChars) {
-            this._cache.set(masked, null);
-            return Promise.resolve(skip());
+        // Not cached: the verdict depends on `maxChars`, so raising the setting
+        // must let the message through on the next render.
+        if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
+        if (this._isBackingOff(masked)) {
+            return Promise.resolve(error("최근 실패로 재시도를 미루는 중"));
         }
-        if (this._inflight.has(masked)) return this._inflight.get(masked);
 
-        const job = this._queue
-            .run(() => this._callProvider(masked))
-            .then(
-                (raw) => this._resolveSuccess(masked, tokens, text, raw),
-                (err) => this._resolveFailure(err),
-            )
-            .finally(() => this._inflight.delete(masked));
+        let job = this._inflight.get(masked);
+        if (!job) {
+            job = this._queue
+                .run(() => {
+                    if (hooks.onStart) hooks.onStart();
+                    return this._callProvider(masked);
+                }, hooks.shouldRun)
+                .then(
+                    (raw) => this._resolveSuccess(masked, raw),
+                    (err) => this._resolveFailure(masked, err),
+                )
+                .finally(() => this._inflight.delete(masked));
+            this._inflight.set(masked, job);
+        }
 
-        this._inflight.set(masked, job);
-        return job;
+        return job.then((outcome) =>
+            outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome,
+        );
+    }
+
+    /** Turn a masked cache/job value into a result for one specific message. */
+    _restore(maskedValue, tokens) {
+        if (typeof maskedValue !== "string") return skip();
+        const segments = unmaskSegments(maskedValue, tokens);
+        const text = segments
+            .map((segment) => segment.value)
+            .join("")
+            .trim();
+        return text ? done(text, trimEdges(segments)) : skip();
+    }
+
+    _isBackingOff(maskedKey) {
+        const failedAt = this._failures.get(maskedKey);
+        if (failedAt == null) return false;
+        if (Date.now() - failedAt < FAILURE_BACKOFF_MS) return true;
+        this._failures.delete(maskedKey);
+        return false;
     }
 
     async _callProvider(maskedText) {
@@ -97,41 +138,88 @@ export class Translator {
         }
     }
 
-    _resolveSuccess(maskedKey, tokens, original, raw) {
-        const text = unmask(stripWrappingQuotes(raw), tokens).trim();
-        if (!text || normalize(text) === normalize(original)) {
+    /** @returns {{status: "done", masked: string} | {status: "skip"}} */
+    _resolveSuccess(maskedKey, raw) {
+        const maskedTranslation = stripWrappingQuotes(raw, maskedKey).trim();
+        if (!maskedTranslation || normalize(maskedTranslation) === normalize(maskedKey)) {
             this._cache.set(maskedKey, null);
             return skip();
         }
-        this._cache.set(maskedKey, text);
-        return done(text);
+        this._cache.set(maskedKey, maskedTranslation);
+        return { status: "done", masked: maskedTranslation };
     }
 
-    _resolveFailure(err) {
+    _resolveFailure(maskedKey, err) {
         const message = (err && err.message) || String(err);
+        // Aborts come from stop()/queue.clear(), not from the provider.
+        if (err && err.name === "AbortError") return error(message);
+        // The message scrolled out of view before its turn came up. Not a
+        // failure: report it as un-answered so the caller can ask again.
+        if (err && err.name === "SkippedError") return { status: "unknown" };
+
+        this._rememberFailure(maskedKey);
         logger.warn("translate failed:", message);
         this._onError(err);
         return error(message);
     }
+
+    _rememberFailure(maskedKey) {
+        this._failures.set(maskedKey, Date.now());
+        if (this._failures.size <= FAILURE_RECORD_LIMIT) return;
+        const cutoff = Date.now() - FAILURE_BACKOFF_MS;
+        for (const [key, at] of this._failures) {
+            if (at < cutoff) this._failures.delete(key);
+        }
+    }
 }
 
 function normalize(value) {
-    return String(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
+    return String(value)
+        .toLowerCase()
+        .replace(/[\s\p{P}\p{S}]/gu, "");
 }
 
-function stripWrappingQuotes(value) {
-    let text = String(value).trim();
-    const pairs = [
-        ['"', '"'],
-        ["'", "'"],
-        ["“", "”"],
-        ["「", "」"],
-        ["『", "』"],
-    ];
-    for (const [open, close] of pairs) {
-        if (text.length >= 2 && text[0] === open && text[text.length - 1] === close) {
-            return text.slice(1, -1).trim();
-        }
+const QUOTE_PAIRS = [
+    ['"', '"'],
+    ["'", "'"],
+    ["“", "”"],
+    ["「", "」"],
+    ["『", "』"],
+];
+
+/**
+ * Models like to wrap a translation in quotes. Strip them only when they really
+ * do wrap the whole string: `"A" 하고 "B"` merely starts and ends with a quote,
+ * and a source that was quoted itself keeps the author's quotes.
+ */
+function stripWrappingQuotes(value, source) {
+    const text = String(value).trim();
+    if (text.length < 2) return text;
+
+    for (const [open, close] of QUOTE_PAIRS) {
+        if (text[0] !== open || text[text.length - 1] !== close) continue;
+
+        const inner = text.slice(1, -1);
+        if (inner.includes(open) || inner.includes(close)) continue;
+
+        const from = String(source ?? "").trim();
+        if (from.length >= 2 && from[0] === open && from[from.length - 1] === close) continue;
+
+        return inner.trim();
     }
     return text;
+}
+
+/** Drop leading/trailing whitespace from the outer text segments. */
+function trimEdges(segments) {
+    const out = segments.slice();
+    while (out.length && out[0].type === "text" && !out[0].value.trim()) out.shift();
+    while (out.length && out[out.length - 1].type === "text" && !out[out.length - 1].value.trim()) out.pop();
+    if (out.length && out[0].type === "text")
+        out[0] = { type: "text", value: out[0].value.replace(/^\s+/, "") };
+    const last = out.length - 1;
+    if (last >= 0 && out[last].type === "text") {
+        out[last] = { type: "text", value: out[last].value.replace(/\s+$/, "") };
+    }
+    return out;
 }

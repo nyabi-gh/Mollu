@@ -6,6 +6,7 @@ import { MessagePatch } from "./message-patch.js";
 import { findMessageContent, createStores } from "./discord.js";
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
+import { disconnectVisibility } from "./ui/visibility.js";
 import { logger } from "./lib/logger.js";
 
 export default class KoreanAutoTranslator {
@@ -81,6 +82,7 @@ export default class KoreanAutoTranslator {
         // Safety net in case a patch was registered but `_patch` was lost.
         BdApi.Patcher.unpatchAll(NAME);
         BdApi.DOM.removeStyle(NAME);
+        disconnectVisibility();
         this._translator.stop();
         this._patch = null;
         logger.info("중지됨");

@@ -12,15 +12,15 @@
 
 1. `MessageContent` 컴포넌트의 렌더를 패치합니다.
 2. 대상 서버의 메시지이고, 봇/본인/시스템 메시지 필터를 통과하고, 한글 비율이 임계값 미만이면 원문 아래에 번역 컴포넌트를 붙입니다.
-3. 번역 컴포넌트는 캐시를 먼저 확인하고, 캐시에 없으면 **그 메시지가 화면에 0.35초 이상 보일 때** 동시 실행 수 제한이 걸린 큐를 통해 API를 호출합니다. 결과가 오면 해당 메시지만 다시 렌더합니다. 스크롤로 빠르게 지나간 메시지는 번역하지 않습니다.
-4. 멘션·커스텀 이모지·코드·링크·타임스탬프는 `【0】` 형태 placeholder로 치환해 모델에 보내고, 번역 후 원래대로 복원합니다.
+3. 번역 컴포넌트는 캐시를 먼저 확인하고, 캐시에 없으면 **그 메시지가 화면에 0.35초 이상 보일 때** 동시 실행 수 제한이 걸린 큐를 통해 API를 호출합니다. 결과가 오면 해당 메시지만 다시 렌더합니다. 스크롤로 빠르게 지나간 메시지는 번역하지 않으며, 큐에서 차례를 기다리는 동안 화면 밖으로 나간 메시지는 호출 직전에 취소되고 다시 보일 때 재시도합니다. "번역 중…" 은 큐에 들어간 시점이 아니라 **실제 요청이 시작된 메시지에만** 표시되므로, 스크롤 중 화면이 밀리지 않습니다.
+4. 멘션·커스텀 이모지·코드·링크·타임스탬프는 `【0】` 형태 placeholder로 치환해 모델에 보내고, 번역 후 원래대로 복원합니다. 복원된 토큰은 원문과 같은 모습(멘션 이름, 이모지 이미지, 코드 배경, 현지 시각)으로 렌더됩니다.
 5. `deepseek-v4-*` 는 thinking(추론) 모드가 기본 ON이라 응답이 15~20초 걸립니다. 이 플러그인은 `thinking: {"type": "disabled"}` 를 보내 꺼 둡니다.
 
 ## 요구 사항
 
 - BetterDiscord **1.14.0 이상** (`BdApi.Net.fetch` 필요 — 이 API가 Discord의 CSP를 우회해 외부 API를 호출합니다)
 - DeepSeek API 키 (`platform.deepseek.com` → API keys, 잔액 충전 필요 — 유료지만 저렴)
-- 빌드용: Node.js 18 이상
+- 빌드용: Node.js 20 이상
 
 ## 빌드
 
@@ -54,7 +54,7 @@ npm test               # 토크나이저 / 언어 판정 / 번들 로드 스모�
 
 | 항목 | 설명 |
 | --- | --- |
-| DeepSeek API 키 | 필수. 없으면 아무 동작도 하지 않습니다. |
+| DeepSeek API 키 | 필수. 없으면 아무 동작도 하지 않습니다. 저장된 키는 패널에 표시되지 않고 뒤 4자리만 보입니다. 비워 두면 유지되고, `-` 를 입력하면 삭제됩니다. |
 | 모델 이름 | `deepseek-v4-flash`(기본·저렴, 1M 컨텍스트) 또는 `deepseek-v4-pro`(고품질). 구 `deepseek-chat`/`deepseek-reasoner`는 2026-07-24 폐기됨 |
 | API Base URL | OpenAI 호환 엔드포인트. 기본값은 `https://api.deepseek.com` |
 | 대상 서버 ID | 쉼표/공백 구분. **개발자 모드**를 켠 뒤 서버 아이콘 우클릭 → *서버 ID 복사* |
@@ -78,6 +78,8 @@ src/
     net.js                     BdApi.Net.fetch 기반 JSON POST
   ui/
     translation-block.js       메시지 아래에 렌더되는 React 컴포넌트
+    rich-text.js               복원된 멘션/이모지/코드/타임스탬프를 요소로 렌더
+    visibility.js              공용 IntersectionObserver (블록당 1개가 아닌 전체 1개)
     styles.js                  주입 CSS
   translation/
     translator.js              캐시 + 큐 + 프로바이더 디스패치 파사드
@@ -103,3 +105,13 @@ scripts/
 ## 개인정보
 
 대상 서버에서 한국어가 아닌 것으로 판정된 메시지의 **본문 텍스트**가 설정한 API 엔드포인트(기본값 DeepSeek)로 전송됩니다. 대상 서버 외 메시지, 한국어 메시지, 필터로 제외된 메시지는 전송되지 않습니다.
+
+전송 전에 멘션·이모지·코드·링크·타임스탬프는 placeholder로 치환되므로 스노우플레이크 ID와 URL은 모델에 노출되지 않습니다.
+
+번역 결과는 **디스크에 평문으로 캐시됩니다.** 원문(치환된 형태)과 번역문 쌍이 최대 3000개까지 BetterDiscord 데이터 폴더에 남습니다.
+
+- Windows: `%AppData%\BetterDiscord\data\<release>\KoreanAutoTranslator\`
+- macOS: `~/Library/Application Support/BetterDiscord/data/<release>/KoreanAutoTranslator/`
+- Linux: `~/.config/BetterDiscord/data/<release>/KoreanAutoTranslator/`
+
+API 키도 같은 위치에 평문으로 저장되며, 설정 패널에서도 가려지지 않은 채 표시됩니다. **화면 공유 중에는 설정 패널을 열지 마세요.** 캐시와 키를 지우려면 플러그인을 비활성화한 뒤 위 폴더의 `KoreanAutoTranslator` 디렉터리를 삭제하면 됩니다.

@@ -7,7 +7,6 @@ function call(level, args) {
     if (api && typeof api[level] === "function") {
         api[level](NAME, ...args);
     } else {
-        // eslint-disable-next-line no-console
         (console[level] || console.log)(`[${NAME}]`, ...args);
     }
 }

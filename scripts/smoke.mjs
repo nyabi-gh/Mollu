@@ -23,10 +23,21 @@ function check(name, fn) {
     }
 }
 
+async function checkAsync(name, fn) {
+    try {
+        await fn();
+        console.log(`  ok  ${name}`);
+    } catch (e) {
+        failures += 1;
+        console.error(`FAIL  ${name}\n      ${e.message}`);
+    }
+}
+
 // --- 1. source logic ---------------------------------------------------------
 
 const { mask, unmask } = await import("../src/translation/tokenizer.js");
 const { LanguageDetector } = await import("../src/translation/language-detector.js");
+const { normalizeBaseUrl } = await import("../src/lib/net.js");
 
 check("tokenizer masks discord tokens and round-trips", () => {
     const original = "hey <@123456789012345678> look `const x = 1` https://example.com/a 😄";
@@ -39,6 +50,37 @@ check("tokenizer masks discord tokens and round-trips", () => {
 check("tokenizer tolerates the model rewriting brackets", () => {
     const { tokens } = mask("call <@1> now");
     assert.equal(unmask("지금 [0] 호출해", tokens), "지금 <@1> 호출해");
+});
+
+check("tokenizer: a literal 【0】 in the source does not collide", () => {
+    const original = "【0】 https://example.com/x";
+    const { masked, tokens } = mask(original);
+    assert.equal(masked, "【0】 【1】");
+    assert.equal(unmask(masked, tokens), original);
+});
+
+check("tokenizer: ordinary '(1)' in a translation is not swallowed", () => {
+    const { tokens } = mask("see https://a.example and https://b.example");
+    assert.equal(
+        unmask("【0】 와 【1】 를 보세요 (1)", tokens),
+        "https://a.example 와 https://b.example 를 보세요 (1)",
+    );
+});
+
+check("tokenizer: mismatched brackets are not placeholders", () => {
+    const { tokens } = mask("call <@1> now");
+    assert.equal(unmask("[0】 호출", tokens), "[0】 호출");
+});
+
+const { TaskQueue } = await import("../src/translation/queue.js");
+
+await checkAsync("queue: clear() rejects waiting tasks instead of hanging", async () => {
+    const queue = new TaskQueue(() => 1);
+    const first = queue.run(() => new Promise((r) => setTimeout(() => r("a"), 20)));
+    const second = queue.run(() => Promise.resolve("b"));
+    queue.clear();
+    await assert.rejects(second, (e) => e.name === "AbortError");
+    assert.equal(await first, "a");
 });
 
 const detector = new LanguageDetector({ current: { koreanThreshold: 30 } });
@@ -90,6 +132,212 @@ check("start() and stop() do not throw (webpack lookup fails gracefully)", () =>
     instance.stop();
 });
 
+// --- 3. cache / token-restore regressions ----------------------------------
+
+await checkAsync("queue: work whose caller lost interest is dropped, not run", async () => {
+    const queue = new TaskQueue(() => 1);
+    let ran = 0;
+    const block = queue.run(() => new Promise((r) => setTimeout(r, 20)));
+    const skipped = queue.run(
+        () => {
+            ran += 1;
+        },
+        () => false,
+    );
+    const kept = queue.run(() => {
+        ran += 1;
+        return "ok";
+    });
+
+    await assert.rejects(skipped, (e) => e.name === "SkippedError");
+    await block;
+    assert.equal(await kept, "ok", "a dropped task must not block the queue");
+    assert.equal(ran, 1, "the dropped task never ran");
+});
+
+const { TranslationCache } = await import("../src/translation/cache.js");
+const { Translator } = await import("../src/translation/translator.js");
+const { CACHE_LIMIT, CACHE_KEY } = await import("../src/constants.js");
+
+check("cache: save() keeps the newest entries, not the oldest", () => {
+    const saved = captureSave(() => {
+        const cache = new TranslationCache();
+        for (let i = 0; i < CACHE_LIMIT + 5; i += 1) cache.set(`k${i}`, `v${i}`);
+        cache.save();
+    });
+    assert.equal(saved.length, CACHE_LIMIT);
+    assert.ok(
+        saved.some(([key]) => key === `k${CACHE_LIMIT + 4}`),
+        "the most recent translation must survive trimming",
+    );
+    assert.ok(!saved.some(([key]) => key === "k0"), "the oldest entry is dropped first");
+});
+
+await checkAsync("translator: a shared cache key restores each message's own tokens", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "안녕 【0】" } }] }), {
+            status: 200,
+        });
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const first = await translator.translate("hi <@111111111111111111>");
+        const second = await translator.translate("hi <@222222222222222222>"); // same masked key
+        assert.equal(first.text, "안녕 <@111111111111111111>");
+        assert.equal(second.text, "안녕 <@222222222222222222>");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: a failed translation is not retried immediately", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response("nope", { status: 500 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal(calls, 1, "the second attempt must be served from the failure backoff");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: pending is reported on start, not on enqueue", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+
+        let started = false;
+        const promise = translator.translate("hello there", { onStart: () => (started = true) });
+        assert.equal(started, false, "enqueueing must not announce a start");
+        await promise;
+        assert.equal(started, true);
+
+        // A message that scrolled away is answered as un-translated, and the
+        // failure backoff must not treat that as an error.
+        const dropped = await translator.translate("something else entirely", {
+            shouldRun: () => false,
+        });
+        assert.equal(dropped.status, "unknown");
+        assert.equal(translator._failures.size, 0, "a drop is not a failure");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("net: a plain-http base url is refused before the key is sent", () => {
+    assert.throws(() => normalizeBaseUrl("http://evil.example"), /https/);
+    assert.equal(normalizeBaseUrl("  https://api.deepseek.com/  "), "https://api.deepseek.com");
+    assert.equal(normalizeBaseUrl("api.deepseek.com"), "https://api.deepseek.com");
+});
+
+// --- 4. rendering / settings ------------------------------------------------
+
+const { renderSegments } = await import("../src/ui/rich-text.js");
+const { Settings } = await import("../src/settings.js");
+
+check("rich text: discord tokens render as elements, not raw markup", () => {
+    const stores = {
+        userName: (id) => (id === "1" ? "냐비" : null),
+        channelName: () => "일반",
+        roleName: () => null,
+    };
+    const nodes = renderSegments(
+        [
+            { type: "text", value: "안녕 " },
+            { type: "token", value: "<@1>" },
+            { type: "token", value: "<@2>" },
+            { type: "token", value: "<#9>" },
+            { type: "token", value: "<:hi:5>" },
+            { type: "token", value: "`x = 1`" },
+        ],
+        stores,
+        "g1",
+    );
+
+    assert.equal(nodes[0], "안녕 ");
+    assert.deepEqual(nodes[1].props.children, ["@냐비"]);
+    assert.equal(nodes[2], "<@2>", "an unknown user falls back to the raw token");
+    assert.deepEqual(nodes[3].props.children, ["#일반"]);
+    assert.equal(nodes[4].type, "img");
+    assert.ok(nodes[4].props.src.includes("/5.webp"), nodes[4].props.src);
+    assert.equal(nodes[5].type, "code");
+    assert.deepEqual(nodes[5].props.children, ["x = 1"]);
+});
+
+await checkAsync("translator: only a real wrapping quote is stripped", async () => {
+    const previous = BdApi.Net.fetch;
+    const reply = (content) => async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+    try {
+        BdApi.Net.fetch = reply('"안녕하세요"');
+        assert.equal(
+            (await new Translator({ settings: stubSettings() }).translate("hello")).text,
+            "안녕하세요",
+        );
+
+        BdApi.Net.fetch = reply('"가" 그리고 "나"');
+        assert.equal(
+            (await new Translator({ settings: stubSettings() }).translate("a and b")).text,
+            '"가" 그리고 "나"',
+            "a string that merely starts and ends with a quote keeps both",
+        );
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("translator: an over-long message is re-checked after maxChars is raised", () => {
+    const settings = stubSettings();
+    settings.current.maxChars = 10;
+    const translator = new Translator({ settings });
+    assert.equal(translator.peek("this message is definitely too long").status, "skip");
+    settings.current.maxChars = 3000;
+    assert.equal(
+        translator.peek("this message is definitely too long").status,
+        "unknown",
+        "the skip must not have been cached",
+    );
+});
+
+check("settings: the stored api key is never rendered into the panel", () => {
+    const settings = new Settings();
+    settings._set("apiKey", "  sk-abcdefgh1234  ");
+
+    const field = settings.buildPanel().__spec.settings.find((entry) => entry.id === "apiKey");
+    assert.equal(field.value, "", "the panel must not carry the key");
+    assert.ok(!JSON.stringify(field).includes("abcdefgh"), "no part of the key may leak into the panel");
+    assert.ok(field.placeholder.includes("1234"), "a last-4 fingerprint identifies the saved key");
+
+    settings._set("apiKey", ""); // an empty edit means "unchanged"
+    assert.equal(settings.current.apiKey, "sk-abcdefgh1234");
+
+    settings._set("apiKey", "-"); // the documented way to erase it
+    assert.equal(settings.current.apiKey, "");
+});
+
+check("settings: listeners fire and unsubscribe, and pasted values are trimmed", () => {
+    const settings = new Settings();
+    const seen = [];
+    const unsubscribe = settings.onChange((id, value) => seen.push([id, value]));
+
+    settings._set("showPending", false);
+    settings._set("apiKey", "  sk-test  ");
+    assert.deepEqual(seen[0], ["showPending", false]);
+    assert.equal(settings.current.apiKey, "sk-test");
+
+    unsubscribe();
+    settings._set("showErrors", true);
+    assert.equal(seen.length, 2, "no callbacks after unsubscribe");
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
@@ -105,6 +353,34 @@ function loadPlugin(path) {
     let exported = moduleObj.exports;
     if (exported && exported.default) exported = exported.default;
     return exported;
+}
+
+function stubSettings() {
+    return {
+        current: {
+            provider: "deepseek",
+            apiKey: "test-key",
+            model: "deepseek-v4-flash",
+            baseUrl: "https://api.deepseek.com",
+            maxChars: 3000,
+            maxConcurrent: 2,
+        },
+    };
+}
+
+function captureSave(fn) {
+    const previous = BdApi.Data.save;
+    let captured = null;
+    BdApi.Data.save = (_name, key, value) => {
+        if (key === CACHE_KEY) captured = value;
+    };
+    try {
+        fn();
+    } finally {
+        BdApi.Data.save = previous;
+    }
+    assert.ok(Array.isArray(captured), "cache.save() wrote nothing");
+    return captured;
 }
 
 function installBdApiStub() {

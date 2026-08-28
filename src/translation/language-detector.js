@@ -3,6 +3,11 @@ import { MASK_PATTERN } from "./tokenizer.js";
 // Hangul syllables + jamo (including half-width and extended blocks).
 const HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
 
+// Hoisted: needsTranslation() runs on every render of every message in a target
+// server, and recompiling this pattern per call was the bulk of its cost.
+const MASK_RE = new RegExp(MASK_PATTERN, "g");
+const NON_LETTER = /[^\p{L}]/gu;
+
 /**
  * Decides whether a message should be translated. A message counts as Korean
  * (and is skipped) when the share of Hangul among its letters reaches the
@@ -28,9 +33,8 @@ export class LanguageDetector {
     }
 
     _letters(text) {
-        const stripped = text
-            .replace(new RegExp(MASK_PATTERN, "g"), " ")
-            .replace(/[^\p{L}]/gu, "");
-        return Array.from(stripped);
+        MASK_RE.lastIndex = 0;
+        NON_LETTER.lastIndex = 0;
+        return Array.from(text.replace(MASK_RE, " ").replace(NON_LETTER, ""));
     }
 }

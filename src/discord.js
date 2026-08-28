@@ -10,6 +10,7 @@ export const React = BdApi.React;
 export function createStores() {
     const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
     const UserStore = BdApi.Webpack.getStore("UserStore");
+    const GuildStore = BdApi.Webpack.getStore("GuildStore");
 
     return {
         guildIdForChannel(channelId) {
@@ -22,6 +23,30 @@ export function createStores() {
         currentUserId() {
             try {
                 return UserStore?.getCurrentUser?.()?.id ?? null;
+            } catch {
+                return null;
+            }
+        },
+        // The three lookups below resolve mentions for display. `null` means
+        // "unknown", and the caller falls back to the raw token.
+        userName(userId) {
+            try {
+                const user = UserStore?.getUser?.(userId);
+                return user?.globalName || user?.username || null;
+            } catch {
+                return null;
+            }
+        },
+        channelName(channelId) {
+            try {
+                return ChannelStore?.getChannel?.(channelId)?.name ?? null;
+            } catch {
+                return null;
+            }
+        },
+        roleName(guildId, roleId) {
+            try {
+                return GuildStore?.getGuild?.(guildId)?.roles?.[roleId]?.name ?? null;
             } catch {
                 return null;
             }
@@ -40,7 +65,7 @@ export function createStores() {
  * @returns {{ module: object, key: string } | null} arguments for BdApi.Patcher
  */
 export function findMessageContent() {
-    const { Filters, getWithKey } = BdApi.Webpack;
+    const { Filters } = BdApi.Webpack;
 
     // MessageContent's function destructures these props:
     //   {className, message, children, content, onUpdate, contentRef, compact}

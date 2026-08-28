@@ -1,4 +1,6 @@
 import { React } from "../discord.js";
+import { renderSegments } from "./rich-text.js";
+import { observeVisibility } from "./visibility.js";
 
 // A message is only translated once it has actually been in the viewport for
 // this long. Scrolling straight past a message never triggers a request.
@@ -14,12 +16,16 @@ function initialResult(translator, text) {
  * watches it with an IntersectionObserver; translation starts only when the
  * anchor becomes visible. Cache hits skip all of that and render immediately.
  */
-export function TranslationBlock({ text, translator, settings }) {
+export function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
+    const { showPending, showErrors } = useDisplaySettings(settings);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
 
     React.useEffect(() => {
         let alive = true;
+        let visible = false;
+        let dwell = null;
+        let running = false;
 
         const known = translator.peek(text);
         if (known.status === "done" || known.status === "skip") {
@@ -29,57 +35,76 @@ export function TranslationBlock({ text, translator, settings }) {
         setResult({ status: "idle" });
 
         const run = () => {
-            if (!alive) return;
-            setResult({ status: "pending" });
-            translator.translate(text).then((res) => {
-                if (alive) setResult(res);
-            });
+            if (!alive || running) return;
+            running = true;
+            translator
+                .translate(text, {
+                    // Only work that has actually left the queue shows "번역 중".
+                    // Flipping every queued message at once would grow hundreds
+                    // of messages by a line at the same time while scrolling.
+                    onStart: () => {
+                        if (alive) setResult({ status: "pending" });
+                    },
+                    shouldRun: () => alive && visible,
+                })
+                .then((res) => {
+                    if (!alive) return;
+                    running = false;
+                    // Dropped while queued — wait for the message to come back.
+                    setResult(res.status === "unknown" ? { status: "idle" } : res);
+                });
         };
 
-        const node = anchorRef.current;
-        if (!node || typeof IntersectionObserver === "undefined") {
+        const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
+            visible = isVisible;
+            if (isVisible) {
+                if (dwell == null && !running) dwell = setTimeout(run, DWELL_MS);
+            } else if (dwell != null) {
+                clearTimeout(dwell);
+                dwell = null;
+            }
+        });
+
+        if (!stopObserving) {
+            visible = true;
             run();
             return () => {
                 alive = false;
             };
         }
 
-        let dwell = null;
-        const observer = new IntersectionObserver((entries) => {
-            const visible = entries.some((e) => e.isIntersecting);
-            if (visible && dwell == null) {
-                dwell = setTimeout(() => {
-                    observer.disconnect();
-                    run();
-                }, DWELL_MS);
-            } else if (!visible && dwell != null) {
-                clearTimeout(dwell);
-                dwell = null;
-            }
-        });
-        observer.observe(node);
-
         return () => {
             alive = false;
-            observer.disconnect();
+            stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
     }, [text]);
 
-    const { showPending, showErrors } = settings.current;
     const status = result && result.status;
 
-    if (status === "idle") {
-        return React.createElement("div", {
+    // The anchor stays mounted in every state so its node identity — and the
+    // visibility subscription attached to it — survives a status change.
+    return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement("div", {
             ref: anchorRef,
             className: "kat-translation__anchor",
             "aria-hidden": "true",
-        });
-    }
-    if (!status || status === "unknown" || status === "skip") return null;
+        }),
+        renderBody(status, result, { showPending, showErrors, stores, guildId }),
+    );
+}
+
+function renderBody(status, result, { showPending, showErrors, stores, guildId }) {
+    if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
     if (status === "pending") {
         return showPending
-            ? React.createElement("div", { className: "kat-translation kat-translation--pending" }, "번역 중…")
+            ? React.createElement(
+                  "div",
+                  { className: "kat-translation kat-translation--pending" },
+                  "번역 중…",
+              )
             : null;
     }
     if (status === "error") {
@@ -91,6 +116,34 @@ export function TranslationBlock({ text, translator, settings }) {
         "div",
         { className: "kat-translation" },
         React.createElement("span", { className: "kat-translation__badge" }, "KO"),
-        React.createElement("span", { className: "kat-translation__text" }, result.text),
+        React.createElement(
+            "span",
+            { className: "kat-translation__text" },
+            ...renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId),
+        ),
     );
+}
+
+/**
+ * Mirrors the display-only settings into state, so toggling "번역 중 표시" or
+ * "번역 실패 시 표시" updates blocks that are already on screen.
+ */
+function useDisplaySettings(settings) {
+    const [display, setDisplay] = React.useState(() => pickDisplay(settings));
+
+    React.useEffect(() => {
+        const unsubscribe = settings.onChange((id) => {
+            if (id === "showPending" || id === "showErrors") setDisplay(pickDisplay(settings));
+        });
+        return () => {
+            unsubscribe();
+        };
+    }, [settings]);
+
+    return display;
+}
+
+function pickDisplay(settings) {
+    const { showPending, showErrors } = settings.current;
+    return { showPending, showErrors };
 }

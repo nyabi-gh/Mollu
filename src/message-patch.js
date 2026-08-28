@@ -44,33 +44,37 @@ export class MessagePatch {
 
     _onRender(props, ret) {
         const message = props?.message;
-        if (!ret || !this._shouldConsider(message)) return ret;
+        const guildId = ret ? this._targetGuildId(message) : null;
+        if (!guildId) return ret;
         if (!this._detector.needsTranslation(message.content)) return ret;
 
         const block = React.createElement(TranslationBlock, {
             key: "kat-translation",
             text: message.content,
+            guildId,
+            stores: this._stores,
             translator: this._translator,
             settings: this._settings,
         });
         return appendChild(ret, block);
     }
 
-    _shouldConsider(message) {
-        if (!message || typeof message.content !== "string" || !message.content.trim()) return false;
-        if (!TRANSLATABLE_TYPES.has(message.type)) return false;
+    /** @returns {string|null} the target guild this message belongs to, if any */
+    _targetGuildId(message) {
+        if (!message || typeof message.content !== "string" || !message.content.trim()) return null;
+        if (!TRANSLATABLE_TYPES.has(message.type)) return null;
 
         const settings = this._settings.current;
-        if (!settings.apiKey || this._settings.guildIdSet.size === 0) return false;
+        if (!settings.apiKey || this._settings.guildIdSet.size === 0) return null;
 
         const author = message.author || {};
-        if (!settings.translateBots && author.bot) return false;
+        if (!settings.translateBots && author.bot) return null;
         if (!settings.translateOwnMessages && author.id && author.id === this._stores.currentUserId()) {
-            return false;
+            return null;
         }
 
         const guildId = this._stores.guildIdForChannel(message.channel_id);
-        return !!guildId && this._settings.guildIdSet.has(guildId);
+        return guildId && this._settings.guildIdSet.has(guildId) ? guildId : null;
     }
 }
 
@@ -80,9 +84,11 @@ function appendChild(ret, child) {
     if (Array.isArray(ret)) return [...ret, child];
     if (ret && ret.props) {
         const children = ret.props.children;
-        const next =
-            children == null ? [child] : Array.isArray(children) ? [...children, child] : [children, child];
-        return React.cloneElement(ret, undefined, next);
+        // Passed as separate arguments rather than one array, so React does not
+        // demand a `key` on Discord's own children.
+        return children == null
+            ? React.cloneElement(ret, undefined, child)
+            : React.cloneElement(ret, undefined, children, child);
     }
     return ret;
 }

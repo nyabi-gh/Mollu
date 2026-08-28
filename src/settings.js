@@ -9,7 +9,7 @@ import { logger } from "./lib/logger.js";
 export class Settings {
     constructor() {
         const stored = safeLoad();
-        this._values = { ...DEFAULT_SETTINGS, ...stored };
+        this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
         this._listeners = new Set();
     }
@@ -28,12 +28,14 @@ export class Settings {
     }
 
     _set(id, value) {
-        this._values[id] = value;
-        if (id === "guildIds") this._guildIdSet = parseGuildIds(value);
+        const next = coerce(id, value, this._values[id]);
+        if (next === KEEP) return;
+        this._values[id] = next;
+        if (id === "guildIds") this._guildIdSet = parseGuildIds(next);
         this._persist();
         for (const listener of this._listeners) {
             try {
-                listener(id, value);
+                listener(id, next);
             } catch {
                 /* a listener error must not block persistence */
             }
@@ -57,8 +59,14 @@ export class Settings {
                     type: "text",
                     id: "apiKey",
                     name: "DeepSeek API 키",
-                    note: "platform.deepseek.com → API Keys 에서 발급합니다.",
-                    value: v.apiKey,
+                    // The stored key is never rendered: BetterDiscord's text
+                    // input has no masked mode, and this panel is a real
+                    // exposure risk while screen sharing.
+                    note: v.apiKey
+                        ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.`
+                        : "platform.deepseek.com → API Keys 에서 발급합니다.",
+                    placeholder: v.apiKey ? `저장됨 · ${fingerprint(v.apiKey)}` : "sk-...",
+                    value: "",
                 },
                 {
                     type: "text",
@@ -140,10 +148,44 @@ export class Settings {
     }
 }
 
+// Pasted keys and URLs routinely carry stray whitespace, which turns into a 401
+// or a malformed endpoint.
+const TRIMMED_FIELDS = new Set(["apiKey", "baseUrl", "model"]);
+
+// Typed into the (always blank) API key field to erase the stored key, since an
+// empty field means "keep what is saved".
+const CLEAR_TOKEN = "-";
+
+// Sentinel returned by coerce() for an edit that must not be applied.
+const KEEP = Symbol("keep");
+
+function normalize(values) {
+    for (const field of TRIMMED_FIELDS) {
+        if (typeof values[field] === "string") values[field] = values[field].trim();
+    }
+    return values;
+}
+
+function coerce(id, value, previous) {
+    if (!TRIMMED_FIELDS.has(id) || typeof value !== "string") return value;
+
+    const trimmed = value.trim();
+    if (id !== "apiKey") return trimmed;
+
+    // The field renders empty, so an empty edit is "unchanged", not "erase".
+    if (!trimmed) return previous ? KEEP : "";
+    return trimmed === CLEAR_TOKEN ? "" : trimmed;
+}
+
+/** Last four characters, the way a provider console identifies a key. */
+function fingerprint(key) {
+    return key.length >= 8 ? `••••${key.slice(-4)}` : "••••";
+}
+
 function safeLoad() {
     try {
         const loaded = BdApi.Data.load(NAME, "settings");
-        logger.info("설정 로드:", loaded ? `apiKey=${!!loaded.apiKey} guildIds=${JSON.stringify(loaded.guildIds)}` : "저장된 값 없음");
+        logger.info("설정 로드:", loaded ? `apiKey=${!!loaded.apiKey}` : "저장된 값 없음");
         return loaded || {};
     } catch (e) {
         logger.error("설정 로드 실패", e);

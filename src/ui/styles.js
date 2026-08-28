@@ -5,8 +5,14 @@ export const STYLES = `
     margin: 0;
     padding: 0;
     pointer-events: none;
+    overflow-anchor: none;
 }
 .kat-translation {
+    /* A translation appears after the message is laid out. Excluding it from
+       scroll anchoring lets the browser hold on to real message content
+       instead, so arriving translations do not shove the viewport around. */
+    overflow-anchor: none;
+    contain: layout style;
     margin-top: 2px;
     color: var(--text-muted, #949ba4);
     font-size: 0.95rem;
@@ -25,6 +31,27 @@ export const STYLES = `
     vertical-align: 1px;
     color: var(--text-muted, #949ba4);
     background: var(--background-modifier-accent, rgba(148, 155, 164, 0.16));
+}
+.kat-translation__emoji {
+    width: 1.375em;
+    height: 1.375em;
+    margin: 0 1px;
+    object-fit: contain;
+    vertical-align: -0.3em;
+}
+.kat-translation__mention {
+    padding: 0 2px;
+    border-radius: 3px;
+    color: var(--mention-foreground, #c9cdfb);
+    background: var(--mention-background, rgba(88, 101, 242, 0.24));
+}
+.kat-translation__code {
+    padding: 0 3px;
+    border-radius: 3px;
+    font-family: var(--font-code, monospace);
+    font-size: 0.85em;
+    white-space: pre-wrap;
+    background: var(--background-secondary, rgba(0, 0, 0, 0.2));
 }
 .kat-translation--pending {
     opacity: 0.6;
