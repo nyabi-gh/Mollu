@@ -1,5 +1,5 @@
 import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
-import { getProvider, PROVIDER_OPTIONS } from "./translation/providers/index.js";
+import { getProvider, modelOptions, PROVIDER_OPTIONS } from "./translation/providers/index.js";
 import { LANGUAGE_OPTIONS } from "./languages.js";
 import { setLocale, t, UI_LANGUAGES } from "./i18n.js";
 import { keysFromString } from "./hotkey.js";
@@ -94,6 +94,7 @@ export class Settings {
 
     _panelSpec() {
         const v = this._values;
+        const modelChoices = modelOptions(v.provider, v.model);
         return {
             onChange: (_categoryId, settingId, value) => this.set(settingId, value),
 
@@ -128,25 +129,6 @@ export class Settings {
                     note: t("settings.targetLanguage.note"),
                     value: v.targetLanguage,
                     options: LANGUAGE_OPTIONS,
-                },
-
-                ...(getProvider(v.provider).usesModel === false
-                    ? []
-                    : [
-                          {
-                              type: "text",
-                              id: "model",
-                              name: t("settings.model"),
-                              note: t(`modelHint.${v.provider}`),
-                              value: v.model,
-                          },
-                      ]),
-                {
-                    type: "text",
-                    id: "baseUrl",
-                    name: t("settings.baseUrl"),
-                    note: t("settings.baseUrl.note"),
-                    value: v.baseUrl,
                 },
                 {
                     type: "switch",
@@ -275,6 +257,25 @@ export class Settings {
                     collapsible: true,
                     shown: true,
                     settings: withChangeHandlers(this, [
+                        ...(modelChoices.length === 0
+                            ? []
+                            : [
+                                  {
+                                      type: "dropdown",
+                                      id: "model",
+                                      name: t("settings.model"),
+                                      note: t(`modelHint.${v.provider}`),
+                                      value: v.model,
+                                      options: modelChoices,
+                                  },
+                              ]),
+                        {
+                            type: "text",
+                            id: "baseUrl",
+                            name: t("settings.baseUrl"),
+                            note: t("settings.baseUrl.note"),
+                            value: v.baseUrl,
+                        },
                         {
                             type: "switch",
                             id: "debugLog",

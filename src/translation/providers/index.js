@@ -18,3 +18,9 @@ export const PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
     label: provider.label,
     value: provider.id,
 }));
+
+export function modelOptions(providerId, current) {
+    const { models = [] } = getProvider(providerId);
+    const values = models.includes(current) || !current ? models : [...models, current];
+    return values.length < 2 ? [] : values.map((model) => ({ label: model, value: model }));
+}

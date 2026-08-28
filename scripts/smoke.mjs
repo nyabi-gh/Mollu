@@ -486,7 +486,7 @@ check("settings: data saved under the previous plugin name is carried over", () 
 
 check("settings: every panel field persists, not just the switches", () => {
     const settings = new Settings();
-    const fields = settings._panelSpec().settings;
+    const fields = panelFields(settings);
 
     const edits = {
         apiKey: "sk-typed-in-the-panel",
@@ -624,18 +624,26 @@ check("settings: a target saved before the split becomes Brazilian", () => {
     }
 });
 
-check("settings: the model field is hidden for a backend without models", () => {
+check("settings: the model field appears only when there is a choice to make", () => {
     const settings = new Settings();
+    const modelField = () => panelFields(settings).find((entry) => entry.id === "model");
+
+    settings.set("provider", "deepseek");
+    assert.equal(modelField().type, "dropdown", "two DeepSeek models are worth choosing between");
+    assert.deepEqual(
+        modelField().options.map((option) => option.value),
+        ["deepseek-v4-flash", "deepseek-v4-pro"],
+    );
+
     settings.set("provider", "deepl");
-    const ids = settings._panelSpec().settings.map((entry) => entry.id);
-    assert.ok(!ids.includes("model"), "DeepL has no model to choose");
-    assert.ok(ids.includes("apiKey") && ids.includes("targetLanguage"));
+    assert.equal(modelField(), undefined, "DeepL has no model at all");
 
     settings.set("provider", "gemini");
-    assert.ok(
-        settings._panelSpec().settings.some((entry) => entry.id === "model"),
-        "a backend with models still shows the field",
-    );
+    assert.equal(modelField(), undefined, "one usable model is not a choice");
+
+    settings.set("model", "some-other-compatible-model");
+    const options = modelField().options.map((option) => option.value);
+    assert.deepEqual(options, ["gemini-3.1-flash-lite", "some-other-compatible-model"]);
 });
 
 check("settings: switching provider swaps defaults and keeps both keys", () => {
@@ -1080,6 +1088,10 @@ function outgoingWith(overrides, targetGuildId = "", translator = null, onFailur
         stores: { guildIdForChannel: (channelId) => (channelId === "dm" ? null : guildId) },
         onFailure: onFailure ?? (() => {}),
     });
+}
+
+function panelFields(settings) {
+    return settings._panelSpec().settings.flatMap((entry) => entry.settings ?? entry);
 }
 
 function patchWith(overrides, targetGuildId = "") {

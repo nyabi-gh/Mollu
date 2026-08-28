@@ -2,8 +2,9 @@ import { chatCompletion } from "./openai-compatible.js";
 
 export const id = "deepseek";
 export const label = "DeepSeek";
+export const models = Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]);
 export const defaults = Object.freeze({
-    model: "deepseek-v4-flash",
+    model: models[0],
     baseUrl: "https://api.deepseek.com",
 });
 

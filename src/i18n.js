@@ -103,9 +103,9 @@ const STRINGS = {
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
         "keySource.deepl":
             "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
-        "modelHint.deepseek": "e.g. deepseek-v4-flash (cheap), deepseek-v4-pro (higher quality)",
-        "modelHint.gemini":
-            "e.g. gemini-3.1-flash-lite (default, ~1s). gemma-4-* reasons and cannot be told not to, so it takes 9-12s and returns its reasoning instead of a translation.",
+        "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better.",
+        "modelHint.gemini": "flash-lite answers in about a second and is the only model worth using here.",
+        "modelHint.deepl": "DeepL has no model to pick.",
         "language.auto": "Match Discord",
     },
     ko: {
@@ -212,9 +212,9 @@ const STRINGS = {
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
         "keySource.deepl":
             "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
-        "modelHint.deepseek": "예: deepseek-v4-flash(저렴), deepseek-v4-pro(고품질)",
-        "modelHint.gemini":
-            "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
+        "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다.",
+        "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠르고, 여기서는 사실상 이것만 쓸 만합니다.",
+        "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
         "language.auto": "Discord 설정에 맞춤",
     },
 };

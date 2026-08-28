@@ -2,8 +2,9 @@ import { chatCompletion } from "./openai-compatible.js";
 
 export const id = "gemini";
 export const label = "Google Gemini / Gemma";
+export const models = Object.freeze(["gemini-3.1-flash-lite"]);
 export const defaults = Object.freeze({
-    model: "gemini-3.1-flash-lite",
+    model: models[0],
     baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
 });
 

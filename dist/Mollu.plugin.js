@@ -84,6 +84,7 @@ __export(deepseek_exports, {
   defaults: () => defaults,
   id: () => id,
   label: () => label,
+  models: () => models,
   translate: () => translate
 });
 
@@ -188,8 +189,9 @@ var STRINGS = {
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
-    "modelHint.deepseek": "e.g. deepseek-v4-flash (cheap), deepseek-v4-pro (higher quality)",
-    "modelHint.gemini": "e.g. gemini-3.1-flash-lite (default, ~1s). gemma-4-* reasons and cannot be told not to, so it takes 9-12s and returns its reasoning instead of a translation.",
+    "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better.",
+    "modelHint.gemini": "flash-lite answers in about a second and is the only model worth using here.",
+    "modelHint.deepl": "DeepL has no model to pick.",
     "language.auto": "Match Discord"
   },
   ko: {
@@ -276,8 +278,9 @@ var STRINGS = {
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
-    "modelHint.deepseek": "예: deepseek-v4-flash(저렴), deepseek-v4-pro(고품질)",
-    "modelHint.gemini": "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
+    "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다.",
+    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠르고, 여기서는 사실상 이것만 쓸 만합니다.",
+    "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
 };
@@ -510,8 +513,9 @@ function outputBudget(text) {
 // src/translation/providers/deepseek.js
 var id = "deepseek";
 var label = "DeepSeek";
+var models = Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]);
 var defaults = Object.freeze({
-  model: "deepseek-v4-flash",
+  model: models[0],
   baseUrl: "https://api.deepseek.com"
 });
 function translate(params) {
@@ -534,12 +538,14 @@ __export(gemini_exports, {
   defaults: () => defaults2,
   id: () => id2,
   label: () => label2,
+  models: () => models2,
   translate: () => translate2
 });
 var id2 = "gemini";
 var label2 = "Google Gemini / Gemma";
+var models2 = Object.freeze(["gemini-3.1-flash-lite"]);
 var defaults2 = Object.freeze({
-  model: "gemini-3.1-flash-lite",
+  model: models2[0],
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
 function translate2(params) {
@@ -555,12 +561,12 @@ __export(deepl_exports, {
   defaults: () => defaults3,
   id: () => id3,
   label: () => label3,
-  translate: () => translate3,
-  usesModel: () => usesModel
+  models: () => models3,
+  translate: () => translate3
 });
 var id3 = "deepl";
 var label3 = "DeepL";
-var usesModel = false;
+var models3 = Object.freeze([]);
 var FREE_BASE = "https://api-free.deepl.com";
 var PRO_BASE = "https://api.deepl.com";
 var defaults3 = Object.freeze({ model: "", baseUrl: FREE_BASE });
@@ -644,6 +650,11 @@ var PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
   label: provider.label,
   value: provider.id
 }));
+function modelOptions(providerId, current) {
+  const { models: models4 = [] } = getProvider(providerId);
+  const values = models4.includes(current) || !current ? models4 : [...models4, current];
+  return values.length < 2 ? [] : values.map((model) => ({ label: model, value: model }));
+}
 
 // src/hotkey.js
 var MODIFIERS = {
@@ -895,6 +906,7 @@ var Settings = class {
   }
   _panelSpec() {
     const v = this._values;
+    const modelChoices = modelOptions(v.provider, v.model);
     return {
       onChange: (_categoryId, settingId, value) => this.set(settingId, value),
       onDrawerToggle: (id4, shown) => DRAWERS.set(id4, shown),
@@ -923,22 +935,6 @@ var Settings = class {
           note: t("settings.targetLanguage.note"),
           value: v.targetLanguage,
           options: LANGUAGE_OPTIONS
-        },
-        ...getProvider(v.provider).usesModel === false ? [] : [
-          {
-            type: "text",
-            id: "model",
-            name: t("settings.model"),
-            note: t(`modelHint.${v.provider}`),
-            value: v.model
-          }
-        ],
-        {
-          type: "text",
-          id: "baseUrl",
-          name: t("settings.baseUrl"),
-          note: t("settings.baseUrl.note"),
-          value: v.baseUrl
         },
         {
           type: "switch",
@@ -1066,6 +1062,23 @@ var Settings = class {
           collapsible: true,
           shown: true,
           settings: withChangeHandlers(this, [
+            ...modelChoices.length === 0 ? [] : [
+              {
+                type: "dropdown",
+                id: "model",
+                name: t("settings.model"),
+                note: t(`modelHint.${v.provider}`),
+                value: v.model,
+                options: modelChoices
+              }
+            ],
+            {
+              type: "text",
+              id: "baseUrl",
+              name: t("settings.baseUrl"),
+              note: t("settings.baseUrl.note"),
+              value: v.baseUrl
+            },
             {
               type: "switch",
               id: "debugLog",
