@@ -202,9 +202,19 @@ async function chatCompletion({ text, settings, signal, defaults: defaults3, ext
     signal,
     body
   });
-  const output = json?.choices?.[0]?.message?.content;
-  if (typeof output !== "string" || !output.trim()) throw new Error("빈 응답");
-  return output.trim();
+  const choice = json?.choices?.[0];
+  const output = stripReasoning(choice?.message?.content);
+  if (!output) {
+    throw new Error(choice?.finish_reason === "length" ? "응답이 추론으로 잘림" : "빈 응답");
+  }
+  return output;
+}
+function stripReasoning(value) {
+  if (typeof value !== "string") return "";
+  let text = value.replace(/<(thought|think)>[\s\S]*?<\/\1>/gi, "");
+  const unclosed = text.search(/<(?:thought|think)>/i);
+  if (unclosed !== -1) text = text.slice(0, unclosed);
+  return text.trim();
 }
 function outputBudget(text) {
   return Math.min(MAX_OUTPUT_TOKENS, text.length + OUTPUT_TOKEN_HEADROOM);
@@ -242,9 +252,11 @@ __export(gemini_exports, {
 var id2 = "gemini";
 var label2 = "Google Gemini / Gemma";
 var defaults2 = Object.freeze({
-  // Gemma 4 31B is an instruction-tuned non-reasoning model with native
-  // system-role support, which is all a translation needs.
-  model: "gemma-4-31b-it",
+  // Measured against the live API on a chat-length message: this answers in
+  // ~1s with the translation alone. The Gemma 4 models take 9-12s and spend
+  // the whole budget emitting a <thought> block instead of a translation,
+  // and they cannot be told to stop — see extend() below.
+  model: "gemini-3.1-flash-lite",
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
 function translate2(params) {
@@ -450,7 +462,7 @@ var KEY_SOURCE = {
 };
 var MODEL_HINT = {
   deepseek: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
-  gemini: "예: gemma-4-31b-it(기본), gemini-3.5-flash-lite, gemini-3.1-flash-lite — 모두 무료 티어"
+  gemini: "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다."
 };
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");

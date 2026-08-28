@@ -39,9 +39,30 @@ export async function chatCompletion({ text, settings, signal, defaults, extend 
         body,
     });
 
-    const output = json?.choices?.[0]?.message?.content;
-    if (typeof output !== "string" || !output.trim()) throw new Error("빈 응답");
-    return output.trim();
+    const choice = json?.choices?.[0];
+    const output = stripReasoning(choice?.message?.content);
+    if (!output) {
+        // Gemma 4 spends the whole budget on a <thought> block and is cut off
+        // before it writes a translation. Reporting that as an error keeps the
+        // reasoning out of the message list.
+        throw new Error(choice?.finish_reason === "length" ? "응답이 추론으로 잘림" : "빈 응답");
+    }
+    return output;
+}
+
+/**
+ * Drop a chain of thought emitted as content. Models that support
+ * `reasoning_effort` are told not to reason at all; this covers the ones that
+ * reason anyway and have no switch for it.
+ */
+function stripReasoning(value) {
+    if (typeof value !== "string") return "";
+
+    let text = value.replace(/<(thought|think)>[\s\S]*?<\/\1>/gi, "");
+    // An unclosed block means the answer never arrived; nothing after it.
+    const unclosed = text.search(/<(?:thought|think)>/i);
+    if (unclosed !== -1) text = text.slice(0, unclosed);
+    return text.trim();
 }
 
 // Korean output is never much longer than its source in characters, and one

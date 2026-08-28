@@ -272,6 +272,33 @@ await checkAsync("translator: a 429 pauses everything instead of failing", async
     }
 });
 
+await checkAsync("provider: a chain of thought never reaches the message list", async () => {
+    const previous = BdApi.Net.fetch;
+    const reply =
+        (content, finish = "stop") =>
+        async () =>
+            new Response(JSON.stringify({ choices: [{ finish_reason: finish, message: { content } }] }), {
+                status: 200,
+            });
+    try {
+        // Closed block: keep only what follows it.
+        BdApi.Net.fetch = reply("<thought>Let me consider the tone.</thought>안녕하세요");
+        assert.equal(
+            (await new Translator({ settings: stubSettings() }).translate("hi there")).text,
+            "안녕하세요",
+        );
+
+        // Gemma 4's actual shape: reasoning runs until the budget is gone, so
+        // no translation was ever written. That is an error, not a result.
+        BdApi.Net.fetch = reply("<thought>*  Input: ...\n*  Option 1: ...", "length");
+        const cut = await new Translator({ settings: stubSettings() }).translate("hi there");
+        assert.equal(cut.status, "error");
+        assert.match(cut.message, /추론/);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 check("net: a plain-http base url is refused before the key is sent", () => {
     assert.throws(() => normalizeBaseUrl("http://evil.example"), /https/);
     assert.equal(normalizeBaseUrl("  https://api.deepseek.com/  "), "https://api.deepseek.com");
@@ -404,7 +431,7 @@ check("settings: switching provider swaps defaults and keeps both keys", () => {
 
     settings._set("provider", "gemini");
     assert.equal(settings.current.baseUrl, "https://generativelanguage.googleapis.com/v1beta/openai");
-    assert.equal(settings.current.model, "gemma-4-31b-it");
+    assert.equal(settings.current.model, "gemini-3.1-flash-lite");
     assert.equal(settings.current.apiKey, "", "a provider with no saved key starts empty");
 
     settings._set("apiKey", "gemini-key");
@@ -429,7 +456,7 @@ await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint",
         const settings = stubSettings();
         Object.assign(settings.current, {
             provider: "gemini",
-            model: "gemma-4-31b-it",
+            model: "gemini-3.1-flash-lite",
             baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
         });
         await new Translator({ settings }).translate("hello there");
@@ -437,16 +464,16 @@ await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint",
         assert.equal(seen.url, "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions");
         assert.equal(seen.options.headers.Authorization, "Bearer test-key");
         const body = JSON.parse(seen.options.body);
-        assert.equal(body.model, "gemma-4-31b-it");
-        assert.equal(body.messages[0].role, "system", "Gemma 4 supports the system role");
+        assert.equal(body.model, "gemini-3.1-flash-lite");
+        assert.equal(body.messages[0].role, "system");
         assert.ok(!("thinking" in body), "the DeepSeek-only field must not leak to Google");
-        assert.ok(!("reasoning_effort" in body), "Gemma is not a reasoning model");
+        assert.equal(body.reasoning_effort, "none", "gemini-* reasons by default; a translation must not");
     } finally {
         BdApi.Net.fetch = previous;
     }
 });
 
-await checkAsync("gemini: reasoning is turned off for gemini-* models only", async () => {
+await checkAsync("gemini: gemma never receives reasoning_effort, which it rejects", async () => {
     const previous = BdApi.Net.fetch;
     let body = null;
     BdApi.Net.fetch = async (_url, options) => {
@@ -459,11 +486,12 @@ await checkAsync("gemini: reasoning is turned off for gemini-* models only", asy
         const settings = stubSettings();
         Object.assign(settings.current, {
             provider: "gemini",
-            model: "gemini-3.1-flash-lite",
+            model: "gemma-4-31b-it",
             baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
         });
         await new Translator({ settings }).translate("hello there");
-        assert.equal(body.reasoning_effort, "none");
+        // "Thinking budget is not supported for this model." — HTTP 400.
+        assert.ok(!("reasoning_effort" in body));
     } finally {
         BdApi.Net.fetch = previous;
     }

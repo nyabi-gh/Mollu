@@ -212,7 +212,7 @@ const KEY_SOURCE = {
 
 const MODEL_HINT = {
     deepseek: "예: deepseek-v4-flash(기본·저렴), deepseek-v4-pro(고품질)",
-    gemini: "예: gemma-4-31b-it(기본), gemini-3.5-flash-lite, gemini-3.1-flash-lite — 모두 무료 티어",
+    gemini: "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
 };
 
 // Typed into the (always blank) API key field to erase the stored key, since an

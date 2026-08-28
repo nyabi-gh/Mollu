@@ -22,6 +22,8 @@
 
 설정에서 백엔드를 `Google Gemini / Gemma` 로 바꾸고 [aistudio.google.com](https://aistudio.google.com) 에서 발급한 키를 넣으면 됩니다. 모델·URL 은 자동으로 채워집니다.
 
+**`gemma-4-*` 는 쓰지 마세요.** 추론 모델인데 `reasoning_effort` 를 거부해서(`Thinking budget is not supported for this model.`) 추론을 끌 수 없습니다. 실측 결과 응답에 9~12초가 걸리고, 토큰 예산을 추론에 다 써서 번역문이 나오기 전에 잘립니다. `gemini-3.1-flash-lite` 는 같은 메시지에 약 1초입니다.
+
 무료 티어는 분당·일일 요청 한도가 있습니다. 한도에 걸리면(`429`) 플러그인이 **모든 요청을 서버가 알려 준 시간만큼 일시정지**한 뒤 다시 시도합니다. 한 메시지당 최대 3번까지 재시도하며, 그 사이 "번역 실패" 를 띄우지 않습니다. 자주 걸린다면 `동시 번역 요청 수` 를 1~2 로 낮추거나, 한도가 더 넉넉한 `gemma-4-31b-it` 로 바꾸세요.
 
 > **주의: 무료 티어는 보낸 데이터가 Google 제품 개선에 사용됩니다.** 이 플러그인은 대상 서버에 있는 **다른 사람의 메시지 본문**을 전송하므로, 서버 구성원의 대화가 학습 데이터가 된다는 뜻입니다. 유료 티어에는 해당하지 않습니다.
@@ -70,7 +72,7 @@ npm run format         # Prettier 적용 (검사만 하려면 npm run format:che
 | --- | --- |
 | 번역 백엔드 | `DeepSeek` 또는 `Google Gemini / Gemma`. 바꾸면 모델·URL 이 기본값으로 맞춰지고, 각 백엔드의 키는 따로 기억됩니다. |
 | API 키 | 필수. 없으면 아무 동작도 하지 않습니다. 저장된 키는 패널에 표시되지 않고 뒤 4자리만 보입니다. 비워 두면 유지되고, `-` 를 입력하면 삭제됩니다. |
-| 모델 이름 | DeepSeek: `deepseek-v4-flash`(기본·저렴) / `deepseek-v4-pro`(고품질). Gemini: `gemma-4-31b-it`(기본) / `gemini-3.5-flash-lite` / `gemini-3.1-flash-lite` — 모두 무료 티어 |
+| 모델 이름 | DeepSeek: `deepseek-v4-flash`(기본·저렴) / `deepseek-v4-pro`(고품질). Gemini: `gemini-3.1-flash-lite`(기본·무료·약 1초) |
 | API Base URL | OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다 |
 | 대상 서버 ID | 쉼표/공백 구분. **개발자 모드**를 켠 뒤 서버 아이콘 우클릭 → *서버 ID 복사* |
 | 한국어로 간주할 한글 비율 | 이 비율 이상 한글이면 번역 생략 (기본 30%) |
