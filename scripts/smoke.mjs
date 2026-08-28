@@ -93,6 +93,10 @@ check("language detector: too short is skipped", () => {
 });
 
 installBdApiStub();
+
+const { setLocale, t } = await import("../src/i18n.js");
+setLocale("en");
+
 const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
 const bundlePath = join(root, "dist", `${meta.name}.plugin.js`);
 
@@ -314,7 +318,8 @@ await checkAsync("provider: a chain of thought never reaches the message list", 
         BdApi.Net.fetch = reply("<thought>*  Input: ...\n*  Option 1: ...", "length");
         const cut = await new Translator({ settings: stubSettings() }).translate("hi there");
         assert.equal(cut.status, "error");
-        assert.match(cut.message, /추론/);
+        assert.equal(cut.message, t("error.reasoningOnly"));
+        assert.notEqual(cut.message, t("error.emptyResponse"));
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -511,7 +516,6 @@ check("settings: every panel field persists, not just the switches", () => {
     assert.deepEqual([...settings.guildIdSet], [edits.guildIds]);
 });
 
-const { setLocale, t } = await import("../src/i18n.js");
 const { getLanguage, badgeFor, LANGUAGE_OPTIONS } = await import("../src/languages.js");
 
 check("i18n: strings switch language and interpolate", () => {
