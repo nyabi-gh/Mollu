@@ -51,6 +51,9 @@ var DEFAULT_SETTINGS = Object.freeze({
   // Messages longer than this are skipped to bound cost.
   maxChars: 3e3,
   maxConcurrent: 3,
+  // Off puts every message behind a "번역" button instead of translating it
+  // as soon as it has been on screen. Nothing is sent until it is clicked.
+  autoTranslate: true,
   translateBots: true,
   translateOwnMessages: false,
   showPending: true,
@@ -419,6 +422,13 @@ var Settings = class {
           value: v.maxConcurrent,
           min: 1,
           max: 10
+        },
+        {
+          type: "switch",
+          id: "autoTranslate",
+          name: "자동 번역",
+          note: "끄면 수동 모드가 됩니다. 번역 대상 메시지 아래에 '번역' 버튼만 나오고, 누른 것만 API 로 보냅니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+          value: v.autoTranslate
         },
         {
           type: "switch",
@@ -1117,7 +1127,8 @@ function initialResult(translator, text) {
 }
 function TranslationBlock({ text, translator, settings, stores, guildId }) {
   const anchorRef = React.useRef(null);
-  const { showPending, showErrors } = useDisplaySettings(settings);
+  const { showPending, showErrors, autoTranslate } = useDisplaySettings(settings);
+  const triggerRef = React.useRef(null);
   const [result, setResult] = React.useState(() => initialResult(translator, text));
   React.useEffect(() => {
     let alive = true;
@@ -1158,6 +1169,13 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
         setResult(res.status === "unknown" ? { status: "idle" } : res);
       });
     };
+    triggerRef.current = run;
+    if (!autoTranslate) {
+      visible = true;
+      return () => {
+        alive = false;
+      };
+    }
     const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
       visible = isVisible;
       if (isVisible) {
@@ -1179,7 +1197,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stopObserving();
       if (dwell != null) clearTimeout(dwell);
     };
-  }, [text]);
+  }, [text, autoTranslate]);
   const status = result && result.status;
   return React.createElement(
     React.Fragment,
@@ -1189,13 +1207,27 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       className: "mollu-translation__anchor",
       "aria-hidden": "true"
     }),
-    renderBody(status, result, { showPending, showErrors, stores, guildId })
+    renderBody(status, result, {
+      showPending,
+      showErrors,
+      stores,
+      guildId,
+      autoTranslate,
+      onTrigger: () => triggerRef.current?.()
+    })
   );
 }
 function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
-function renderBody(status, result, { showPending, showErrors, stores, guildId }) {
+function renderBody(status, result, { showPending, showErrors, stores, guildId, autoTranslate, onTrigger }) {
+  if (status === "idle" && !autoTranslate) {
+    return React.createElement(
+      "button",
+      { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
+      "번역"
+    );
+  }
   if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
   if (status === "retry") return null;
   if (status === "pending") {
@@ -1227,7 +1259,7 @@ function useDisplaySettings(settings) {
   const [display, setDisplay] = React.useState(() => pickDisplay(settings));
   React.useEffect(() => {
     const unsubscribe = settings.onChange((id3) => {
-      if (id3 === "showPending" || id3 === "showErrors") setDisplay(pickDisplay(settings));
+      if (MIRRORED.has(id3)) setDisplay(pickDisplay(settings));
     });
     return () => {
       unsubscribe();
@@ -1235,9 +1267,10 @@ function useDisplaySettings(settings) {
   }, [settings]);
   return display;
 }
+var MIRRORED = /* @__PURE__ */ new Set(["showPending", "showErrors", "autoTranslate"]);
 function pickDisplay(settings) {
-  const { showPending, showErrors } = settings.current;
-  return { showPending, showErrors };
+  const { showPending, showErrors, autoTranslate } = settings.current;
+  return { showPending, showErrors, autoTranslate };
 }
 
 // src/message-patch.js
@@ -1363,6 +1396,23 @@ var STYLES = `
     font-size: 0.85em;
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
+}
+.mollu-translation__trigger {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 0.8rem;
+    font-family: inherit;
+    line-height: 1.2;
+    color: var(--text-muted, #949ba4);
+    opacity: 0.75;
+    cursor: pointer;
+}
+.mollu-translation__trigger:hover {
+    opacity: 1;
+    text-decoration: underline;
 }
 .mollu-translation--pending {
     opacity: 0.6;

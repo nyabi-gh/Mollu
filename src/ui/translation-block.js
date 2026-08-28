@@ -19,7 +19,8 @@ function initialResult(translator, text) {
  */
 export function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
-    const { showPending, showErrors } = useDisplaySettings(settings);
+    const { showPending, showErrors, autoTranslate } = useDisplaySettings(settings);
+    const triggerRef = React.useRef(null);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
 
     React.useEffect(() => {
@@ -71,6 +72,17 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                 });
         };
 
+        triggerRef.current = run;
+
+        // Manual mode: nothing is sent until the reader asks for it, so there
+        // is no viewport to watch and the request is always wanted.
+        if (!autoTranslate) {
+            visible = true;
+            return () => {
+                alive = false;
+            };
+        }
+
         const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
             visible = isVisible;
             if (isVisible) {
@@ -94,7 +106,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
-    }, [text]);
+    }, [text, autoTranslate]);
 
     const status = result && result.status;
 
@@ -108,7 +120,14 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             className: "mollu-translation__anchor",
             "aria-hidden": "true",
         }),
-        renderBody(status, result, { showPending, showErrors, stores, guildId }),
+        renderBody(status, result, {
+            showPending,
+            showErrors,
+            stores,
+            guildId,
+            autoTranslate,
+            onTrigger: () => triggerRef.current?.(),
+        }),
     );
 }
 
@@ -118,7 +137,14 @@ function jitter() {
     return Math.floor(Math.random() * 2000);
 }
 
-function renderBody(status, result, { showPending, showErrors, stores, guildId }) {
+function renderBody(status, result, { showPending, showErrors, stores, guildId, autoTranslate, onTrigger }) {
+    if (status === "idle" && !autoTranslate) {
+        return React.createElement(
+            "button",
+            { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
+            "번역",
+        );
+    }
     if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
     if (status === "retry") return null;
     if (status === "pending") {
@@ -160,7 +186,7 @@ function useDisplaySettings(settings) {
 
     React.useEffect(() => {
         const unsubscribe = settings.onChange((id) => {
-            if (id === "showPending" || id === "showErrors") setDisplay(pickDisplay(settings));
+            if (MIRRORED.has(id)) setDisplay(pickDisplay(settings));
         });
         return () => {
             unsubscribe();
@@ -170,7 +196,10 @@ function useDisplaySettings(settings) {
     return display;
 }
 
+// Settings the block reads while rendering, so a change has to re-render it.
+const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate"]);
+
 function pickDisplay(settings) {
-    const { showPending, showErrors } = settings.current;
-    return { showPending, showErrors };
+    const { showPending, showErrors, autoTranslate } = settings.current;
+    return { showPending, showErrors, autoTranslate };
 }

@@ -26,6 +26,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
     // Messages longer than this are skipped to bound cost.
     maxChars: 3000,
     maxConcurrent: 3,
+    // Off puts every message behind a "번역" button instead of translating it
+    // as soon as it has been on screen. Nothing is sent until it is clicked.
+    autoTranslate: true,
     translateBots: true,
     translateOwnMessages: false,
     showPending: true,

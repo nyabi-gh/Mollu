@@ -497,6 +497,31 @@ await checkAsync("gemini: gemma never receives reasoning_effort, which it reject
     }
 });
 
+await checkAsync("manual mode: nothing is sent until it is asked for", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        const translator = new Translator({ settings });
+
+        // A cache miss must stay a miss until something explicitly asks.
+        assert.equal(translator.peek("hello there").status, "unknown");
+        assert.equal(calls, 0, "peek() must never reach the provider");
+
+        // The button's handler is the same translate() call the observer makes.
+        assert.equal((await translator.translate("hello there")).text, "안녕");
+        assert.equal(calls, 1);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 check("settings: the stored api key is never rendered into the panel", () => {
     const settings = new Settings();
     settings._set("apiKey", "  sk-abcdefgh1234  ");

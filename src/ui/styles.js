@@ -53,6 +53,23 @@ export const STYLES = `
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
 }
+.mollu-translation__trigger {
+    display: inline-block;
+    margin-top: 2px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-size: 0.8rem;
+    font-family: inherit;
+    line-height: 1.2;
+    color: var(--text-muted, #949ba4);
+    opacity: 0.75;
+    cursor: pointer;
+}
+.mollu-translation__trigger:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
 .mollu-translation--pending {
     opacity: 0.6;
     font-style: italic;

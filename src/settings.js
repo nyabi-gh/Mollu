@@ -164,6 +164,13 @@ export class Settings {
                 },
                 {
                     type: "switch",
+                    id: "autoTranslate",
+                    name: "자동 번역",
+                    note: "끄면 수동 모드가 됩니다. 번역 대상 메시지 아래에 '번역' 버튼만 나오고, 누른 것만 API 로 보냅니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+                    value: v.autoTranslate,
+                },
+                {
+                    type: "switch",
                     id: "translateBots",
                     name: "봇 메시지도 번역",
                     value: v.translateBots,
