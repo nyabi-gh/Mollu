@@ -1,5 +1,6 @@
 import { MASK_PATTERN } from "./tokenizer.js";
 import { getLanguage } from "../languages.js";
+import { DEFAULT_SETTINGS } from "../constants.js";
 
 // 호이스팅: needsTranslation() 은 대상 서버 모든 메시지의 매 렌더마다 실행되는데,
 // 호출마다 이 패턴을 재컴파일하는 것이 비용의 대부분이었다.
@@ -27,7 +28,17 @@ export class LanguageDetector {
         for (const ch of letters) {
             if (script.test(ch)) inTarget += 1;
         }
-        return inTarget / letters.length < this._settings.current.skipThreshold / 100;
+        return inTarget / letters.length < this._threshold();
+    }
+
+    // 값이 없거나 숫자가 아니면 기본값으로 돌아간다. NaN 과의 비교는 항상 false 라,
+    // 그대로 두면 번역이 통째로 조용히 꺼진다.
+    _threshold() {
+        const raw = this._settings.current.skipThreshold;
+        // Number(null) 은 0 이라 "미설정" 과 "0%" 를 구분하지 못한다.
+        const configured = typeof raw === "number" ? raw : Number.parseFloat(raw);
+        const percent = Number.isFinite(configured) ? configured : DEFAULT_SETTINGS.skipThreshold;
+        return percent / 100;
     }
 
     _letters(text) {

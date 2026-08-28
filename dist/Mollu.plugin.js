@@ -1210,7 +1210,15 @@ var LanguageDetector = class {
     for (const ch of letters) {
       if (script.test(ch)) inTarget += 1;
     }
-    return inTarget / letters.length < this._settings.current.skipThreshold / 100;
+    return inTarget / letters.length < this._threshold();
+  }
+  // 값이 없거나 숫자가 아니면 기본값으로 돌아간다. NaN 과의 비교는 항상 false 라,
+  // 그대로 두면 번역이 통째로 조용히 꺼진다.
+  _threshold() {
+    const raw = this._settings.current.skipThreshold;
+    const configured = typeof raw === "number" ? raw : Number.parseFloat(raw);
+    const percent = Number.isFinite(configured) ? configured : DEFAULT_SETTINGS.skipThreshold;
+    return percent / 100;
   }
   _letters(text) {
     MASK_RE2.lastIndex = 0;
@@ -1787,7 +1795,10 @@ var Mollu = class {
       if (this._settings.guildIdSet.size === 0) {
         this._toast(t("toast.needGuilds"), "info");
       }
-      logger.info(`started · ${this._settings.guildIdSet.size} target server(s)`);
+      const { provider, targetLanguage, autoTranslate } = this._settings.current;
+      logger.info(
+        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${this._settings.guildIdSet.size}`
+      );
     } catch (e) {
       logger.error("start failed", e);
     }

@@ -554,6 +554,18 @@ await checkAsync("target language: drives the prompt and the cache key", async (
     }
 });
 
+check("detector: a missing threshold falls back instead of disabling everything", () => {
+    // ratio < NaN is always false, so an unset value used to switch translation
+    // off silently — no block, no button, no error.
+    for (const skipThreshold of [undefined, null, NaN, "", {}]) {
+        const detect = new LanguageDetector({ current: { skipThreshold, targetLanguage: "ko" } });
+        assert.equal(detect.needsTranslation("hello everyone"), true, `broken by ${String(skipThreshold)}`);
+    }
+    // A real 0 still means "never translate", which is a legitimate setting.
+    const zero = new LanguageDetector({ current: { skipThreshold: 0, targetLanguage: "ko" } });
+    assert.equal(zero.needsTranslation("hello everyone"), false);
+});
+
 check("detector: judges against the chosen target language", () => {
     const settings = { current: { skipThreshold: 30, targetLanguage: "ko" } };
     const detect = new LanguageDetector(settings);

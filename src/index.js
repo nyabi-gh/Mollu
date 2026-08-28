@@ -63,7 +63,11 @@ export default class Mollu {
                 this._toast(t("toast.needGuilds"), "info");
             }
 
-            logger.info(`started · ${this._settings.guildIdSet.size} target server(s)`);
+            const { provider, targetLanguage, autoTranslate } = this._settings.current;
+            logger.info(
+                `started · provider=${provider} target=${targetLanguage} ` +
+                    `mode=${autoTranslate ? "auto" : "manual"} servers=${this._settings.guildIdSet.size}`,
+            );
         } catch (e) {
             logger.error("start failed", e);
         }
