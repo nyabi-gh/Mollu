@@ -422,7 +422,7 @@ check("settings: every panel field persists, not just the switches", () => {
 });
 
 const { setLocale, t } = await import("../src/i18n.js");
-const { getLanguage, LANGUAGE_OPTIONS } = await import("../src/languages.js");
+const { getLanguage, badgeFor, LANGUAGE_OPTIONS } = await import("../src/languages.js");
 
 check("i18n: strings switch language and interpolate", () => {
     setLocale("ko");
@@ -494,6 +494,35 @@ check("detector: judges against the chosen target language", () => {
     );
 
     assert.equal(getLanguage("nope").code, "ko", "an unknown code falls back to the default");
+});
+
+check("languages: regional variants are distinct targets", () => {
+    assert.equal(getLanguage("pt-BR").name, "Brazilian Portuguese");
+    assert.equal(getLanguage("pt-PT").name, "European Portuguese");
+    assert.equal(badgeFor("pt-BR"), "PT-BR", "a regional code needs its own badge");
+    assert.equal(badgeFor("ko"), "KO");
+    assert.ok(
+        LANGUAGE_OPTIONS.some((option) => option.value === "pt-BR"),
+        "the panel must offer Brazilian Portuguese",
+    );
+});
+
+check("settings: a target saved before the split becomes Brazilian", () => {
+    const previous = BdApi.Data;
+    const store = new Map([[`${NAME}::settings`, { targetLanguage: "pt", koreanThreshold: 45 }]]);
+    BdApi.Data = {
+        load: (name, key) => store.get(`${name}::${key}`) ?? null,
+        save: (name, key, value) => store.set(`${name}::${key}`, value),
+        delete: (name, key) => store.delete(`${name}::${key}`),
+    };
+    try {
+        const settings = new Settings();
+        assert.equal(settings.current.targetLanguage, "pt-BR");
+        assert.equal(settings.current.skipThreshold, 45, "the renamed threshold carries over");
+        assert.ok(!("koreanThreshold" in settings.current), "the old key is dropped");
+    } finally {
+        BdApi.Data = previous;
+    }
 });
 
 check("settings: switching provider swaps defaults and keeps both keys", () => {

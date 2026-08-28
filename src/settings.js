@@ -6,7 +6,7 @@ import { logger } from "./lib/logger.js";
 
 export class Settings {
     constructor() {
-        const stored = safeLoad();
+        const stored = migrate(safeLoad());
         this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
         this._listeners = new Set();
@@ -235,14 +235,25 @@ const CLEAR_TOKEN = "-";
 // 적용하면 안 되는 편집에 대해 coerce() 가 돌려주는 표식.
 const KEEP = Symbol("keep");
 
+// 기본값과 병합하기 전에 적용해야 한다. 병합 후에는 기본값이 이미 들어와 있어
+// "저장된 적 없음" 과 구분할 수 없다.
+function migrate(stored) {
+    if (!stored || typeof stored !== "object") return stored;
+
+    // skipThreshold 의 옛 이름.
+    if (stored.skipThreshold === undefined && typeof stored.koreanThreshold === "number") {
+        stored.skipThreshold = stored.koreanThreshold;
+    }
+    delete stored.koreanThreshold;
+
+    // 포르투갈어를 지역 변종으로 나누기 전 값.
+    if (stored.targetLanguage === "pt") stored.targetLanguage = "pt-BR";
+    return stored;
+}
+
 function normalize(values) {
     for (const field of TRIMMED_FIELDS) {
         if (typeof values[field] === "string") values[field] = values[field].trim();
-    }
-    // 대상 언어를 고를 수 있게 되기 전의 이름.
-    if (typeof values.koreanThreshold === "number") {
-        values.skipThreshold = values.koreanThreshold;
-        delete values.koreanThreshold;
     }
     return values;
 }

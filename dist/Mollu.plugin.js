@@ -317,7 +317,20 @@ var LANGUAGES = [
   { code: "es", label: "Español (Spanish)", name: "Spanish", script: null },
   { code: "fr", label: "Français (French)", name: "French", script: null },
   { code: "de", label: "Deutsch (German)", name: "German", script: null },
-  { code: "pt", label: "Português (Portuguese)", name: "Portuguese", script: null },
+  {
+    code: "pt-BR",
+    label: "Português do Brasil",
+    name: "Brazilian Portuguese",
+    badge: "PT-BR",
+    script: null
+  },
+  {
+    code: "pt-PT",
+    label: "Português de Portugal",
+    name: "European Portuguese",
+    badge: "PT-PT",
+    script: null
+  },
   { code: "ru", label: "Русский (Russian)", name: "Russian", script: CYRILLIC },
   { code: "vi", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese", script: null },
   { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI },
@@ -329,6 +342,10 @@ var DEFAULT_LANGUAGE = "ko";
 var BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));
 function getLanguage(code) {
   return BY_CODE.get(code) || BY_CODE.get(DEFAULT_LANGUAGE);
+}
+function badgeFor(code) {
+  const language = getLanguage(code);
+  return language.badge || language.code.toUpperCase();
 }
 var LANGUAGE_OPTIONS = LANGUAGES.map((language) => ({
   label: language.label,
@@ -442,7 +459,7 @@ var PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
 // src/settings.js
 var Settings = class {
   constructor() {
-    const stored = safeLoad();
+    const stored = migrate(safeLoad());
     this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
     this._guildIdSet = parseGuildIds(this._values.guildIds);
     this._listeners = /* @__PURE__ */ new Set();
@@ -642,13 +659,18 @@ var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
 var CREDENTIAL_FIELDS = /* @__PURE__ */ new Set(["apiKey", "model", "baseUrl"]);
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");
+function migrate(stored) {
+  if (!stored || typeof stored !== "object") return stored;
+  if (stored.skipThreshold === void 0 && typeof stored.koreanThreshold === "number") {
+    stored.skipThreshold = stored.koreanThreshold;
+  }
+  delete stored.koreanThreshold;
+  if (stored.targetLanguage === "pt") stored.targetLanguage = "pt-BR";
+  return stored;
+}
 function normalize(values) {
   for (const field of TRIMMED_FIELDS) {
     if (typeof values[field] === "string") values[field] = values[field].trim();
-  }
-  if (typeof values.koreanThreshold === "number") {
-    values.skipThreshold = values.koreanThreshold;
-    delete values.koreanThreshold;
   }
   return values;
 }
@@ -1372,7 +1394,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stores,
       guildId,
       autoTranslate,
-      badge: settings.current.targetLanguage.toUpperCase(),
+      badge: badgeFor(settings.current.targetLanguage),
       onTrigger: () => triggerRef.current?.()
     })
   );

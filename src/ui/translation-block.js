@@ -2,6 +2,7 @@ import { React } from "../discord.js";
 import { renderSegments } from "./rich-text.js";
 import { observeVisibility } from "./visibility.js";
 import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
+import { badgeFor } from "../languages.js";
 import { t } from "../i18n.js";
 
 // 이 시간만큼 실제로 화면에 머문 메시지만 번역한다. 스크롤로 스쳐 지나간
@@ -122,7 +123,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stores,
             guildId,
             autoTranslate,
-            badge: settings.current.targetLanguage.toUpperCase(),
+            badge: badgeFor(settings.current.targetLanguage),
             onTrigger: () => triggerRef.current?.(),
         }),
     );

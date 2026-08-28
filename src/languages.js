@@ -18,7 +18,20 @@ export const LANGUAGES = [
     { code: "es", label: "Español (Spanish)", name: "Spanish", script: null },
     { code: "fr", label: "Français (French)", name: "French", script: null },
     { code: "de", label: "Deutsch (German)", name: "German", script: null },
-    { code: "pt", label: "Português (Portuguese)", name: "Portuguese", script: null },
+    {
+        code: "pt-BR",
+        label: "Português do Brasil",
+        name: "Brazilian Portuguese",
+        badge: "PT-BR",
+        script: null,
+    },
+    {
+        code: "pt-PT",
+        label: "Português de Portugal",
+        name: "European Portuguese",
+        badge: "PT-PT",
+        script: null,
+    },
     { code: "ru", label: "Русский (Russian)", name: "Russian", script: CYRILLIC },
     { code: "vi", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese", script: null },
     { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI },
@@ -33,6 +46,12 @@ const BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));
 
 export function getLanguage(code) {
     return BY_CODE.get(code) || BY_CODE.get(DEFAULT_LANGUAGE);
+}
+
+// 번역문 앞에 붙는 짧은 표식. 지역 변종은 코드가 길어 따로 지정한다.
+export function badgeFor(code) {
+    const language = getLanguage(code);
+    return language.badge || language.code.toUpperCase();
 }
 
 export const LANGUAGE_OPTIONS = LANGUAGES.map((language) => ({
