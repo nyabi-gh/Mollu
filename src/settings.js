@@ -2,6 +2,8 @@ import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
 import { getProvider, PROVIDER_OPTIONS } from "./translation/providers/index.js";
 import { LANGUAGE_OPTIONS } from "./languages.js";
 import { setLocale, t, UI_LANGUAGES } from "./i18n.js";
+import { keysFromString } from "./hotkey.js";
+import { React } from "./discord.js";
 import { logger } from "./lib/logger.js";
 
 export class Settings {
@@ -28,7 +30,7 @@ export class Settings {
         return () => this._listeners.delete(listener);
     }
 
-    _set(id, value) {
+    set(id, value) {
         const next = coerce(id, value, this._values[id]);
         // KEEP 은 적용하면 안 되는 편집. 값이 그대로면 같은 편집이 두 번 온
         // 것이므로(buildPanel 참고) 다시 쓸 필요가 없다.
@@ -76,15 +78,35 @@ export class Settings {
         }
     }
 
+    // BD 의 설정 항목은 defaultValue 로 한 번 초기화되는 비제어 컴포넌트라, 값만
+    // 바꿔 다시 렌더해도 화면은 그대로다. 프로바이더나 UI 언어처럼 패널 전체의
+    // 표시를 바꾸는 편집은 key 를 갈아 끼워 통째로 다시 마운트시킨다.
     buildPanel() {
+        const settings = this;
+        function MolluSettings() {
+            const [revision, bump] = React.useState(0);
+            React.useEffect(
+                () =>
+                    settings.onChange((id) => {
+                        if (PANEL_REBUILD.has(id)) bump((n) => n + 1);
+                    }),
+                [],
+            );
+            const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
+            return React.cloneElement(panel, { key: `panel-${revision}` });
+        }
+        return React.createElement(MolluSettings);
+    }
+
+    _panelSpec() {
         const v = this._values;
-        return BdApi.UI.buildSettingsPanel({
+        return {
             // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
             // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
             // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
             // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
-            // switch 에서 생기는 중복은 _set() 이 무시한다.
-            onChange: (_categoryId, settingId, value) => this._set(settingId, value),
+            // switch 에서 생기는 중복은 set() 이 무시한다.
+            onChange: (_categoryId, settingId, value) => this.set(settingId, value),
             settings: withChangeHandlers(this, [
                 {
                     type: "dropdown",
@@ -136,11 +158,20 @@ export class Settings {
                     value: v.baseUrl,
                 },
                 {
+                    type: "switch",
+                    id: "allGuilds",
+                    name: t("settings.allGuilds"),
+                    note: t("settings.allGuilds.note"),
+                    value: v.allGuilds,
+                },
+                {
                     type: "text",
                     id: "guildIds",
                     name: t("settings.guildIds"),
                     note: t("settings.guildIds.note"),
                     value: v.guildIds,
+                    // 목록을 무시하는 동안에는 칸도 비활성으로 보여 준다.
+                    disableWith: "allGuilds",
                 },
                 {
                     type: "dropdown",
@@ -191,6 +222,38 @@ export class Settings {
                     value: v.autoTranslate,
                 },
                 {
+                    type: "keybind",
+                    id: "hotkey",
+                    name: t("settings.hotkey"),
+                    note: t("settings.hotkey.note"),
+                    value: v.hotkey,
+                    clearable: true,
+                },
+                {
+                    type: "switch",
+                    id: "translateOutgoing",
+                    name: t("settings.translateOutgoing"),
+                    note: t("settings.translateOutgoing.note"),
+                    value: v.translateOutgoing,
+                },
+                {
+                    type: "dropdown",
+                    id: "outgoingLanguage",
+                    name: t("settings.outgoingLanguage"),
+                    note: t("settings.outgoingLanguage.note"),
+                    value: v.outgoingLanguage,
+                    options: LANGUAGE_OPTIONS,
+                    enableWith: "translateOutgoing",
+                },
+                {
+                    type: "keybind",
+                    id: "outgoingHotkey",
+                    name: t("settings.outgoingHotkey"),
+                    note: t("settings.outgoingHotkey.note"),
+                    value: v.outgoingHotkey,
+                    clearable: true,
+                },
+                {
                     type: "switch",
                     id: "translateBots",
                     name: t("settings.translateBots"),
@@ -214,16 +277,27 @@ export class Settings {
                     name: t("settings.showErrors"),
                     value: v.showErrors,
                 },
+                {
+                    type: "switch",
+                    id: "debugLog",
+                    name: t("settings.debugLog"),
+                    note: t("settings.debugLog.note"),
+                    value: v.debugLog,
+                },
             ]),
-        });
+        };
     }
 }
+
+// 이 항목을 바꾸면 다른 칸의 이름·설명·값·표시 여부까지 달라지므로 패널을 다시
+// 만든다. 타자를 치는 동안 다시 마운트되면 포커스를 잃으므로 텍스트 칸은 넣지 않는다.
+const PANEL_REBUILD = new Set(["provider", "uiLanguage"]);
 
 // 모든 항목에 자기 onChange 를 붙인다. BdApi 가 실제로 호출하는 건 이것뿐이다.
 function withChangeHandlers(settings, items) {
     return items.map((item) => ({
         ...item,
-        onChange: (value) => settings._set(item.id, value),
+        onChange: (value) => settings.set(item.id, value),
     }));
 }
 
@@ -253,6 +327,12 @@ function migrate(stored) {
 
     // 포르투갈어를 지역 변종으로 나누기 전 값.
     if (stored.targetLanguage === "pt") stored.targetLanguage = "pt-BR";
+
+    // 단축키는 "Ctrl+Shift+T" 문자열이었다가 BD keybind 입력이 쓰는 키 이름
+    // 배열이 됐다. 문자열을 그대로 두면 패널 자체가 렌더되지 않는다.
+    for (const field of ["hotkey", "outgoingHotkey"]) {
+        if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
+    }
     return stored;
 }
 

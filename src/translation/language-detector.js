@@ -14,12 +14,14 @@ export class LanguageDetector {
         this._settings = settings;
     }
 
-    needsTranslation(text) {
+    // language 를 넘기면 그 언어로 판정한다. 받는 메시지와 보내는 메시지의
+    // 대상 언어가 서로 다르기 때문이다.
+    needsTranslation(text, language) {
         if (typeof text !== "string") return false;
         const letters = this._letters(text);
         if (letters.length < 2) return false;
 
-        const { script } = getLanguage(this._settings.current.targetLanguage);
+        const { script } = getLanguage(language ?? this._settings.current.targetLanguage);
         // 라틴 문자 대상 언어는 보내기 전에 구분할 수 없다. 모델에 맡기고,
         // 원문과 같은 결과가 오면 표시하지 않는 경로로 처리한다.
         if (!script) return true;

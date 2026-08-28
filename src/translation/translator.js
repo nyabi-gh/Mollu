@@ -31,6 +31,8 @@ export class Translator {
         this._cache = new TranslationCache();
         this._queue = new TaskQueue(() => this._settings.current.maxConcurrent);
         this._inflight = new Map(); // masked key -> Promise<masked outcome>
+        // masked key -> Set<onStart> (아직 큐에 있음) | true (이미 큐를 떠남)
+        this._starts = new Map();
         this._failures = new Map(); // masked key -> timestamp of last failure
         this._aborters = new Set();
         this._pausedUntil = 0; // set by a 429; blocks every provider call
@@ -55,21 +57,22 @@ export class Translator {
         }
         this._aborters.clear();
         this._inflight.clear();
+        this._starts.clear();
         this._failures.clear();
         this._cache.save();
     }
 
     peek(text) {
         const { masked, tokens } = mask(text);
-        const key = this._cacheKey(masked);
+        const key = this._cacheKey(masked, this._settings.current.targetLanguage);
         if (this._cache.has(key)) return this._restore(this._cache.get(key), tokens);
         if (text.length > this._settings.current.maxChars) return skip();
         return { status: "unknown" };
     }
 
     // 같은 원문이라도 대상 언어가 다르면 다른 번역이다.
-    _cacheKey(masked) {
-        return `${this._settings.current.targetLanguage}\u0001${masked}`;
+    _cacheKey(masked, language) {
+        return `${language}\u0001${masked}`;
     }
 
     // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
@@ -78,7 +81,8 @@ export class Translator {
     // 이 함수는 절대 reject 하지 않는다.
     translate(text, hooks = {}) {
         const { masked, tokens } = mask(text);
-        const key = this._cacheKey(masked);
+        const language = hooks.language || this._settings.current.targetLanguage;
+        const key = this._cacheKey(masked, language);
 
         if (this._cache.has(key)) {
             return Promise.resolve(this._restore(this._cache.get(key), tokens));
@@ -90,6 +94,10 @@ export class Translator {
         if (hooks.ignoreBackoff) this._failures.delete(key);
         else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
 
+        // 같은 텍스트가 여러 번 올라오면 요청은 하나로 합치되, 표시는 기다리는
+        // 블록 전부가 받아야 한다.
+        if (hooks.onStart) this._onStart(key, hooks.onStart);
+
         let job = this._inflight.get(key);
         if (!job) {
             job = this._queue
@@ -99,20 +107,43 @@ export class Translator {
                     await this._awaitResume();
                     if (this._stopped) throw aborted();
                     if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
-                    if (hooks.onStart) hooks.onStart();
-                    return this._callWithRetries(masked);
+                    this._announceStart(key);
+                    return this._callWithRetries(masked, language);
                 }, hooks.shouldRun)
                 .then(
                     (raw) => this._resolveSuccess(key, masked, raw),
                     (err) => this._resolveFailure(key, err),
                 )
-                .finally(() => this._inflight.delete(key));
+                .finally(() => {
+                    this._inflight.delete(key);
+                    this._starts.delete(key);
+                });
             this._inflight.set(key, job);
         }
 
         return job.then((outcome) =>
             outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome,
         );
+    }
+
+    _onStart(key, listener) {
+        const waiting = this._starts.get(key);
+        if (waiting === true) return listener();
+        if (waiting) waiting.add(listener);
+        else this._starts.set(key, new Set([listener]));
+    }
+
+    _announceStart(key) {
+        const waiting = this._starts.get(key);
+        this._starts.set(key, true);
+        if (waiting === true || !waiting) return;
+        for (const listener of waiting) {
+            try {
+                listener();
+            } catch {
+                /* 표시가 실패해도 번역은 계속되어야 한다 */
+            }
+        }
     }
 
     _restore(maskedValue, tokens) {
@@ -126,10 +157,10 @@ export class Translator {
     }
 
     // 일시적인 실패는 사용자에게 보이기 전에 몇 번 더 해 본다.
-    async _callWithRetries(maskedText) {
+    async _callWithRetries(maskedText, language) {
         for (let attempt = 0; ; attempt += 1) {
             try {
-                return await this._callProvider(maskedText);
+                return await this._callProvider(maskedText, language);
             } catch (err) {
                 if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
                 logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
@@ -151,14 +182,20 @@ export class Translator {
         return false;
     }
 
-    async _callProvider(maskedText) {
+    async _callProvider(maskedText, language) {
         const controller = new AbortController();
         this._aborters.add(controller);
         try {
-            const provider = getProvider(this._settings.current.provider);
+            const settings = this._settings.current;
+            const provider = getProvider(settings.provider);
             return await provider.translate({
                 text: maskedText,
-                settings: this._settings.current,
+                // 프로바이더는 settings.targetLanguage 만 본다. 호출 단위 언어를
+                // 그 자리에 얹어 넘기고, 저장된 설정은 건드리지 않는다.
+                settings:
+                    language === settings.targetLanguage
+                        ? settings
+                        : { ...settings, targetLanguage: language },
                 signal: controller.signal,
             });
         } finally {

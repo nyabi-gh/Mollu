@@ -14,6 +14,12 @@ const STRINGS = {
         "toast.needApiKey": "Enter an API key in the settings.",
         "toast.needGuilds": "Add at least one target server id in the settings.",
         "toast.failed": "Translation failed · {message}",
+        "toast.startFailed": "Could not start · {message}. Check the console log.",
+        "toast.autoOn": "Automatic translation on",
+        "toast.autoOff": "Automatic translation off · manual mode",
+        "toast.outgoingOn": "Your messages will be sent in {language}",
+        "toast.outgoingOff": "Your messages will be sent as you type them",
+        "toast.outgoingFailed": "Sent untranslated · {message}",
 
         "error.noApiKey": "No API key configured",
         "error.emptyResponse": "Empty response",
@@ -27,7 +33,7 @@ const STRINGS = {
 
         "settings.provider": "Translation backend",
         "settings.provider.note":
-            "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately. The fields below only refresh after you close and reopen this panel.",
+            "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately.",
         "settings.apiKey": "{provider} API key",
         "settings.apiKey.note":
             "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
@@ -35,6 +41,9 @@ const STRINGS = {
         "settings.model": "Model",
         "settings.baseUrl": "API base URL",
         "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
+        "settings.allGuilds": "Translate in every server",
+        "settings.allGuilds.note":
+            "Ignores the list below and translates in every server you are in. Direct messages are left alone either way.",
         "settings.guildIds": "Target server ids",
         "settings.guildIds.note":
             "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
@@ -52,10 +61,25 @@ const STRINGS = {
         "settings.autoTranslate": "Automatic translation",
         "settings.autoTranslate.note":
             "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
+        "settings.hotkey": "Automatic translation shortcut",
+        "settings.hotkey.note":
+            "Toggles automatic translation without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
+        "settings.translateOutgoing": "Translate the messages I send",
+        "settings.translateOutgoing.note":
+            "Replaces what you type with its translation before it is sent, in the target servers only. Other people never see the original, so leave this off unless you mean it.",
+        "settings.outgoingLanguage": "Send my messages in",
+        "settings.outgoingLanguage.note":
+            "What you type is translated into this language. A message already written in it is sent untouched.",
+        "settings.outgoingHotkey": "Outgoing translation shortcut",
+        "settings.outgoingHotkey.note":
+            "Toggles the switch above without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
         "settings.translateBots": "Translate bot messages",
         "settings.translateOwnMessages": "Translate my own messages",
         "settings.showPending": "Show while translating",
         "settings.showErrors": "Show translation failures",
+        "settings.debugLog": "Log why a message was skipped",
+        "settings.debugLog.note":
+            "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
 
         "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
@@ -79,6 +103,12 @@ const STRINGS = {
         "toast.needApiKey": "설정에서 API 키를 입력하세요.",
         "toast.needGuilds": "설정에서 대상 서버 ID를 추가하세요.",
         "toast.failed": "번역 실패 · {message}",
+        "toast.startFailed": "시작하지 못했습니다 · {message}. 콘솔 로그를 확인하세요.",
+        "toast.autoOn": "자동 번역 켜짐",
+        "toast.autoOff": "자동 번역 꺼짐 · 수동 모드",
+        "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
+        "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
+        "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
 
         "error.noApiKey": "API 키가 설정되지 않았습니다",
         "error.emptyResponse": "빈 응답",
@@ -92,7 +122,7 @@ const STRINGS = {
 
         "settings.provider": "번역 백엔드",
         "settings.provider.note":
-            "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+            "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다.",
         "settings.apiKey": "{provider} API 키",
         "settings.apiKey.note":
             "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
@@ -100,6 +130,9 @@ const STRINGS = {
         "settings.model": "모델 이름",
         "settings.baseUrl": "API Base URL",
         "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
+        "settings.allGuilds": "모든 서버에서 번역",
+        "settings.allGuilds.note":
+            "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. 어느 쪽이든 DM 은 대상이 아닙니다.",
         "settings.guildIds": "대상 서버 ID",
         "settings.guildIds.note":
             "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
@@ -116,10 +149,25 @@ const STRINGS = {
         "settings.autoTranslate": "자동 번역",
         "settings.autoTranslate.note":
             "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+        "settings.hotkey": "자동 번역 단축키",
+        "settings.hotkey.note":
+            "설정 창을 열지 않고 자동 번역을 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 단축키를 쓰지 않습니다.",
+        "settings.translateOutgoing": "보내는 메시지도 번역",
+        "settings.translateOutgoing.note":
+            "대상 서버에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
+        "settings.outgoingLanguage": "보낼 때 번역할 언어",
+        "settings.outgoingLanguage.note":
+            "입력한 글을 이 언어로 번역해 보냅니다. 이미 이 언어로 쓴 메시지는 그대로 나갑니다.",
+        "settings.outgoingHotkey": "보내는 메시지 번역 단축키",
+        "settings.outgoingHotkey.note":
+            "설정 창을 열지 않고 위 스위치를 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 쓰지 않습니다.",
         "settings.translateBots": "봇 메시지도 번역",
         "settings.translateOwnMessages": "내 메시지도 번역",
         "settings.showPending": "번역 중 표시",
         "settings.showErrors": "번역 실패 시 표시",
+        "settings.debugLog": "번역하지 않은 사유 기록",
+        "settings.debugLog.note":
+            "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
 
         "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",

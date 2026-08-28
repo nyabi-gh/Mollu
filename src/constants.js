@@ -11,25 +11,41 @@ export const DEFAULT_SETTINGS = Object.freeze({
     apiKey: "",
     model: "deepseek-v4-flash",
     baseUrl: "https://api.deepseek.com",
+    // 켜면 guildIds 를 무시하고 참여 중인 모든 서버를 대상으로 삼는다.
+    allGuilds: false,
     guildIds: "",
     // 번역 결과 언어. languages.js 의 code.
     targetLanguage: "ko",
     // "auto" 면 Discord 로캘을 따른다.
     uiLanguage: "auto",
-    // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
-    // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
-    profiles: {},
+    // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 인스턴스 사이에
+    // 공유되므로, 제자리 수정이 조용히 새어 나가지 않도록 얼려 둔다.
+    profiles: Object.freeze({}),
     skipThreshold: 30,
     maxChars: 3000,
     maxConcurrent: 3,
     autoTranslate: true,
+    // 전역 단축키. BD 의 keybind 입력이 쓰는 event.key 이름 배열이고, 비우면
+    // 단축키를 쓰지 않는다. DEFAULT_SETTINGS 는 공유되므로 함께 얼려 둔다.
+    hotkey: Object.freeze(["Control", "Shift", "T"]),
+    // 내가 보내는 메시지를 번역해서 내보낸다. 남에게 나가는 글을 고쳐 쓰므로
+    // 기본은 꺼짐이고, 대상 서버 안에서만 동작한다.
+    translateOutgoing: false,
+    outgoingLanguage: "en",
+    outgoingHotkey: Object.freeze(["Control", "Shift", "O"]),
     translateBots: true,
     translateOwnMessages: false,
     showPending: true,
     showErrors: false,
+    // 켜면 번역하지 않은 메시지마다 그 사유를 콘솔에 남긴다.
+    debugLog: false,
 });
 
 export const CACHE_LIMIT = 3000;
+
+// stop() 만 믿으면 강제 종료나 크래시에서 그 세션의 번역을 통째로 잃고 다시
+// 결제한다. 쓰기가 몰릴 때 저장이 폭주하지 않도록 이만큼 모아서 내보낸다.
+export const CACHE_SAVE_DEBOUNCE_MS = 10000;
 
 // 캐시 키에는 대상 언어가 들어간다. 언어를 바꾸면 옛 항목은 자연히 무효가 된다.
 // -v2 이전 항목은 토큰이 치환된 번역문을 저장해서 다른 메시지의 멘션이나 링크가
@@ -38,6 +54,10 @@ export const CACHE_KEY = "cache-v3";
 export const LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
 
 export const ERROR_TOAST_COOLDOWN_MS = 15000;
+
+// 진단 로그는 메시지가 렌더될 때마다 같은 판정을 반복하므로, 남긴 사유를 기억해
+// 한 번씩만 찍는다. 이 수를 넘으면 통째로 비운다.
+export const TRACE_LIMIT = 500;
 
 // BdApi.Net.fetch 자체 기본값은 8초.
 export const REQUEST_TIMEOUT_MS = 30000;

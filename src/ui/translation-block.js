@@ -16,7 +16,7 @@ function initialResult(translator, text) {
 
 export function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
-    const { showPending, showErrors, autoTranslate } = useDisplaySettings(settings);
+    const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
     const triggerRef = React.useRef(null);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
 
@@ -33,6 +33,15 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             return undefined;
         }
         setResult({ status: "idle" });
+
+        // 타이머가 발화하면 핸들을 비운다. 남겨 두면 아래 재예약 조건에 걸려
+        // 다시 화면에 들어와도 요청이 나가지 않는다.
+        const schedule = (delay) => {
+            dwell = setTimeout(() => {
+                dwell = null;
+                run();
+            }, delay);
+        };
 
         const run = (force) => {
             if (!alive || running) return;
@@ -59,7 +68,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                         setResult({ status: "idle" });
                         if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
                             rateLimitRetries += 1;
-                            dwell = setTimeout(run, res.after + jitter());
+                            schedule(res.after + jitter());
                         } else {
                             setResult({ status: "error", message: t("error.rateLimited") });
                         }
@@ -85,7 +94,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
             visible = isVisible;
             if (isVisible) {
-                if (dwell == null && !running) dwell = setTimeout(run, DWELL_MS);
+                if (dwell == null && !running) schedule(DWELL_MS);
             } else if (dwell != null) {
                 clearTimeout(dwell);
                 dwell = null;
@@ -105,7 +114,9 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
-    }, [text, autoTranslate]);
+        // 대상 언어나 길이 제한이 바뀌면 판정이 달라진다. 이미 화면에 있는
+        // 블록도 그 자리에서 다시 판단해야 설정이 즉시 반영된 것처럼 보인다.
+    }, [text, autoTranslate, targetLanguage, maxChars]);
 
     const status = result && result.status;
 
@@ -125,7 +136,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stores,
             guildId,
             autoTranslate,
-            badge: badgeFor(settings.current.targetLanguage),
+            badge: badgeFor(targetLanguage),
             onTrigger: () => triggerRef.current?.(true),
         }),
     );
@@ -201,10 +212,12 @@ function useDisplaySettings(settings) {
     return display;
 }
 
-// 블록이 렌더 중에 읽는 설정. 바뀌면 다시 렌더해야 한다.
-const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate"]);
+// 블록이 렌더 중에 읽거나 번역 여부를 다시 정하는 데 쓰는 설정. 바뀌면 다시
+// 렌더해야 한다. skipThreshold 는 여기 없다 — 그 판정은 블록이 붙기 전에
+// message-patch.js 에서 끝나므로 메시지가 다시 렌더되어야 반영된다.
+const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate", "targetLanguage", "maxChars"]);
 
 function pickDisplay(settings) {
-    const { showPending, showErrors, autoTranslate } = settings.current;
-    return { showPending, showErrors, autoTranslate };
+    const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = settings.current;
+    return { showPending, showErrors, autoTranslate, targetLanguage, maxChars };
 }

@@ -39,27 +39,41 @@ var DEFAULT_SETTINGS = Object.freeze({
   apiKey: "",
   model: "deepseek-v4-flash",
   baseUrl: "https://api.deepseek.com",
+  // 켜면 guildIds 를 무시하고 참여 중인 모든 서버를 대상으로 삼는다.
+  allGuilds: false,
   guildIds: "",
   // 번역 결과 언어. languages.js 의 code.
   targetLanguage: "ko",
   // "auto" 면 Discord 로캘을 따른다.
   uiLanguage: "auto",
-  // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
-  // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
-  profiles: {},
+  // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 인스턴스 사이에
+  // 공유되므로, 제자리 수정이 조용히 새어 나가지 않도록 얼려 둔다.
+  profiles: Object.freeze({}),
   skipThreshold: 30,
   maxChars: 3e3,
   maxConcurrent: 3,
   autoTranslate: true,
+  // 전역 단축키. BD 의 keybind 입력이 쓰는 event.key 이름 배열이고, 비우면
+  // 단축키를 쓰지 않는다. DEFAULT_SETTINGS 는 공유되므로 함께 얼려 둔다.
+  hotkey: Object.freeze(["Control", "Shift", "T"]),
+  // 내가 보내는 메시지를 번역해서 내보낸다. 남에게 나가는 글을 고쳐 쓰므로
+  // 기본은 꺼짐이고, 대상 서버 안에서만 동작한다.
+  translateOutgoing: false,
+  outgoingLanguage: "en",
+  outgoingHotkey: Object.freeze(["Control", "Shift", "O"]),
   translateBots: true,
   translateOwnMessages: false,
   showPending: true,
-  showErrors: false
+  showErrors: false,
+  // 켜면 번역하지 않은 메시지마다 그 사유를 콘솔에 남긴다.
+  debugLog: false
 });
 var CACHE_LIMIT = 3e3;
+var CACHE_SAVE_DEBOUNCE_MS = 1e4;
 var CACHE_KEY = "cache-v3";
 var LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
 var ERROR_TOAST_COOLDOWN_MS = 15e3;
+var TRACE_LIMIT = 500;
 var REQUEST_TIMEOUT_MS = 3e4;
 var RATE_LIMIT_PAUSE_MS = 2e4;
 var MAX_RATE_LIMIT_PAUSE_MS = 12e4;
@@ -108,6 +122,12 @@ var STRINGS = {
     "toast.needApiKey": "Enter an API key in the settings.",
     "toast.needGuilds": "Add at least one target server id in the settings.",
     "toast.failed": "Translation failed · {message}",
+    "toast.startFailed": "Could not start · {message}. Check the console log.",
+    "toast.autoOn": "Automatic translation on",
+    "toast.autoOff": "Automatic translation off · manual mode",
+    "toast.outgoingOn": "Your messages will be sent in {language}",
+    "toast.outgoingOff": "Your messages will be sent as you type them",
+    "toast.outgoingFailed": "Sent untranslated · {message}",
     "error.noApiKey": "No API key configured",
     "error.emptyResponse": "Empty response",
     "error.reasoningOnly": "Response was cut off while the model was still reasoning",
@@ -118,13 +138,15 @@ var STRINGS = {
     "error.unsupportedLanguage": "{provider} cannot translate into {language}",
     "error.quotaExceeded": "The API key's translation quota is used up",
     "settings.provider": "Translation backend",
-    "settings.provider.note": "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately. The fields below only refresh after you close and reopen this panel.",
+    "settings.provider.note": "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately.",
     "settings.apiKey": "{provider} API key",
     "settings.apiKey.note": "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
     "settings.apiKey.saved": "saved · {fingerprint}",
     "settings.model": "Model",
     "settings.baseUrl": "API base URL",
     "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
+    "settings.allGuilds": "Translate in every server",
+    "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages are left alone either way.",
     "settings.guildIds": "Target server ids",
     "settings.guildIds.note": "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
     "settings.targetLanguage": "Translate into",
@@ -138,10 +160,20 @@ var STRINGS = {
     "settings.maxConcurrent": "Concurrent requests",
     "settings.autoTranslate": "Automatic translation",
     "settings.autoTranslate.note": "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
+    "settings.hotkey": "Automatic translation shortcut",
+    "settings.hotkey.note": "Toggles automatic translation without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
+    "settings.translateOutgoing": "Translate the messages I send",
+    "settings.translateOutgoing.note": "Replaces what you type with its translation before it is sent, in the target servers only. Other people never see the original, so leave this off unless you mean it.",
+    "settings.outgoingLanguage": "Send my messages in",
+    "settings.outgoingLanguage.note": "What you type is translated into this language. A message already written in it is sent untouched.",
+    "settings.outgoingHotkey": "Outgoing translation shortcut",
+    "settings.outgoingHotkey.note": "Toggles the switch above without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
     "settings.translateBots": "Translate bot messages",
     "settings.translateOwnMessages": "Translate my own messages",
     "settings.showPending": "Show while translating",
     "settings.showErrors": "Show translation failures",
+    "settings.debugLog": "Log why a message was skipped",
+    "settings.debugLog.note": "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
@@ -160,6 +192,12 @@ var STRINGS = {
     "toast.needApiKey": "설정에서 API 키를 입력하세요.",
     "toast.needGuilds": "설정에서 대상 서버 ID를 추가하세요.",
     "toast.failed": "번역 실패 · {message}",
+    "toast.startFailed": "시작하지 못했습니다 · {message}. 콘솔 로그를 확인하세요.",
+    "toast.autoOn": "자동 번역 켜짐",
+    "toast.autoOff": "자동 번역 꺼짐 · 수동 모드",
+    "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
+    "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
+    "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
     "error.noApiKey": "API 키가 설정되지 않았습니다",
     "error.emptyResponse": "빈 응답",
     "error.reasoningOnly": "모델이 추론하는 도중에 응답이 잘렸습니다",
@@ -170,13 +208,15 @@ var STRINGS = {
     "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
     "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
     "settings.provider": "번역 백엔드",
-    "settings.provider.note": "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
+    "settings.provider.note": "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다.",
     "settings.apiKey": "{provider} API 키",
     "settings.apiKey.note": "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
     "settings.apiKey.saved": "저장됨 · {fingerprint}",
     "settings.model": "모델 이름",
     "settings.baseUrl": "API Base URL",
     "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
+    "settings.allGuilds": "모든 서버에서 번역",
+    "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. 어느 쪽이든 DM 은 대상이 아닙니다.",
     "settings.guildIds": "대상 서버 ID",
     "settings.guildIds.note": "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
     "settings.targetLanguage": "번역할 언어",
@@ -190,10 +230,20 @@ var STRINGS = {
     "settings.maxConcurrent": "동시 번역 요청 수",
     "settings.autoTranslate": "자동 번역",
     "settings.autoTranslate.note": "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+    "settings.hotkey": "자동 번역 단축키",
+    "settings.hotkey.note": "설정 창을 열지 않고 자동 번역을 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 단축키를 쓰지 않습니다.",
+    "settings.translateOutgoing": "보내는 메시지도 번역",
+    "settings.translateOutgoing.note": "대상 서버에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
+    "settings.outgoingLanguage": "보낼 때 번역할 언어",
+    "settings.outgoingLanguage.note": "입력한 글을 이 언어로 번역해 보냅니다. 이미 이 언어로 쓴 메시지는 그대로 나갑니다.",
+    "settings.outgoingHotkey": "보내는 메시지 번역 단축키",
+    "settings.outgoingHotkey.note": "설정 창을 열지 않고 위 스위치를 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 쓰지 않습니다.",
     "settings.translateBots": "봇 메시지도 번역",
     "settings.translateOwnMessages": "내 메시지도 번역",
     "settings.showPending": "번역 중 표시",
     "settings.showErrors": "번역 실패 시 표시",
+    "settings.debugLog": "번역하지 않은 사유 기록",
+    "settings.debugLog.note": "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
@@ -555,6 +605,180 @@ var PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
   value: provider.id
 }));
 
+// src/hotkey.js
+var MODIFIERS = {
+  control: "ctrl",
+  ctrl: "ctrl",
+  shift: "shift",
+  alt: "alt",
+  option: "alt",
+  meta: "meta",
+  cmd: "meta",
+  command: "meta",
+  os: "meta"
+};
+var KEY_NAMES = {
+  ctrl: "Control",
+  control: "Control",
+  shift: "Shift",
+  alt: "Alt",
+  option: "Alt",
+  cmd: "Meta",
+  command: "Meta",
+  meta: "Meta"
+};
+function keysFromString(raw) {
+  return String(raw || "").split("+").map((part) => part.trim()).filter(Boolean).map((part) => KEY_NAMES[part.toLowerCase()] ?? (part.length === 1 ? part.toUpperCase() : part));
+}
+function parseHotkey(keys) {
+  const list = Array.isArray(keys) ? keys : keysFromString(keys);
+  if (list.length === 0) return null;
+  const combo = { ctrl: false, shift: false, alt: false, meta: false, key: "" };
+  for (const entry of list) {
+    const name = String(entry ?? "").trim();
+    if (!name) continue;
+    const modifier = MODIFIERS[name.toLowerCase()];
+    if (modifier) {
+      combo[modifier] = true;
+    } else if (combo.key) {
+      return null;
+    } else {
+      combo.key = name.toLowerCase();
+    }
+  }
+  return combo.key ? combo : null;
+}
+function matchesHotkey(combo, event) {
+  if (!combo || !event || event.repeat) return false;
+  if (event.isComposing) return false;
+  if (String(event.key || "").toLowerCase() !== combo.key) return false;
+  return event.ctrlKey === combo.ctrl && event.shiftKey === combo.shift && event.altKey === combo.alt && event.metaKey === combo.meta;
+}
+var Hotkey = class {
+  constructor({ settings, field, onTrigger }) {
+    this._settings = settings;
+    this._field = field;
+    this._onTrigger = onTrigger;
+    this._combo = null;
+    this._unsubscribe = null;
+    this._onKeyDown = (event) => {
+      if (!matchesHotkey(this._combo, event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      this._onTrigger();
+    };
+  }
+  install() {
+    if (typeof document === "undefined") return;
+    this._apply(this._settings.current[this._field]);
+    this._unsubscribe = this._settings.onChange((id4, value) => {
+      if (id4 === this._field) this._apply(value);
+    });
+    document.addEventListener("keydown", this._onKeyDown, true);
+  }
+  remove() {
+    if (typeof document !== "undefined") {
+      document.removeEventListener("keydown", this._onKeyDown, true);
+    }
+    this._unsubscribe?.();
+    this._unsubscribe = null;
+    this._combo = null;
+  }
+  _apply(raw) {
+    this._combo = parseHotkey(raw);
+    if (raw?.length && !this._combo) {
+      logger.warn(`unrecognised ${this._field}: ${JSON.stringify(raw)}`);
+    }
+  }
+};
+
+// src/discord.js
+var React = BdApi.React;
+function createStores() {
+  const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
+  const UserStore = BdApi.Webpack.getStore("UserStore");
+  const GuildStore = BdApi.Webpack.getStore("GuildStore");
+  return {
+    guildIdForChannel(channelId) {
+      try {
+        return ChannelStore?.getChannel?.(channelId)?.guild_id ?? null;
+      } catch {
+        return null;
+      }
+    },
+    currentUserId() {
+      try {
+        return UserStore?.getCurrentUser?.()?.id ?? null;
+      } catch {
+        return null;
+      }
+    },
+    // 아래 세 조회는 멘션 표시용이다. null 은 "모름" 이고 호출자는 원본 토큰으로 물러난다.
+    userName(userId) {
+      try {
+        const user = UserStore?.getUser?.(userId);
+        return user?.globalName || user?.username || null;
+      } catch {
+        return null;
+      }
+    },
+    channelName(channelId) {
+      try {
+        return ChannelStore?.getChannel?.(channelId)?.name ?? null;
+      } catch {
+        return null;
+      }
+    },
+    roleName(guildId, roleId) {
+      try {
+        return GuildStore?.getGuild?.(guildId)?.roles?.[roleId]?.name ?? null;
+      } catch {
+        return null;
+      }
+    }
+  };
+}
+function findMessageContent() {
+  const { Filters } = BdApi.Webpack;
+  const markerSets = [
+    ["contentRef", "onUpdate", "compact"],
+    ["contentRef", "onUpdate", "message", "content"],
+    ["className", "message", "children", "content", "onUpdate", "contentRef", "compact"],
+    ["messageContent", "onUpdate", "contentRef"]
+  ];
+  for (const markers of markerSets) {
+    const target = tryWithKey(Filters.byComponentType(Filters.byStrings(...markers)));
+    if (target) {
+      logger.info(`MessageContent resolved via [${markers.join(", ")}] -> key "${target.key}"`);
+      return target;
+    }
+  }
+  if (typeof Filters.byDisplayName === "function") {
+    const target = tryWithKey(Filters.byDisplayName("MessageContent"));
+    if (target) {
+      logger.info(`MessageContent resolved via displayName -> key "${target.key}"`);
+      return target;
+    }
+  }
+  return null;
+}
+function tryWithKey(filter) {
+  let owner;
+  let key;
+  try {
+    [owner, key] = BdApi.Webpack.getWithKey(filter);
+  } catch (e) {
+    logger.warn("getWithKey threw", e);
+    return null;
+  }
+  if (!owner || !key) return null;
+  const value = owner[key];
+  if (value && typeof value.type === "function") return { module: value, key: "type" };
+  if (value && typeof value.render === "function") return { module: value, key: "render" };
+  if (typeof value === "function") return { module: owner, key };
+  return null;
+}
+
 // src/settings.js
 var Settings = class {
   constructor() {
@@ -575,7 +799,7 @@ var Settings = class {
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
-  _set(id4, value) {
+  set(id4, value) {
     const next = coerce(id4, value, this._values[id4]);
     if (next === KEEP || next === this._values[id4]) return;
     if (id4 === "provider") {
@@ -615,15 +839,33 @@ var Settings = class {
       logger.error("failed to save settings", e);
     }
   }
+  // BD 의 설정 항목은 defaultValue 로 한 번 초기화되는 비제어 컴포넌트라, 값만
+  // 바꿔 다시 렌더해도 화면은 그대로다. 프로바이더나 UI 언어처럼 패널 전체의
+  // 표시를 바꾸는 편집은 key 를 갈아 끼워 통째로 다시 마운트시킨다.
   buildPanel() {
+    const settings = this;
+    function MolluSettings() {
+      const [revision, bump] = React.useState(0);
+      React.useEffect(
+        () => settings.onChange((id4) => {
+          if (PANEL_REBUILD.has(id4)) bump((n) => n + 1);
+        }),
+        []
+      );
+      const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
+      return React.cloneElement(panel, { key: `panel-${revision}` });
+    }
+    return React.createElement(MolluSettings);
+  }
+  _panelSpec() {
     const v = this._values;
-    return BdApi.UI.buildSettingsPanel({
+    return {
       // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
       // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
       // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
       // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
-      // switch 에서 생기는 중복은 _set() 이 무시한다.
-      onChange: (_categoryId, settingId, value) => this._set(settingId, value),
+      // switch 에서 생기는 중복은 set() 이 무시한다.
+      onChange: (_categoryId, settingId, value) => this.set(settingId, value),
       settings: withChangeHandlers(this, [
         {
           type: "dropdown",
@@ -669,11 +911,20 @@ var Settings = class {
           value: v.baseUrl
         },
         {
+          type: "switch",
+          id: "allGuilds",
+          name: t("settings.allGuilds"),
+          note: t("settings.allGuilds.note"),
+          value: v.allGuilds
+        },
+        {
           type: "text",
           id: "guildIds",
           name: t("settings.guildIds"),
           note: t("settings.guildIds.note"),
-          value: v.guildIds
+          value: v.guildIds,
+          // 목록을 무시하는 동안에는 칸도 비활성으로 보여 준다.
+          disableWith: "allGuilds"
         },
         {
           type: "dropdown",
@@ -724,6 +975,38 @@ var Settings = class {
           value: v.autoTranslate
         },
         {
+          type: "keybind",
+          id: "hotkey",
+          name: t("settings.hotkey"),
+          note: t("settings.hotkey.note"),
+          value: v.hotkey,
+          clearable: true
+        },
+        {
+          type: "switch",
+          id: "translateOutgoing",
+          name: t("settings.translateOutgoing"),
+          note: t("settings.translateOutgoing.note"),
+          value: v.translateOutgoing
+        },
+        {
+          type: "dropdown",
+          id: "outgoingLanguage",
+          name: t("settings.outgoingLanguage"),
+          note: t("settings.outgoingLanguage.note"),
+          value: v.outgoingLanguage,
+          options: LANGUAGE_OPTIONS,
+          enableWith: "translateOutgoing"
+        },
+        {
+          type: "keybind",
+          id: "outgoingHotkey",
+          name: t("settings.outgoingHotkey"),
+          note: t("settings.outgoingHotkey.note"),
+          value: v.outgoingHotkey,
+          clearable: true
+        },
+        {
           type: "switch",
           id: "translateBots",
           name: t("settings.translateBots"),
@@ -746,15 +1029,23 @@ var Settings = class {
           id: "showErrors",
           name: t("settings.showErrors"),
           value: v.showErrors
+        },
+        {
+          type: "switch",
+          id: "debugLog",
+          name: t("settings.debugLog"),
+          note: t("settings.debugLog.note"),
+          value: v.debugLog
         }
       ])
-    });
+    };
   }
 };
+var PANEL_REBUILD = /* @__PURE__ */ new Set(["provider", "uiLanguage"]);
 function withChangeHandlers(settings, items) {
   return items.map((item) => ({
     ...item,
-    onChange: (value) => settings._set(item.id, value)
+    onChange: (value) => settings.set(item.id, value)
   }));
 }
 var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
@@ -768,6 +1059,9 @@ function migrate(stored) {
   }
   delete stored.koreanThreshold;
   if (stored.targetLanguage === "pt") stored.targetLanguage = "pt-BR";
+  for (const field of ["hotkey", "outgoingHotkey"]) {
+    if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
+  }
   return stored;
 }
 function normalize(values) {
@@ -881,6 +1175,7 @@ function split(input, regex, tokens, restored, record) {
 var TranslationCache = class {
   constructor() {
     this._map = /* @__PURE__ */ new Map();
+    this._pendingSave = null;
   }
   load() {
     for (const store of [NAME, ...LEGACY_NAMES]) {
@@ -895,18 +1190,25 @@ var TranslationCache = class {
       const stored = readCache();
       if (!Array.isArray(stored)) return;
       for (const entry of stored) {
-        if (Array.isArray(entry) && entry.length === 2) this._map.set(entry[0], entry[1]);
+        if (!Array.isArray(entry) || entry.length !== 2) continue;
+        const [key, value] = entry;
+        if (typeof key !== "string") continue;
+        if (typeof value === "string" || value === null) this._map.set(key, value);
       }
     } catch {
     }
   }
   save() {
+    if (this._pendingSave != null) {
+      clearTimeout(this._pendingSave);
+      this._pendingSave = null;
+    }
     try {
       const entries = Array.from(this._map);
       const out = [];
       for (let i = entries.length - 1; i >= 0 && out.length < CACHE_LIMIT; i -= 1) {
         const [key, value] = entries[i];
-        if (typeof value !== "string") continue;
+        if (typeof value !== "string" && value !== null) continue;
         if (key.length > 600) continue;
         out.push([key, value]);
       }
@@ -923,6 +1225,7 @@ var TranslationCache = class {
   }
   set(key, value) {
     this._map.set(key, value);
+    this._scheduleSave();
     const max = CACHE_LIMIT * 2;
     if (this._map.size <= max) return;
     let drop = this._map.size - max;
@@ -930,6 +1233,14 @@ var TranslationCache = class {
       this._map.delete(oldKey);
       if (--drop <= 0) break;
     }
+  }
+  _scheduleSave() {
+    if (this._pendingSave != null) return;
+    this._pendingSave = setTimeout(() => {
+      this._pendingSave = null;
+      this.save();
+    }, CACHE_SAVE_DEBOUNCE_MS);
+    this._pendingSave?.unref?.();
   }
 };
 function readCache() {
@@ -996,6 +1307,7 @@ var Translator = class {
     this._cache = new TranslationCache();
     this._queue = new TaskQueue(() => this._settings.current.maxConcurrent);
     this._inflight = /* @__PURE__ */ new Map();
+    this._starts = /* @__PURE__ */ new Map();
     this._failures = /* @__PURE__ */ new Map();
     this._aborters = /* @__PURE__ */ new Set();
     this._pausedUntil = 0;
@@ -1017,19 +1329,20 @@ var Translator = class {
     }
     this._aborters.clear();
     this._inflight.clear();
+    this._starts.clear();
     this._failures.clear();
     this._cache.save();
   }
   peek(text) {
     const { masked, tokens } = mask(text);
-    const key = this._cacheKey(masked);
+    const key = this._cacheKey(masked, this._settings.current.targetLanguage);
     if (this._cache.has(key)) return this._restore(this._cache.get(key), tokens);
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
   }
   // 같은 원문이라도 대상 언어가 다르면 다른 번역이다.
-  _cacheKey(masked) {
-    return `${this._settings.current.targetLanguage}${masked}`;
+  _cacheKey(masked, language) {
+    return `${language}${masked}`;
   }
   // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
   // 이때 "번역 중" 을 띄워야 스크롤 중 화면이 밀리지 않는다. shouldRun 은 그
@@ -1037,30 +1350,52 @@ var Translator = class {
   // 이 함수는 절대 reject 하지 않는다.
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
-    const key = this._cacheKey(masked);
+    const language = hooks.language || this._settings.current.targetLanguage;
+    const key = this._cacheKey(masked, language);
     if (this._cache.has(key)) {
       return Promise.resolve(this._restore(this._cache.get(key), tokens));
     }
     if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
     if (hooks.ignoreBackoff) this._failures.delete(key);
     else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
+    if (hooks.onStart) this._onStart(key, hooks.onStart);
     let job = this._inflight.get(key);
     if (!job) {
       job = this._queue.run(async () => {
         await this._awaitResume();
         if (this._stopped) throw aborted();
         if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
-        if (hooks.onStart) hooks.onStart();
-        return this._callWithRetries(masked);
+        this._announceStart(key);
+        return this._callWithRetries(masked, language);
       }, hooks.shouldRun).then(
         (raw) => this._resolveSuccess(key, masked, raw),
         (err) => this._resolveFailure(key, err)
-      ).finally(() => this._inflight.delete(key));
+      ).finally(() => {
+        this._inflight.delete(key);
+        this._starts.delete(key);
+      });
       this._inflight.set(key, job);
     }
     return job.then(
       (outcome) => outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome
     );
+  }
+  _onStart(key, listener) {
+    const waiting = this._starts.get(key);
+    if (waiting === true) return listener();
+    if (waiting) waiting.add(listener);
+    else this._starts.set(key, /* @__PURE__ */ new Set([listener]));
+  }
+  _announceStart(key) {
+    const waiting = this._starts.get(key);
+    this._starts.set(key, true);
+    if (waiting === true || !waiting) return;
+    for (const listener of waiting) {
+      try {
+        listener();
+      } catch {
+      }
+    }
   }
   _restore(maskedValue, tokens) {
     if (typeof maskedValue !== "string") return skip();
@@ -1069,10 +1404,10 @@ var Translator = class {
     return text ? done(text, trimEdges(segments)) : skip();
   }
   // 일시적인 실패는 사용자에게 보이기 전에 몇 번 더 해 본다.
-  async _callWithRetries(maskedText) {
+  async _callWithRetries(maskedText, language) {
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this._callProvider(maskedText);
+        return await this._callProvider(maskedText, language);
       } catch (err) {
         if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
         logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
@@ -1091,14 +1426,17 @@ var Translator = class {
     this._failures.delete(maskedKey);
     return false;
   }
-  async _callProvider(maskedText) {
+  async _callProvider(maskedText, language) {
     const controller = new AbortController();
     this._aborters.add(controller);
     try {
-      const provider = getProvider(this._settings.current.provider);
+      const settings = this._settings.current;
+      const provider = getProvider(settings.provider);
       return await provider.translate({
         text: maskedText,
-        settings: this._settings.current,
+        // 프로바이더는 settings.targetLanguage 만 본다. 호출 단위 언어를
+        // 그 자리에 얹어 넘기고, 저장된 설정은 건드리지 않는다.
+        settings: language === settings.targetLanguage ? settings : { ...settings, targetLanguage: language },
         signal: controller.signal
       });
     } finally {
@@ -1200,11 +1538,13 @@ var LanguageDetector = class {
   constructor(settings) {
     this._settings = settings;
   }
-  needsTranslation(text) {
+  // language 를 넘기면 그 언어로 판정한다. 받는 메시지와 보내는 메시지의
+  // 대상 언어가 서로 다르기 때문이다.
+  needsTranslation(text, language) {
     if (typeof text !== "string") return false;
     const letters = this._letters(text);
     if (letters.length < 2) return false;
-    const { script } = getLanguage(this._settings.current.targetLanguage);
+    const { script } = getLanguage(language ?? this._settings.current.targetLanguage);
     if (!script) return true;
     let inTarget = 0;
     for (const ch of letters) {
@@ -1226,93 +1566,6 @@ var LanguageDetector = class {
     return Array.from(text.replace(MASK_RE2, " ").replace(NON_LETTER, ""));
   }
 };
-
-// src/discord.js
-var React = BdApi.React;
-function createStores() {
-  const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
-  const UserStore = BdApi.Webpack.getStore("UserStore");
-  const GuildStore = BdApi.Webpack.getStore("GuildStore");
-  return {
-    guildIdForChannel(channelId) {
-      try {
-        return ChannelStore?.getChannel?.(channelId)?.guild_id ?? null;
-      } catch {
-        return null;
-      }
-    },
-    currentUserId() {
-      try {
-        return UserStore?.getCurrentUser?.()?.id ?? null;
-      } catch {
-        return null;
-      }
-    },
-    // 아래 세 조회는 멘션 표시용이다. null 은 "모름" 이고 호출자는 원본 토큰으로 물러난다.
-    userName(userId) {
-      try {
-        const user = UserStore?.getUser?.(userId);
-        return user?.globalName || user?.username || null;
-      } catch {
-        return null;
-      }
-    },
-    channelName(channelId) {
-      try {
-        return ChannelStore?.getChannel?.(channelId)?.name ?? null;
-      } catch {
-        return null;
-      }
-    },
-    roleName(guildId, roleId) {
-      try {
-        return GuildStore?.getGuild?.(guildId)?.roles?.[roleId]?.name ?? null;
-      } catch {
-        return null;
-      }
-    }
-  };
-}
-function findMessageContent() {
-  const { Filters } = BdApi.Webpack;
-  const markerSets = [
-    ["contentRef", "onUpdate", "compact"],
-    ["contentRef", "onUpdate", "message", "content"],
-    ["className", "message", "children", "content", "onUpdate", "contentRef", "compact"],
-    ["messageContent", "onUpdate", "contentRef"]
-  ];
-  for (const markers of markerSets) {
-    const target = tryWithKey(Filters.byComponentType(Filters.byStrings(...markers)));
-    if (target) {
-      logger.info(`MessageContent resolved via [${markers.join(", ")}] -> key "${target.key}"`);
-      return target;
-    }
-  }
-  if (typeof Filters.byDisplayName === "function") {
-    const target = tryWithKey(Filters.byDisplayName("MessageContent"));
-    if (target) {
-      logger.info(`MessageContent resolved via displayName -> key "${target.key}"`);
-      return target;
-    }
-  }
-  return null;
-}
-function tryWithKey(filter) {
-  let owner;
-  let key;
-  try {
-    [owner, key] = BdApi.Webpack.getWithKey(filter);
-  } catch (e) {
-    logger.warn("getWithKey threw", e);
-    return null;
-  }
-  if (!owner || !key) return null;
-  const value = owner[key];
-  if (value && typeof value.type === "function") return { module: value, key: "type" };
-  if (value && typeof value.render === "function") return { module: value, key: "render" };
-  if (typeof value === "function") return { module: owner, key };
-  return null;
-}
 
 // src/ui/rich-text.js
 var CUSTOM_EMOJI = /^<(a)?:(\w+):(\d+)>$/;
@@ -1401,16 +1654,20 @@ function relativeTime(date) {
 }
 
 // src/ui/visibility.js
+var ROOT_MARGIN = "200px 0px";
 var observer = null;
 var callbacks = /* @__PURE__ */ new Map();
 function ensure() {
   if (observer || typeof IntersectionObserver === "undefined") return observer;
-  observer = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      const onChange = callbacks.get(entry.target);
-      if (onChange) onChange(entry.isIntersecting);
-    }
-  });
+  observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        const onChange = callbacks.get(entry.target);
+        if (onChange) onChange(entry.isIntersecting);
+      }
+    },
+    { rootMargin: ROOT_MARGIN }
+  );
   return observer;
 }
 function observeVisibility(node, onChange) {
@@ -1437,7 +1694,7 @@ function initialResult(translator, text) {
 }
 function TranslationBlock({ text, translator, settings, stores, guildId }) {
   const anchorRef = React.useRef(null);
-  const { showPending, showErrors, autoTranslate } = useDisplaySettings(settings);
+  const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
   const triggerRef = React.useRef(null);
   const [result, setResult] = React.useState(() => initialResult(translator, text));
   React.useEffect(() => {
@@ -1452,6 +1709,12 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       return void 0;
     }
     setResult({ status: "idle" });
+    const schedule = (delay) => {
+      dwell = setTimeout(() => {
+        dwell = null;
+        run();
+      }, delay);
+    };
     const run = (force) => {
       if (!alive || running) return;
       running = true;
@@ -1472,7 +1735,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
           setResult({ status: "idle" });
           if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
             rateLimitRetries += 1;
-            dwell = setTimeout(run, res.after + jitter());
+            schedule(res.after + jitter());
           } else {
             setResult({ status: "error", message: t("error.rateLimited") });
           }
@@ -1491,7 +1754,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
       visible = isVisible;
       if (isVisible) {
-        if (dwell == null && !running) dwell = setTimeout(run, DWELL_MS);
+        if (dwell == null && !running) schedule(DWELL_MS);
       } else if (dwell != null) {
         clearTimeout(dwell);
         dwell = null;
@@ -1509,7 +1772,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stopObserving();
       if (dwell != null) clearTimeout(dwell);
     };
-  }, [text, autoTranslate]);
+  }, [text, autoTranslate, targetLanguage, maxChars]);
   const status = result && result.status;
   return React.createElement(
     React.Fragment,
@@ -1525,7 +1788,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stores,
       guildId,
       autoTranslate,
-      badge: badgeFor(settings.current.targetLanguage),
+      badge: badgeFor(targetLanguage),
       onTrigger: () => triggerRef.current?.(true)
     })
   );
@@ -1586,14 +1849,14 @@ function useDisplaySettings(settings) {
   }, [settings]);
   return display;
 }
-var MIRRORED = /* @__PURE__ */ new Set(["showPending", "showErrors", "autoTranslate"]);
+var MIRRORED = /* @__PURE__ */ new Set(["showPending", "showErrors", "autoTranslate", "targetLanguage", "maxChars"]);
 function pickDisplay(settings) {
-  const { showPending, showErrors, autoTranslate } = settings.current;
-  return { showPending, showErrors, autoTranslate };
+  const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = settings.current;
+  return { showPending, showErrors, autoTranslate, targetLanguage, maxChars };
 }
 
 // src/message-patch.js
-var TRANSLATABLE_TYPES = /* @__PURE__ */ new Set([0, 19]);
+var TRANSLATABLE_TYPES = /* @__PURE__ */ new Set([0, 19, 20]);
 var MessagePatch = class {
   constructor({ target, settings, translator, languageDetector, stores }) {
     this._target = target;
@@ -1602,6 +1865,7 @@ var MessagePatch = class {
     this._detector = languageDetector;
     this._stores = stores;
     this._unpatch = null;
+    this._traced = /* @__PURE__ */ new Set();
   }
   install() {
     const { module: module2, key } = this._target;
@@ -1622,10 +1886,17 @@ var MessagePatch = class {
     }
   }
   _onRender(props, ret) {
+    if (!ret) return ret;
     const message = props?.message;
-    const guildId = ret ? this._targetGuildId(message) : null;
-    if (!guildId) return ret;
-    if (!this._detector.needsTranslation(message.content)) return ret;
+    const { guildId, reason } = this._resolve(message);
+    if (!guildId) {
+      this._trace(message, reason);
+      return ret;
+    }
+    if (!this._detector.needsTranslation(message.content)) {
+      this._trace(message, "already in the target language");
+      return ret;
+    }
     const block = React.createElement(TranslationBlock, {
       key: "mollu-translation",
       text: message.content,
@@ -1636,18 +1907,40 @@ var MessagePatch = class {
     });
     return appendChild(ret, block);
   }
-  _targetGuildId(message) {
-    if (!message || typeof message.content !== "string" || !message.content.trim()) return null;
-    if (!TRANSLATABLE_TYPES.has(message.type)) return null;
+  // {guildId} 또는 {reason}. 사유는 진단 로그에만 쓰이고, 꺼져 있으면 버려진다.
+  _resolve(message) {
+    if (!message || typeof message.content !== "string" || !message.content.trim()) {
+      return { reason: "no text content" };
+    }
+    if (!TRANSLATABLE_TYPES.has(message.type)) {
+      return { reason: `message type ${message.type} is not translatable` };
+    }
     const settings = this._settings.current;
-    if (!settings.apiKey || this._settings.guildIdSet.size === 0) return null;
+    if (!settings.apiKey) return { reason: "no api key configured" };
+    if (!settings.allGuilds && this._settings.guildIdSet.size === 0) {
+      return { reason: "no target server configured" };
+    }
     const author = message.author || {};
-    if (!settings.translateBots && author.bot) return null;
+    if (!settings.translateBots && author.bot) return { reason: "author is a bot" };
     if (!settings.translateOwnMessages && author.id && author.id === this._stores.currentUserId()) {
-      return null;
+      return { reason: "own message" };
     }
     const guildId = this._stores.guildIdForChannel(message.channel_id);
-    return guildId && this._settings.guildIdSet.has(guildId) ? guildId : null;
+    if (!guildId) return { reason: "not a server channel" };
+    if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
+      return { reason: `server ${guildId} is not in the target list` };
+    }
+    return { guildId };
+  }
+  // 같은 메시지가 렌더마다 다시 판정되므로 사유당 한 번만 남긴다.
+  _trace(message, reason) {
+    if (!this._settings.current.debugLog) return;
+    const id4 = message?.id ?? "?";
+    const key = `${id4}${reason}`;
+    if (this._traced.has(key)) return;
+    if (this._traced.size >= TRACE_LIMIT) this._traced.clear();
+    this._traced.add(key);
+    logger.info(`not translated · ${id4} · ${reason}`);
   }
 };
 function appendChild(ret, child) {
@@ -1658,6 +1951,89 @@ function appendChild(ret, child) {
   }
   return ret;
 }
+
+// src/outgoing-patch.js
+function findMessageActions() {
+  try {
+    return BdApi.Webpack.getByKeys("sendMessage", "editMessage") ?? null;
+  } catch (e) {
+    logger.warn("MessageActions lookup threw", e);
+    return null;
+  }
+}
+var OutgoingPatch = class {
+  constructor({ target, settings, translator, languageDetector, stores, onFailure }) {
+    this._target = target;
+    this._settings = settings;
+    this._translator = translator;
+    this._detector = languageDetector;
+    this._stores = stores;
+    this._onFailure = onFailure || (() => {
+    });
+    this._unpatch = null;
+  }
+  install() {
+    this._unpatch = BdApi.Patcher.instead(
+      NAME,
+      this._target,
+      "sendMessage",
+      (self, args, original) => this._onSend(self, args, original)
+    );
+  }
+  remove() {
+    try {
+      this._unpatch?.();
+    } finally {
+      this._unpatch = null;
+    }
+  }
+  // 번역하지 않는 경우에는 원래 호출을 그대로 돌려준다. async 로 감싸면 반환값이
+  // Promise 로 바뀌므로, 보내는 경로의 대부분은 건드리지 않고 지나가게 한다.
+  _onSend(self, args, original) {
+    let text = null;
+    try {
+      text = this._pick(args);
+    } catch (e) {
+      logger.error("outgoing gate failed", e);
+    }
+    if (!text) return original.apply(self, args);
+    return this._translateThenSend(self, args, original, text);
+  }
+  async _translateThenSend(self, args, original, text) {
+    try {
+      const result = await this._translator.translate(text, {
+        language: this._settings.current.outgoingLanguage,
+        // 보내는 사람이 기다리고 있다. 실패 백오프에 걸려 조용히 원문이
+        // 나가는 것보다 한 번 더 시도하는 편이 낫다.
+        ignoreBackoff: true
+      });
+      if (result.status === "done" && result.text) {
+        args[1] = { ...args[1], content: result.text };
+      } else if (result.status === "error" || result.status === "retry") {
+        this._onFailure(result.message);
+      }
+    } catch (e) {
+      logger.error("outgoing translation failed", e);
+      this._onFailure(e && e.message || "unknown");
+    }
+    return original.apply(self, args);
+  }
+  // 번역해서 보낼 원문, 아니면 null.
+  _pick(args) {
+    const settings = this._settings.current;
+    if (!settings.translateOutgoing || !settings.apiKey) return null;
+    const [channelId, message] = args;
+    const content = message?.content;
+    if (typeof content !== "string" || !content.trim()) return null;
+    if (content.startsWith("/")) return null;
+    if (content.length > settings.maxChars) return null;
+    const guildId = this._stores.guildIdForChannel(channelId);
+    if (!guildId) return null;
+    if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) return null;
+    if (!this._detector.needsTranslation(content, settings.outgoingLanguage)) return null;
+    return content;
+  }
+};
 
 // src/ui/styles.js
 var STYLES = `
@@ -1760,6 +2136,19 @@ var Mollu = class {
       onError: (err) => this._notifyError(err)
     });
     this._patch = null;
+    this._outgoing = null;
+    this._hotkeys = [
+      new Hotkey({
+        settings: this._settings,
+        field: "hotkey",
+        onTrigger: () => this._toggle("autoTranslate", "toast.autoOn", "toast.autoOff")
+      }),
+      new Hotkey({
+        settings: this._settings,
+        field: "outgoingHotkey",
+        onTrigger: () => this._toggle("translateOutgoing", "toast.outgoingOn", "toast.outgoingOff")
+      })
+    ];
     this._lastErrorToast = 0;
   }
   getName() {
@@ -1772,6 +2161,9 @@ var Mollu = class {
     try {
       BdApi.DOM.addStyle(NAME, STYLES);
       this._translator.start();
+      for (const hotkey of this._hotkeys) hotkey.install();
+      const stores = createStores();
+      this._installOutgoing(stores);
       if (!hasNativeFetch()) {
         this._toast(t("toast.outdatedBd"), "warning");
       }
@@ -1786,21 +2178,22 @@ var Mollu = class {
         settings: this._settings,
         translator: this._translator,
         languageDetector: this._detector,
-        stores: createStores()
+        stores
       });
       this._patch.install();
       if (!this._settings.current.apiKey) {
         this._toast(t("toast.needApiKey"), "info");
       }
-      if (this._settings.guildIdSet.size === 0) {
+      const { provider, targetLanguage, autoTranslate, allGuilds } = this._settings.current;
+      if (!allGuilds && this._settings.guildIdSet.size === 0) {
         this._toast(t("toast.needGuilds"), "info");
       }
-      const { provider, targetLanguage, autoTranslate } = this._settings.current;
       logger.info(
-        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${this._settings.guildIdSet.size}`
+        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${allGuilds ? "all" : this._settings.guildIdSet.size} outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`
       );
     } catch (e) {
       logger.error("start failed", e);
+      this._toast(t("toast.startFailed", { message: e && e.message || "unknown" }), "error");
     }
   }
   stop() {
@@ -1809,12 +2202,43 @@ var Mollu = class {
     } catch (e) {
       logger.error("unpatch failed", e);
     }
+    try {
+      this._outgoing?.remove();
+    } catch (e) {
+      logger.error("outgoing unpatch failed", e);
+    }
+    for (const hotkey of this._hotkeys) hotkey.remove();
     BdApi.Patcher.unpatchAll(NAME);
     BdApi.DOM.removeStyle(NAME);
     disconnectVisibility();
     this._translator.stop();
     this._patch = null;
+    this._outgoing = null;
     logger.info("stopped");
+  }
+  // 보내는 메시지 번역은 자동 번역과 달리 남에게 나가는 글을 바꾸므로, 찾지
+  // 못하면 조용히 없는 기능이 된다. 번역 자체는 그와 무관하게 계속 동작한다.
+  _installOutgoing(stores) {
+    const target = findMessageActions();
+    if (!target) {
+      logger.warn("MessageActions not found; outgoing translation is unavailable");
+      return;
+    }
+    this._outgoing = new OutgoingPatch({
+      target,
+      settings: this._settings,
+      translator: this._translator,
+      languageDetector: this._detector,
+      stores,
+      onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error")
+    });
+    this._outgoing.install();
+  }
+  _toggle(id4, onKey, offKey) {
+    const next = !this._settings.current[id4];
+    this._settings.set(id4, next);
+    const language = getLanguage(this._settings.current.outgoingLanguage).label;
+    this._toast(t(next ? onKey : offKey, { language }), "info");
   }
   _notifyError(err) {
     if (!this._settings.current.showErrors) return;

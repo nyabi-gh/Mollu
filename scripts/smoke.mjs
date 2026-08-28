@@ -119,7 +119,7 @@ check("plugin instance has the BetterDiscord lifecycle", () => {
 
 check("getSettingsPanel returns a panel spec with an onChange", () => {
     const instance = new Plugin({ name: meta.name });
-    const panel = instance.getSettingsPanel();
+    const panel = instance.getSettingsPanel().type();
     assert.ok(Array.isArray(panel.__spec.settings) && panel.__spec.settings.length > 0);
     assert.equal(typeof panel.__spec.onChange, "function");
 });
@@ -169,6 +169,29 @@ check("cache: save() keeps the newest entries, not the oldest", () => {
         "the most recent translation must survive trimming",
     );
     assert.ok(!saved.some(([key]) => key === "k0"), "the oldest entry is dropped first");
+});
+
+check('cache: a "no translation needed" verdict survives a restart', () => {
+    const saved = captureSave(() => {
+        const cache = new TranslationCache();
+        cache.set("ko\u0001already korean", null);
+        cache.set("ko\u0001bonjour", "안녕");
+        cache.save();
+    });
+    // null 을 버리면 "이미 대상 언어" 라는 판정을 세션마다 API 에 다시 물어보게 된다.
+    assert.equal(saved.length, 2);
+
+    const reloaded = new TranslationCache();
+    const previous = BdApi.Data.load;
+    BdApi.Data.load = (_name, key) => (key === CACHE_KEY ? saved : null);
+    try {
+        reloaded.load();
+    } finally {
+        BdApi.Data.load = previous;
+    }
+    assert.ok(reloaded.has("ko\u0001already korean"));
+    assert.equal(reloaded.get("ko\u0001already korean"), null);
+    assert.equal(reloaded.get("ko\u0001bonjour"), "안녕");
 });
 
 await checkAsync("translator: a shared cache key restores each message's own tokens", async () => {
@@ -476,7 +499,7 @@ check("settings: every panel field persists, not just the switches", () => {
     // 패널 레벨 onChange 는 switch 에만 연결되므로, 자기 핸들러가 없는 칸은
     // 모든 편집을 조용히 버린다.
     const settings = new Settings();
-    const fields = settings.buildPanel().__spec.settings;
+    const fields = settings._panelSpec().settings;
 
     const edits = {
         apiKey: "sk-typed-in-the-panel",
@@ -619,33 +642,33 @@ check("settings: a target saved before the split becomes Brazilian", () => {
 
 check("settings: the model field is hidden for a backend without models", () => {
     const settings = new Settings();
-    settings._set("provider", "deepl");
-    const ids = settings.buildPanel().__spec.settings.map((entry) => entry.id);
+    settings.set("provider", "deepl");
+    const ids = settings._panelSpec().settings.map((entry) => entry.id);
     assert.ok(!ids.includes("model"), "DeepL has no model to choose");
     assert.ok(ids.includes("apiKey") && ids.includes("targetLanguage"));
 
-    settings._set("provider", "gemini");
+    settings.set("provider", "gemini");
     assert.ok(
-        settings.buildPanel().__spec.settings.some((entry) => entry.id === "model"),
+        settings._panelSpec().settings.some((entry) => entry.id === "model"),
         "a backend with models still shows the field",
     );
 });
 
 check("settings: switching provider swaps defaults and keeps both keys", () => {
     const settings = new Settings();
-    settings._set("apiKey", "sk-deepseek");
+    settings.set("apiKey", "sk-deepseek");
 
-    settings._set("provider", "gemini");
+    settings.set("provider", "gemini");
     assert.equal(settings.current.baseUrl, "https://generativelanguage.googleapis.com/v1beta/openai");
     assert.equal(settings.current.model, "gemini-3.1-flash-lite");
     assert.equal(settings.current.apiKey, "", "a provider with no saved key starts empty");
 
-    settings._set("apiKey", "gemini-key");
-    settings._set("provider", "deepseek");
+    settings.set("apiKey", "gemini-key");
+    settings.set("provider", "deepseek");
     assert.equal(settings.current.apiKey, "sk-deepseek", "the first key was remembered");
     assert.equal(settings.current.baseUrl, "https://api.deepseek.com");
 
-    settings._set("provider", "gemini");
+    settings.set("provider", "gemini");
     assert.equal(settings.current.apiKey, "gemini-key", "so was the second");
 });
 
@@ -703,6 +726,25 @@ await checkAsync("gemini: gemma never receives reasoning_effort, which it reject
     }
 });
 
+await checkAsync("translator: every block waiting on the same text is told it started", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const started = [];
+        const both = await Promise.all([
+            translator.translate("hello there", { onStart: () => started.push("first") }),
+            translator.translate("hello there", { onStart: () => started.push("second") }),
+        ]);
+        // 요청은 하나로 합쳐도, 합류한 블록이 빈 줄에 앉아 있으면 안 된다.
+        assert.deepEqual(started, ["first", "second"]);
+        assert.equal(both[0].text, both[1].text);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 await checkAsync("manual mode: nothing is sent until it is asked for", async () => {
     const previous = BdApi.Net.fetch;
     let calls = 0;
@@ -730,18 +772,102 @@ await checkAsync("manual mode: nothing is sent until it is asked for", async () 
 
 check("settings: the stored api key is never rendered into the panel", () => {
     const settings = new Settings();
-    settings._set("apiKey", "  sk-abcdefgh1234  ");
+    settings.set("apiKey", "  sk-abcdefgh1234  ");
 
-    const field = settings.buildPanel().__spec.settings.find((entry) => entry.id === "apiKey");
+    const field = settings._panelSpec().settings.find((entry) => entry.id === "apiKey");
     assert.equal(field.value, "", "the panel must not carry the key");
     assert.ok(!JSON.stringify(field).includes("abcdefgh"), "no part of the key may leak into the panel");
     assert.ok(field.placeholder.includes("1234"), "a last-4 fingerprint identifies the saved key");
 
-    settings._set("apiKey", ""); // an empty edit means "unchanged"
+    settings.set("apiKey", ""); // an empty edit means "unchanged"
     assert.equal(settings.current.apiKey, "sk-abcdefgh1234");
 
-    settings._set("apiKey", "-"); // the documented way to erase it
+    settings.set("apiKey", "-"); // the documented way to erase it
     assert.equal(settings.current.apiKey, "");
+});
+
+const { parseHotkey, matchesHotkey, keysFromString } = await import("../src/hotkey.js");
+
+check("hotkey: a combo is parsed, and nonsense disables it instead of throwing", () => {
+    // BD 의 keybind 입력이 주는 형태: 누른 순서대로 모은 event.key 배열.
+    assert.deepEqual(parseHotkey(["Control", "Shift", "T"]), {
+        ctrl: true,
+        shift: true,
+        alt: false,
+        meta: false,
+        key: "t",
+    });
+    assert.deepEqual(parseHotkey(["Alt", "k"]), {
+        ctrl: false,
+        shift: false,
+        alt: true,
+        meta: false,
+        key: "k",
+    });
+    assert.equal(parseHotkey(["Meta", "K"]).meta, true, "macOS Command");
+
+    // 문자열로 저장하던 시절의 값도 그대로 읽힌다.
+    assert.deepEqual(parseHotkey("Ctrl+Shift+T"), parseHotkey(["Control", "Shift", "T"]));
+    assert.deepEqual(keysFromString("Ctrl+Shift+T"), ["Control", "Shift", "T"]);
+    assert.deepEqual(keysFromString("cmd+K"), ["Meta", "K"]);
+
+    // 알아볼 수 없으면 단축키만 붙지 않는다. 설정 하나가 플러그인을 멈추면 안 된다.
+    assert.equal(parseHotkey([]), null);
+    assert.equal(parseHotkey(""), null);
+    assert.equal(parseHotkey(["Control", "Shift"]), null, "a modifier alone is not a shortcut");
+    assert.equal(parseHotkey(["Control", "T", "K"]), null, "two keys is not a shortcut");
+});
+
+check("settings: a hotkey saved as text becomes a recordable keybind", () => {
+    const previous = BdApi.Data;
+    const store = new Map([[`${NAME}::settings`, { hotkey: "Ctrl+Shift+T", outgoingHotkey: "Alt+K" }]]);
+    BdApi.Data = {
+        load: (name, key) => store.get(`${name}::${key}`) ?? null,
+        save: (name, key, value) => store.set(`${name}::${key}`, value),
+        delete: (name, key) => store.delete(`${name}::${key}`),
+    };
+    try {
+        // 문자열이 남아 있으면 BD 의 keybind 입력이 렌더되지 않는다.
+        const settings = new Settings();
+        assert.deepEqual(settings.current.hotkey, ["Control", "Shift", "T"]);
+        assert.deepEqual(settings.current.outgoingHotkey, ["Alt", "K"]);
+    } finally {
+        BdApi.Data = previous;
+    }
+});
+
+check("hotkey: only the exact combo fires, and never mid-composition", () => {
+    const combo = parseHotkey("Ctrl+Shift+T");
+    const event = (overrides) => ({
+        key: "T",
+        ctrlKey: true,
+        shiftKey: true,
+        altKey: false,
+        metaKey: false,
+        repeat: false,
+        isComposing: false,
+        ...overrides,
+    });
+
+    assert.ok(matchesHotkey(combo, event()));
+    assert.ok(!matchesHotkey(combo, event({ altKey: true })), "an extra modifier is a different combo");
+    assert.ok(!matchesHotkey(combo, event({ ctrlKey: false })));
+    assert.ok(!matchesHotkey(combo, event({ key: "R" })));
+    assert.ok(!matchesHotkey(combo, event({ repeat: true })), "holding the key must not spam the toggle");
+    // 한글 조합 중의 keydown 을 단축키로 읽으면 타이핑이 망가진다.
+    assert.ok(!matchesHotkey(combo, event({ isComposing: true })));
+    assert.ok(!matchesHotkey(null, event()));
+});
+
+check("settings: the panel is a live component, not a one-shot spec", () => {
+    const settings = new Settings();
+    const panel = settings.buildPanel();
+    assert.equal(typeof panel.type, "function", "a plain spec cannot react to a provider change");
+
+    const rendered = panel.type();
+    assert.ok(rendered.__spec.settings.some((entry) => entry.id === "provider"));
+    // key 가 바뀌어야 BD 의 비제어 입력이 새 defaultValue 로 다시 마운트된다.
+    assert.match(String(rendered.props.key), /^panel-/);
 });
 
 check("settings: listeners fire and unsubscribe, and pasted values are trimmed", () => {
@@ -749,14 +875,133 @@ check("settings: listeners fire and unsubscribe, and pasted values are trimmed",
     const seen = [];
     const unsubscribe = settings.onChange((id, value) => seen.push([id, value]));
 
-    settings._set("showPending", false);
-    settings._set("apiKey", "  sk-test  ");
+    settings.set("showPending", false);
+    settings.set("apiKey", "  sk-test  ");
     assert.deepEqual(seen[0], ["showPending", false]);
     assert.equal(settings.current.apiKey, "sk-test");
 
     unsubscribe();
-    settings._set("showErrors", true);
+    settings.set("showErrors", true);
     assert.equal(seen.length, 2, "no callbacks after unsubscribe");
+});
+
+// --- 5. 메시지 필터 -----------------------------------------------------------
+
+const { MessagePatch } = await import("../src/message-patch.js");
+
+check("target servers: the list gates by default, the toggle opens every server", () => {
+    const inList = "1101573652786446417";
+
+    const guildOf = (overrides, list, msg) => patchWith(overrides, list)._resolve(message(msg)).guildId;
+
+    assert.equal(guildOf({}, inList), inList);
+    assert.equal(guildOf({}, "222222222222222222"), undefined, "outside the list");
+    assert.equal(guildOf({}), undefined, "an empty list translates nothing");
+
+    assert.equal(guildOf({ allGuilds: true }), inList, "the toggle needs no list");
+    assert.equal(
+        guildOf({ allGuilds: true }, "", { channel_id: "dm" }),
+        undefined,
+        "a direct message belongs to no server, with or without the toggle",
+    );
+    assert.equal(guildOf({ allGuilds: true, apiKey: "" }), undefined, "still needs a key");
+    assert.equal(
+        guildOf({ allGuilds: true }, "", { author: { id: "me" } }),
+        undefined,
+        "the toggle must not bypass the author filters",
+    );
+
+    // 슬래시 커맨드 응답(20)도 사람이 읽는 본문이다.
+    assert.equal(guildOf({ allGuilds: true }, "", { type: 20 }), inList);
+    assert.equal(guildOf({ allGuilds: true }, "", { type: 7 }), undefined, "a join notice has no body");
+});
+
+check("diagnostics: a skipped message reports why", () => {
+    const reasonFor = (overrides, msg) => patchWith(overrides, "")._resolve(message(msg)).reason;
+
+    assert.match(reasonFor({}), /no target server/);
+    assert.match(reasonFor({ allGuilds: true }, { author: { id: "me" } }), /own message/);
+    assert.match(reasonFor({ allGuilds: true }, { channel_id: "dm" }), /not a server channel/);
+    assert.match(reasonFor({ allGuilds: true, apiKey: "" }), /no api key/);
+    assert.match(reasonFor({ allGuilds: true }, { content: "   " }), /no text content/);
+});
+
+// --- 6. 보내는 메시지 -----------------------------------------------------------
+
+const { OutgoingPatch } = await import("../src/outgoing-patch.js");
+
+check("outgoing: the gate opens only for a target server with the toggle on", () => {
+    const inList = "1101573652786446417";
+    const pick = (overrides, content = "안녕하세요", channelId = "c") =>
+        outgoingWith(overrides, inList)._pick([channelId, { content }]);
+
+    assert.equal(pick({ translateOutgoing: true }), "안녕하세요");
+
+    assert.equal(pick({}), null, "off by default");
+    assert.equal(pick({ translateOutgoing: true, apiKey: "" }), null, "no key");
+    assert.equal(pick({ translateOutgoing: true }, "안녕하세요", "dm"), null, "not a server channel");
+    assert.equal(pick({ translateOutgoing: true }, "   "), null, "nothing to translate");
+    // 슬래시 커맨드를 번역하면 명령 자체가 망가진다.
+    assert.equal(pick({ translateOutgoing: true }, "/giphy 안녕"), null);
+    // 문자로 구분되는 언어라면 이미 그 언어인 글은 보내지 않는다.
+    assert.equal(pick({ translateOutgoing: true, outgoingLanguage: "ko" }), null);
+    // 라틴 문자 대상 언어는 보내기 전에 구분할 수 없어 한 번은 왕복한다. 결과가
+    // 원문과 같으면 그대로 나가고, 그 판정은 캐시된다.
+    assert.equal(pick({ translateOutgoing: true }, "hello there"), "hello there");
+    assert.equal(
+        outgoingWith({ translateOutgoing: true }, "222222222222222222")._pick([
+            "c",
+            { content: "안녕하세요" },
+        ]),
+        null,
+        "outside the target list",
+    );
+});
+
+await checkAsync(
+    "outgoing: a translation replaces the content, a failure never eats the message",
+    async () => {
+        const done = { status: "done", text: "hello there" };
+        const sent = [];
+        const original = function (channelId, message) {
+            sent.push(message.content);
+            return "sent";
+        };
+
+        const patch = outgoingWith({ translateOutgoing: true }, "1101573652786446417", {
+            translate: async () => done,
+        });
+        await patch._onSend(null, ["c", { content: "안녕하세요" }], original);
+        assert.deepEqual(sent, ["hello there"]);
+
+        // 번역이 실패해도 원문은 반드시 나가고, 조용히 나가서도 안 된다.
+        const failures = [];
+        const failing = outgoingWith(
+            { translateOutgoing: true },
+            "1101573652786446417",
+            { translate: async () => ({ status: "error", message: "HTTP 401" }) },
+            (message) => failures.push(message),
+        );
+        await failing._onSend(null, ["c", { content: "안녕하세요" }], original);
+        assert.deepEqual(sent, ["hello there", "안녕하세요"]);
+        assert.deepEqual(failures, ["HTTP 401"]);
+
+        // translate() 가 약속을 어기고 throw 해도 마찬가지다.
+        const throwing = outgoingWith({ translateOutgoing: true }, "1101573652786446417", {
+            translate: async () => {
+                throw new Error("boom");
+            },
+        });
+        await throwing._onSend(null, ["c", { content: "안녕하세요" }], original);
+        assert.deepEqual(sent, ["hello there", "안녕하세요", "안녕하세요"]);
+    },
+);
+
+check("outgoing: the gate is skipped without a promise when it does not apply", () => {
+    const patch = outgoingWith({}, "1101573652786446417");
+    const result = patch._onSend(null, ["c", { content: "안녕하세요" }], () => "sent");
+    // 보내는 경로 대부분은 그대로 지나가야 한다. Promise 로 감싸면 반환값이 바뀐다.
+    assert.equal(result, "sent");
 });
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
@@ -774,6 +1019,58 @@ function loadPlugin(path) {
     let exported = moduleObj.exports;
     if (exported && exported.default) exported = exported.default;
     return exported;
+}
+
+function outgoingWith(overrides, targetGuildId = "", translator = null, onFailure = null) {
+    const guildId = "1101573652786446417";
+    const settings = {
+        current: {
+            apiKey: "test-key",
+            allGuilds: false,
+            maxChars: 3000,
+            targetLanguage: "ko",
+            translateOutgoing: false,
+            outgoingLanguage: "en",
+            skipThreshold: 30,
+            ...overrides,
+        },
+        guildIdSet: new Set(targetGuildId ? [targetGuildId] : []),
+    };
+    return new OutgoingPatch({
+        target: {},
+        settings,
+        translator: translator ?? { translate: async () => ({ status: "unknown" }) },
+        languageDetector: new LanguageDetector(settings),
+        stores: { guildIdForChannel: (channelId) => (channelId === "dm" ? null : guildId) },
+        onFailure: onFailure ?? (() => {}),
+    });
+}
+
+function patchWith(overrides, targetGuildId = "") {
+    const guildId = "1101573652786446417";
+    return new MessagePatch({
+        target: {},
+        translator: {},
+        languageDetector: {},
+        settings: {
+            current: {
+                apiKey: "test-key",
+                allGuilds: false,
+                translateBots: true,
+                translateOwnMessages: false,
+                ...overrides,
+            },
+            guildIdSet: new Set(targetGuildId ? [targetGuildId] : []),
+        },
+        stores: {
+            guildIdForChannel: (channelId) => (channelId === "dm" ? null : guildId),
+            currentUserId: () => "me",
+        },
+    });
+}
+
+function message(overrides) {
+    return { type: 0, content: "hello there", author: { id: "someone" }, channel_id: "c", ...overrides };
 }
 
 function stubSettings() {
