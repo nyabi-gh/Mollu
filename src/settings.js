@@ -32,7 +32,9 @@ export class Settings {
 
     _set(id, value) {
         const next = coerce(id, value, this._values[id]);
-        if (next === KEEP) return;
+        // KEEP is an edit that must not apply; an unchanged value means the
+        // same edit arrived twice (see buildPanel) and needs no second write.
+        if (next === KEEP || next === this._values[id]) return;
         this._values[id] = next;
         if (id === "guildIds") this._guildIdSet = parseGuildIds(next);
         this._persist();
@@ -56,8 +58,15 @@ export class Settings {
     buildPanel() {
         const v = this._values;
         return BdApi.UI.buildSettingsPanel({
+            // BetterDiscord wires the panel-level onChange for `switch` items
+            // only: every other type is rendered as
+            //   Kr({...setting, defaultValue, disabled})
+            // and reports exclusively through the setting's own onChange. With
+            // just the panel callback, the API key, server ids, model and the
+            // numeric settings were silently discarded. Both are wired, and
+            // _set() ignores the duplicate a switch produces.
             onChange: (_categoryId, settingId, value) => this._set(settingId, value),
-            settings: [
+            settings: withChangeHandlers(this, [
                 {
                     type: "text",
                     id: "apiKey",
@@ -146,9 +155,17 @@ export class Settings {
                     name: "번역 실패 시 표시",
                     value: v.showErrors,
                 },
-            ],
+            ]),
         });
     }
+}
+
+/** Give every setting its own onChange, which is the only one BdApi calls. */
+function withChangeHandlers(settings, items) {
+    return items.map((item) => ({
+        ...item,
+        onChange: (value) => settings._set(item.id, value),
+    }));
 }
 
 // Pasted keys and URLs routinely carry stray whitespace, which turns into a 401

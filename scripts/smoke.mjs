@@ -329,6 +329,37 @@ check("settings: data saved under the previous plugin name is carried over", () 
     }
 });
 
+check("settings: every panel field persists, not just the switches", () => {
+    // Mirrors how BdApi renders a top-level setting: it strips `value`, passes
+    // `defaultValue`, and the input reports through the setting's own
+    // onChange. The panel-level onChange is wired for `switch` only, so a
+    // field without its own handler silently discards every edit.
+    const settings = new Settings();
+    const fields = settings.buildPanel().__spec.settings;
+
+    const edits = {
+        apiKey: "sk-typed-in-the-panel",
+        guildIds: "1339590547421007964",
+        model: "deepseek-v4-pro",
+        baseUrl: "https://api.example.com",
+        koreanThreshold: 55,
+        maxChars: 1200,
+        maxConcurrent: 5,
+        translateBots: false,
+        showPending: false,
+    };
+
+    for (const [id, value] of Object.entries(edits)) {
+        const field = fields.find((entry) => entry.id === id);
+        assert.ok(field, `panel is missing "${id}"`);
+        assert.equal(typeof field.onChange, "function", `"${id}" has no onChange of its own`);
+        field.onChange(value);
+        assert.equal(settings.current[id], value, `"${id}" did not persist`);
+    }
+
+    assert.deepEqual([...settings.guildIdSet], [edits.guildIds]);
+});
+
 check("settings: the stored api key is never rendered into the panel", () => {
     const settings = new Settings();
     settings._set("apiKey", "  sk-abcdefgh1234  ");

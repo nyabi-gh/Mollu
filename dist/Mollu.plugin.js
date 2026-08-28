@@ -98,7 +98,7 @@ var Settings = class {
   }
   _set(id2, value) {
     const next = coerce(id2, value, this._values[id2]);
-    if (next === KEEP) return;
+    if (next === KEEP || next === this._values[id2]) return;
     this._values[id2] = next;
     if (id2 === "guildIds") this._guildIdSet = parseGuildIds(next);
     this._persist();
@@ -119,8 +119,15 @@ var Settings = class {
   buildPanel() {
     const v = this._values;
     return BdApi.UI.buildSettingsPanel({
+      // BetterDiscord wires the panel-level onChange for `switch` items
+      // only: every other type is rendered as
+      //   Kr({...setting, defaultValue, disabled})
+      // and reports exclusively through the setting's own onChange. With
+      // just the panel callback, the API key, server ids, model and the
+      // numeric settings were silently discarded. Both are wired, and
+      // _set() ignores the duplicate a switch produces.
       onChange: (_categoryId, settingId, value) => this._set(settingId, value),
-      settings: [
+      settings: withChangeHandlers(this, [
         {
           type: "text",
           id: "apiKey",
@@ -207,10 +214,16 @@ var Settings = class {
           name: "번역 실패 시 표시",
           value: v.showErrors
         }
-      ]
+      ])
     });
   }
 };
+function withChangeHandlers(settings, items) {
+  return items.map((item) => ({
+    ...item,
+    onChange: (value) => settings._set(item.id, value)
+  }));
+}
 var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");
