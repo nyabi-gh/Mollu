@@ -1,12 +1,9 @@
-// Static configuration shared across modules.
-
-// Must match `name` in meta.json. Used as the BdApi caller id, data-store name,
-// and injected <style> id.
+// meta.json 의 name 과 일치해야 한다. BdApi 호출자 id, 데이터 저장소 이름,
+// 주입 <style> id 로 함께 쓰인다.
 export const NAME = "Mollu";
 
-// Data-store names this plugin used before it was renamed. Settings and cache
-// are read from these once so a rename does not silently drop the user's API
-// key and target servers.
+// 이름 변경 전에 쓰던 저장소 이름. 여기서 한 번 읽어 오지 않으면 이름을 바꾸는
+// 순간 API 키와 대상 서버 설정이 조용히 사라진다.
 export const LEGACY_NAMES = ["KoreanAutoTranslator"];
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -14,20 +11,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
     apiKey: "",
     model: "deepseek-v4-flash",
     baseUrl: "https://api.deepseek.com",
-    // Comma/space separated guild ids. Translation only runs in these servers.
     guildIds: "",
-    // Per-provider {apiKey, model, baseUrl}, so switching providers does not
-    // throw away the credentials of the one being left. Always replaced, never
-    // mutated in place: DEFAULT_SETTINGS is shared.
+    // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
+    // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
     profiles: {},
-    // A message is treated as Korean (and skipped) when its share of Hangul
-    // letters is at least this percentage.
     koreanThreshold: 30,
-    // Messages longer than this are skipped to bound cost.
     maxChars: 3000,
     maxConcurrent: 3,
-    // Off puts every message behind a "번역" button instead of translating it
-    // as soon as it has been on screen. Nothing is sent until it is clicked.
     autoTranslate: true,
     translateBots: true,
     translateOwnMessages: false,
@@ -35,37 +25,30 @@ export const DEFAULT_SETTINGS = Object.freeze({
     showErrors: false,
 });
 
-// Persistent translation cache is trimmed back to this many entries.
 export const CACHE_LIMIT = 3000;
 
-// Data-store key for the persistent cache. Bumped to "-v2" because entries
-// written before that version stored token-substituted text, which could
-// surface another message's mention or link on a cache hit.
+// -v2 로 올린 이유: 이전 버전은 토큰이 치환된 번역문을 저장해서, 캐시가 맞으면
+// 다른 메시지의 멘션이나 링크가 표시될 수 있었다.
 export const CACHE_KEY = "cache-v2";
 export const LEGACY_CACHE_KEYS = ["cache"];
 
-// Minimum gap between "translation failed" toasts.
 export const ERROR_TOAST_COOLDOWN_MS = 15000;
 
-// Per-request timeout handed to BdApi.Net.fetch (its own default is 8s).
+// BdApi.Net.fetch 자체 기본값은 8초.
 export const REQUEST_TIMEOUT_MS = 30000;
 
-// A 429 pauses every request, not just the one that was rejected: the limit is
-// per account, so retrying the others immediately just burns more quota. Used
-// when the response does not say how long to wait.
+// 한도는 계정 단위라 429 가 나면 거부된 요청뿐 아니라 전체를 멈춘다. 나머지를
+// 곧바로 재시도해 봐야 할당량만 더 태운다. 응답이 대기 시간을 알려 주지 않을 때 사용.
 export const RATE_LIMIT_PAUSE_MS = 20000;
 export const MAX_RATE_LIMIT_PAUSE_MS = 120000;
-// How many times one message re-queues itself after being rate limited.
 export const MAX_RATE_LIMIT_RETRIES = 3;
 
-// After a failed translation the same text is not retried for this long.
-// Without it every re-render of a message re-issues the request.
+// 이 시간 동안 같은 텍스트를 재요청하지 않는다. 없으면 메시지가 다시 렌더될
+// 때마다 요청이 나간다.
 export const FAILURE_BACKOFF_MS = 60000;
 export const FAILURE_RECORD_LIMIT = 500;
 
-// Hard ceiling on model output. A translation is roughly as long as its source,
-// so the per-request budget is derived from the source length and only clamped
-// here. This bounds runaway generations (e.g. a prompt-injected message) without
-// truncating a legitimately long translation.
+// 실제 예산은 원문 길이에서 계산하고 여기서 상한만 건다. 프롬프트 인젝션 같은
+// 폭주는 막되 정상적으로 긴 번역문은 자르지 않기 위함.
 export const MAX_OUTPUT_TOKENS = 4096;
 export const OUTPUT_TOKEN_HEADROOM = 256;

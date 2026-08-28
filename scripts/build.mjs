@@ -10,16 +10,15 @@ const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
 const outName = `${meta.name}.plugin.js`;
 const outfile = join(root, "dist", outName);
 
-// BetterDiscord reads this JSDoc block for @name/@version/etc.
+// BetterDiscord 가 이 JSDoc 블록에서 @name/@version 등을 읽는다.
 const banner = `/**\n${Object.entries(meta)
     .map(([key, value]) => ` * @${key} ${value}`)
     .join("\n")}\n */\n`;
 
-// esbuild's cjs output puts the class on `module.exports.default`; BetterDiscord
-// already normalises that, this is just belt-and-suspenders.
+// esbuild 의 cjs 출력은 클래스를 module.exports.default 에 둔다. BD 가 이미
+// 정규화하지만 이중 안전장치.
 const footer = "\nif (module.exports && module.exports.default) module.exports = module.exports.default;\n";
 
-/** @type {import("esbuild").BuildOptions} */
 const options = {
     entryPoints: [join(root, "src/index.js")],
     bundle: true,

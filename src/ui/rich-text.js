@@ -1,10 +1,8 @@
 import { React } from "../discord.js";
 
-// Tokens come back from the translation exactly as they appeared in the source
-// (see translation/tokenizer.js). Rendering them as plain text would show raw
-// `<@123>` / `<:name:123>` markup, so each shape is turned into an element.
-// Anything unrecognised — or any name lookup that misses — falls back to the
-// literal token, which is what the previous behaviour was.
+// 토큰은 원문에 있던 모습 그대로 돌아온다(translation/tokenizer.js 참고).
+// 평문으로 두면 <@123> / <:name:123> 마크업이 그대로 보이므로 요소로 바꾼다.
+// 알 수 없는 형태이거나 이름 조회에 실패하면 원본 토큰으로 물러난다.
 
 const CUSTOM_EMOJI = /^<(a)?:(\w+):(\d+)>$/;
 const USER_MENTION = /^<@!?(\d+)>$/;
@@ -16,12 +14,7 @@ const INLINE_CODE = /^`([^`\n]+)`$/;
 
 const EMOJI_CDN = "https://cdn.discordapp.com/emojis";
 
-/**
- * @param {Array<{type: "text" | "token", value: string}>} segments
- * @param {{userName: Function, channelName: Function, roleName: Function}} stores
- * @param {string|null} guildId owning guild, needed to resolve role mentions
- * @returns {Array<React.ReactNode>}
- */
+// guildId 는 역할 멘션 이름을 조회하는 데 필요하다.
 export function renderSegments(segments, stores, guildId) {
     return segments.map((segment, index) =>
         segment.type === "token" ? renderToken(segment.value, stores, guildId, index) : segment.value,
@@ -72,7 +65,7 @@ function mention(key, name, sigil, fallback) {
     return React.createElement("span", { key, className: "mollu-translation__mention" }, `${sigil}${name}`);
 }
 
-// Discord's <t:unix:style> styles. Rendered with the viewer's own locale.
+// Discord 의 <t:unix:style> 스타일. 보는 사람의 로캘로 렌더한다.
 const TIME_STYLES = {
     t: { timeStyle: "short" },
     T: { timeStyle: "medium" },

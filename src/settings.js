@@ -2,19 +2,13 @@ import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
 import { getProvider, PROVIDER_OPTIONS } from "./translation/providers/index.js";
 import { logger } from "./lib/logger.js";
 
-/**
- * Loads/persists plugin settings and builds the BetterDiscord settings panel.
- * `current` is the live values object; `guildIdSet` is the parsed allow-list.
- * Consumers can `onChange` to react to edits without rebuilding.
- */
 export class Settings {
     constructor() {
         const stored = safeLoad();
         this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
         this._listeners = new Set();
-        // Settings carried over from a previous name only live under the old
-        // store until something writes them back.
+        // 이전 이름에서 인계한 값은 무언가가 다시 쓰기 전까지 옛 저장소에만 있다.
         if (!BdApi.Data.load(NAME, "settings")) this._persist();
     }
 
@@ -33,8 +27,8 @@ export class Settings {
 
     _set(id, value) {
         const next = coerce(id, value, this._values[id]);
-        // KEEP is an edit that must not apply; an unchanged value means the
-        // same edit arrived twice (see buildPanel) and needs no second write.
+        // KEEP 은 적용하면 안 되는 편집. 값이 그대로면 같은 편집이 두 번 온
+        // 것이므로(buildPanel 참고) 다시 쓸 필요가 없다.
         if (next === KEEP || next === this._values[id]) return;
 
         if (id === "provider") {
@@ -56,7 +50,7 @@ export class Settings {
         }
     }
 
-    /** Remember the active provider's credentials before leaving it. */
+    // 현재 프로바이더를 떠나기 전에 자격증명을 기억해 둔다.
     _stashProfile() {
         const { provider, apiKey, model, baseUrl } = this._values;
         this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
@@ -81,13 +75,11 @@ export class Settings {
     buildPanel() {
         const v = this._values;
         return BdApi.UI.buildSettingsPanel({
-            // BetterDiscord wires the panel-level onChange for `switch` items
-            // only: every other type is rendered as
-            //   Kr({...setting, defaultValue, disabled})
-            // and reports exclusively through the setting's own onChange. With
-            // just the panel callback, the API key, server ids, model and the
-            // numeric settings were silently discarded. Both are wired, and
-            // _set() ignores the duplicate a switch produces.
+            // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
+            // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
+            // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
+            // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
+            // switch 에서 생기는 중복은 _set() 이 무시한다.
             onChange: (_categoryId, settingId, value) => this._set(settingId, value),
             settings: withChangeHandlers(this, [
                 {
@@ -102,9 +94,8 @@ export class Settings {
                     type: "text",
                     id: "apiKey",
                     name: `${getProvider(v.provider).label} API 키`,
-                    // The stored key is never rendered: BetterDiscord's text
-                    // input has no masked mode, and this panel is a real
-                    // exposure risk while screen sharing.
+                    // 저장된 키는 렌더하지 않는다. BD 텍스트 입력에는 마스킹
+                    // 모드가 없고, 화면 공유 중 이 패널은 실제 노출 위험이다.
                     note: v.apiKey
                         ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.`
                         : KEY_SOURCE[v.provider] || "제공사 콘솔에서 API 키를 발급하세요.",
@@ -198,7 +189,7 @@ export class Settings {
     }
 }
 
-/** Give every setting its own onChange, which is the only one BdApi calls. */
+// 모든 항목에 자기 onChange 를 붙인다. BdApi 가 실제로 호출하는 건 이것뿐이다.
 function withChangeHandlers(settings, items) {
     return items.map((item) => ({
         ...item,
@@ -206,8 +197,8 @@ function withChangeHandlers(settings, items) {
     }));
 }
 
-// Pasted keys and URLs routinely carry stray whitespace, which turns into a 401
-// or a malformed endpoint.
+// 붙여넣은 키와 URL 에는 공백이 딸려 오기 쉬운데, 그대로 두면 401 이나 잘못된
+// 엔드포인트가 된다.
 const TRIMMED_FIELDS = new Set(["apiKey", "baseUrl", "model"]);
 
 const CREDENTIAL_FIELDS = new Set(["apiKey", "model", "baseUrl"]);
@@ -222,11 +213,11 @@ const MODEL_HINT = {
     gemini: "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
 };
 
-// Typed into the (always blank) API key field to erase the stored key, since an
-// empty field means "keep what is saved".
+// 항상 비어 보이는 API 키 칸에서 빈 입력은 "유지" 를 뜻하므로, 저장된 키를
+// 지우려면 이 값을 입력한다.
 const CLEAR_TOKEN = "-";
 
-// Sentinel returned by coerce() for an edit that must not be applied.
+// 적용하면 안 되는 편집에 대해 coerce() 가 돌려주는 표식.
 const KEEP = Symbol("keep");
 
 function normalize(values) {
@@ -242,12 +233,11 @@ function coerce(id, value, previous) {
     const trimmed = value.trim();
     if (id !== "apiKey") return trimmed;
 
-    // The field renders empty, so an empty edit is "unchanged", not "erase".
+    // 칸이 비어 보이므로 빈 입력은 "삭제" 가 아니라 "변경 없음" 이다.
     if (!trimmed) return previous ? KEEP : "";
     return trimmed === CLEAR_TOKEN ? "" : trimmed;
 }
 
-/** Last four characters, the way a provider console identifies a key. */
 function fingerprint(key) {
     return key.length >= 8 ? `••••${key.slice(-4)}` : "••••";
 }
@@ -263,7 +253,6 @@ function safeLoad() {
     }
 }
 
-/** Settings saved under a previous plugin name, carried over once. */
 function loadLegacy() {
     for (const legacy of LEGACY_NAMES) {
         const stored = BdApi.Data.load(legacy, "settings");

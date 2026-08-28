@@ -1,9 +1,8 @@
 import * as deepseek from "./deepseek.js";
 import * as gemini from "./gemini.js";
 
-// Registry of translation backends. Add another OpenAI-compatible provider by
-// creating a sibling module that exports `id`, `label`, `defaults` and
-// `translate`, then listing it here.
+// OpenAI 호환 프로바이더를 추가하려면 id, label, defaults, translate 를 내보내는
+// 형제 모듈을 만들어 여기에 등록하면 된다.
 export const PROVIDERS = {
     [deepseek.id]: deepseek,
     [gemini.id]: gemini,
@@ -15,7 +14,6 @@ export function getProvider(providerId) {
     return PROVIDERS[providerId] || PROVIDERS[DEFAULT_PROVIDER];
 }
 
-/** Options for the settings dropdown. */
 export const PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
     label: provider.label,
     value: provider.id,

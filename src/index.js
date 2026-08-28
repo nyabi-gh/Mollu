@@ -79,7 +79,7 @@ export default class Mollu {
         } catch (e) {
             logger.error("patch 해제 실패", e);
         }
-        // Safety net in case a patch was registered but `_patch` was lost.
+        // 패치는 걸렸는데 _patch 참조를 잃은 경우를 대비한 안전망.
         BdApi.Patcher.unpatchAll(NAME);
         BdApi.DOM.removeStyle(NAME);
         disconnectVisibility();

@@ -7,19 +7,14 @@ export const defaults = Object.freeze({
     baseUrl: "https://api.deepseek.com",
 });
 
-/**
- * @param {{ text: string, settings: object, signal?: AbortSignal }} params
- * @returns {Promise<string>} the raw model output
- */
 export function translate(params) {
     return chatCompletion({ ...params, defaults, extend });
 }
 
 function extend(body, { base }) {
-    // `thinking` is a DeepSeek extension. OpenAI-compatible servers reject
-    // unknown top-level fields with a 400, so it is only sent to DeepSeek.
-    // deepseek-v4-* runs with thinking on by default (effort "high"), which
-    // adds ~15-20s of latency. Translation needs none of it.
+    // thinking 은 DeepSeek 확장이다. 다른 OpenAI 호환 서버는 모르는 최상위 필드에
+    // 400 을 주므로 DeepSeek 에만 보낸다. deepseek-v4-* 는 추론이 기본 ON 이라
+    // 15~20초가 더 걸리는데 번역에는 필요 없다.
     if (/(^|\.)deepseek\.com$/i.test(hostOf(base))) body.thinking = { type: "disabled" };
 }
 

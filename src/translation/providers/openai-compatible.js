@@ -2,18 +2,9 @@ import { postJson, normalizeBaseUrl } from "../../lib/net.js";
 import { MAX_OUTPUT_TOKENS, OUTPUT_TOKEN_HEADROOM } from "../../constants.js";
 import { SYSTEM_PROMPT } from "../prompt.js";
 
-// Every backend here speaks OpenAI's /chat/completions. Providers differ only
-// in their defaults and in the extra fields they accept, which they add through
-// `extend` — a field one vendor requires is a 400 at another.
-
-/**
- * @param {{
- *   text: string, settings: object, signal?: AbortSignal,
- *   defaults: {model: string, baseUrl: string},
- *   extend?: (body: object, context: {base: string, model: string}) => void,
- * }} params
- * @returns {Promise<string>} the raw model output
- */
+// 여기 백엔드는 모두 OpenAI 의 /chat/completions 를 쓴다. 프로바이더 간 차이는
+// 기본값과 extend 로 덧붙이는 벤더 전용 필드뿐이다. 한 벤더가 요구하는 필드가
+// 다른 벤더에서는 400 이 된다.
 export async function chatCompletion({ text, settings, signal, defaults, extend }) {
     const apiKey = String(settings.apiKey || "").trim();
     if (!apiKey) throw new Error("API 키가 설정되지 않았습니다");
@@ -42,32 +33,27 @@ export async function chatCompletion({ text, settings, signal, defaults, extend 
     const choice = json?.choices?.[0];
     const output = stripReasoning(choice?.message?.content);
     if (!output) {
-        // Gemma 4 spends the whole budget on a <thought> block and is cut off
-        // before it writes a translation. Reporting that as an error keeps the
-        // reasoning out of the message list.
+        // Gemma 4 는 예산을 전부 <thought> 에 쓰고 번역문을 쓰기 전에 잘린다.
+        // 오류로 처리해야 추론 과정이 메시지 목록에 노출되지 않는다.
         throw new Error(choice?.finish_reason === "length" ? "응답이 추론으로 잘림" : "빈 응답");
     }
     return output;
 }
 
-/**
- * Drop a chain of thought emitted as content. Models that support
- * `reasoning_effort` are told not to reason at all; this covers the ones that
- * reason anyway and have no switch for it.
- */
+// 본문으로 흘러나온 추론 과정을 제거한다. reasoning_effort 를 지원하는 모델은
+// 애초에 추론을 끄지만, 끌 수단이 없는 모델을 위한 방어선이다.
 function stripReasoning(value) {
     if (typeof value !== "string") return "";
 
     let text = value.replace(/<(thought|think)>[\s\S]*?<\/\1>/gi, "");
-    // An unclosed block means the answer never arrived; nothing after it.
+    // 닫히지 않은 블록은 답이 아예 오지 않았다는 뜻이라 그 뒤에는 아무것도 없다.
     const unclosed = text.search(/<(?:thought|think)>/i);
     if (unclosed !== -1) text = text.slice(0, unclosed);
     return text.trim();
 }
 
-// Korean output is never much longer than its source in characters, and one
-// token covers at least one character, so source length + headroom is a safe
-// upper bound that still caps a runaway generation on a short message.
+// 번역문은 글자 수 기준으로 원문보다 크게 길어지지 않고 토큰 하나가 최소 한 글자를
+// 담으므로, 원문 길이 + 여유분이 안전한 상한이다. 짧은 메시지의 폭주도 함께 막힌다.
 function outputBudget(text) {
     return Math.min(MAX_OUTPUT_TOKENS, text.length + OUTPUT_TOKEN_HEADROOM);
 }

@@ -3,8 +3,8 @@ import { renderSegments } from "./rich-text.js";
 import { observeVisibility } from "./visibility.js";
 import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
 
-// A message is only translated once it has actually been in the viewport for
-// this long. Scrolling straight past a message never triggers a request.
+// 이 시간만큼 실제로 화면에 머문 메시지만 번역한다. 스크롤로 스쳐 지나간
+// 메시지는 요청을 만들지 않는다.
 const DWELL_MS = 350;
 
 function initialResult(translator, text) {
@@ -12,11 +12,6 @@ function initialResult(translator, text) {
     return known.status === "done" || known.status === "skip" ? known : { status: "idle" };
 }
 
-/**
- * Rendered under a message. While idle it renders a zero-height anchor and
- * watches it with an IntersectionObserver; translation starts only when the
- * anchor becomes visible. Cache hits skip all of that and render immediately.
- */
 export function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
     const { showPending, showErrors, autoTranslate } = useDisplaySettings(settings);
@@ -42,9 +37,9 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             running = true;
             translator
                 .translate(text, {
-                    // Only work that has actually left the queue shows "번역 중".
-                    // Flipping every queued message at once would grow hundreds
-                    // of messages by a line at the same time while scrolling.
+                    // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
+                    // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
+                    // 커지면서 화면이 밀린다.
                     onStart: () => {
                         if (alive) setResult({ status: "pending" });
                     },
@@ -54,8 +49,8 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                     if (!alive) return;
                     running = false;
 
-                    // Rate limited. The message is still on screen, so nothing
-                    // else will re-trigger it: re-queue once the window passes.
+                    // 한도 초과. 메시지가 아직 화면에 있으면 다시 트리거될 일이
+                    // 없으므로, 대기 시간이 지난 뒤 직접 다시 큐에 넣는다.
                     if (res.status === "retry") {
                         setResult({ status: "idle" });
                         if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
@@ -67,15 +62,15 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                         return;
                     }
 
-                    // Dropped while queued — wait for the message to come back.
+                    // 큐에서 버려진 경우 — 메시지가 다시 보일 때까지 기다린다.
                     setResult(res.status === "unknown" ? { status: "idle" } : res);
                 });
         };
 
         triggerRef.current = run;
 
-        // Manual mode: nothing is sent until the reader asks for it, so there
-        // is no viewport to watch and the request is always wanted.
+        // 수동 모드에서는 사용자가 누르기 전까지 아무것도 보내지 않으므로,
+        // 관찰할 뷰포트가 없고 요청은 항상 유효하다.
         if (!autoTranslate) {
             visible = true;
             return () => {
@@ -110,8 +105,8 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
 
     const status = result && result.status;
 
-    // The anchor stays mounted in every state so its node identity — and the
-    // visibility subscription attached to it — survives a status change.
+    // 앵커는 모든 상태에서 마운트를 유지한다. 그래야 노드 identity 와 거기 붙은
+    // 가시성 구독이 상태 변화를 넘어 살아남는다.
     return React.createElement(
         React.Fragment,
         null,
@@ -131,8 +126,8 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
     );
 }
 
-// Spreads the retries of many blocks waking at once, so they do not all hit the
-// provider on the same tick and trip the limit again.
+// 동시에 깨어난 블록들의 재시도를 흩뜨린다. 안 그러면 같은 틱에 몰려 나가 또
+// 한도를 친다.
 function jitter() {
     return Math.floor(Math.random() * 2000);
 }
@@ -177,10 +172,8 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId, 
     );
 }
 
-/**
- * Mirrors the display-only settings into state, so toggling "번역 중 표시" or
- * "번역 실패 시 표시" updates blocks that are already on screen.
- */
+// 표시용 설정을 state 로 미러링한다. 그래야 토글이 이미 화면에 있는 블록에도
+// 즉시 반영된다.
 function useDisplaySettings(settings) {
     const [display, setDisplay] = React.useState(() => pickDisplay(settings));
 
@@ -196,7 +189,7 @@ function useDisplaySettings(settings) {
     return display;
 }
 
-// Settings the block reads while rendering, so a change has to re-render it.
+// 블록이 렌더 중에 읽는 설정. 바뀌면 다시 렌더해야 한다.
 const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate"]);
 
 function pickDisplay(settings) {

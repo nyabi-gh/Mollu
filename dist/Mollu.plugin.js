@@ -1,9 +1,9 @@
 /**
  * @name Mollu
- * @author nyattic
+ * @author Nyabi
  * @version 1.0.0
  * @description 지정한 서버에서 한국어가 아닌 메시지를 AI API로 자동 번역해 원문 아래에 표시합니다.
- * @source https://github.com/nyattic/mollu
+ * @source https://github.com/Nyabi/mollu
  */
 
 var __defProp = Object.defineProperty;
@@ -39,20 +39,13 @@ var DEFAULT_SETTINGS = Object.freeze({
   apiKey: "",
   model: "deepseek-v4-flash",
   baseUrl: "https://api.deepseek.com",
-  // Comma/space separated guild ids. Translation only runs in these servers.
   guildIds: "",
-  // Per-provider {apiKey, model, baseUrl}, so switching providers does not
-  // throw away the credentials of the one being left. Always replaced, never
-  // mutated in place: DEFAULT_SETTINGS is shared.
+  // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 공유되므로
+  // 제자리 수정 없이 항상 새 객체로 교체해야 한다.
   profiles: {},
-  // A message is treated as Korean (and skipped) when its share of Hangul
-  // letters is at least this percentage.
   koreanThreshold: 30,
-  // Messages longer than this are skipped to bound cost.
   maxChars: 3e3,
   maxConcurrent: 3,
-  // Off puts every message behind a "번역" button instead of translating it
-  // as soon as it has been on screen. Nothing is sent until it is clicked.
   autoTranslate: true,
   translateBots: true,
   translateOwnMessages: false,
@@ -148,8 +141,8 @@ async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIM
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
-    // The `timeout` option is BdApi.Net.fetch's; standard fetch ignores it,
-    // so the fallback path gets the same deadline through its signal.
+    // timeout 은 BdApi.Net.fetch 전용 옵션이라 표준 fetch 는 무시한다.
+    // 폴백 경로에는 signal 로 같은 마감을 건다.
     signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
     timeout
   });
@@ -255,10 +248,9 @@ __export(gemini_exports, {
 var id2 = "gemini";
 var label2 = "Google Gemini / Gemma";
 var defaults2 = Object.freeze({
-  // Measured against the live API on a chat-length message: this answers in
-  // ~1s with the translation alone. The Gemma 4 models take 9-12s and spend
-  // the whole budget emitting a <thought> block instead of a translation,
-  // and they cannot be told to stop — see extend() below.
+  // 실제 API 로 채팅 길이 메시지를 측정한 결과 약 1초에 번역문만 돌려준다.
+  // gemma-4-* 는 9~12초가 걸리고 예산을 전부 <thought> 블록에 써서 번역문이
+  // 나오지 않는데, 추론을 끌 수도 없다(아래 extend 참고).
   model: "gemini-3.1-flash-lite",
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
@@ -322,7 +314,7 @@ var Settings = class {
       }
     }
   }
-  /** Remember the active provider's credentials before leaving it. */
+  // 현재 프로바이더를 떠나기 전에 자격증명을 기억해 둔다.
   _stashProfile() {
     const { provider, apiKey, model, baseUrl } = this._values;
     this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
@@ -344,13 +336,11 @@ var Settings = class {
   buildPanel() {
     const v = this._values;
     return BdApi.UI.buildSettingsPanel({
-      // BetterDiscord wires the panel-level onChange for `switch` items
-      // only: every other type is rendered as
-      //   Kr({...setting, defaultValue, disabled})
-      // and reports exclusively through the setting's own onChange. With
-      // just the panel callback, the API key, server ids, model and the
-      // numeric settings were silently discarded. Both are wired, and
-      // _set() ignores the duplicate a switch produces.
+      // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
+      // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
+      // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
+      // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
+      // switch 에서 생기는 중복은 _set() 이 무시한다.
       onChange: (_categoryId, settingId, value) => this._set(settingId, value),
       settings: withChangeHandlers(this, [
         {
@@ -365,9 +355,8 @@ var Settings = class {
           type: "text",
           id: "apiKey",
           name: `${getProvider(v.provider).label} API 키`,
-          // The stored key is never rendered: BetterDiscord's text
-          // input has no masked mode, and this panel is a real
-          // exposure risk while screen sharing.
+          // 저장된 키는 렌더하지 않는다. BD 텍스트 입력에는 마스킹
+          // 모드가 없고, 화면 공유 중 이 패널은 실제 노출 위험이다.
           note: v.apiKey ? `저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 ${CLEAR_TOKEN} 를 입력하세요.` : KEY_SOURCE[v.provider] || "제공사 콘솔에서 API 키를 발급하세요.",
           placeholder: v.apiKey ? `저장됨 · ${fingerprint(v.apiKey)}` : "sk-...",
           value: ""
@@ -520,8 +509,8 @@ function parseGuildIds(raw) {
 
 // src/translation/tokenizer.js
 var PATTERNS = [
-  // A literal 【n】 already in the message. Masking it first keeps it from
-  // colliding with the placeholders we generate below.
+  // 원문에 이미 들어 있는 리터럴 【n】. 먼저 마스킹해야 아래에서 생성하는
+  // placeholder 와 충돌하지 않는다.
   "\\u3010\\d+\\u3011",
   "```[\\s\\S]*?```",
   // fenced code block
@@ -653,22 +642,16 @@ var TaskQueue = class {
     this._active = 0;
     this._pending = [];
   }
-  /**
-   * @param {() => Promise<any>} task
-   * @param {() => boolean} [shouldRun] checked when the task reaches the front
-   *   of the queue; a task whose caller has lost interest (a message scrolled
-   *   out of view) is dropped instead of occupying a slot.
-   */
+  // shouldRun 은 작업이 큐 맨 앞에 왔을 때 다시 확인한다. 호출자가 관심을 잃은
+  // 작업(화면 밖으로 나간 메시지)은 슬롯을 차지하지 않고 버려진다.
   run(task, shouldRun) {
     return new Promise((resolve, reject) => {
       this._pending.push({ task, resolve, reject, shouldRun });
       this._drain();
     });
   }
-  /**
-   * Drops queued work. Waiting callers are rejected rather than left hanging —
-   * a never-settled promise would strand the UI on "번역 중…" forever.
-   */
+  // 대기 중인 호출자를 방치하지 않고 reject 한다. settle 되지 않는 Promise 는
+  // UI 를 "번역 중…" 에 영원히 묶어 둔다.
   clear() {
     const dropped = this._pending;
     this._pending = [];
@@ -732,24 +715,16 @@ var Translator = class {
     this._failures.clear();
     this._cache.save();
   }
-  /**
-   * Synchronous cache lookup for the first render.
-   * @returns {TranslationResult}
-   */
   peek(text) {
     const { masked, tokens } = mask(text);
     if (this._cache.has(masked)) return this._restore(this._cache.get(masked), tokens);
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
   }
-  /**
-   * @param {string} text
-   * @param {{onStart?: () => void, shouldRun?: () => boolean}} [hooks]
-   *   `onStart` fires when the request actually leaves the queue, so the UI
-   *   can show "번역 중" for in-flight work only. `shouldRun` is re-checked at
-   *   that moment and drops work whose message has scrolled away.
-   * @returns {Promise<TranslationResult>} never rejects.
-   */
+  // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
+  // 이때 "번역 중" 을 띄워야 스크롤 중 화면이 밀리지 않는다. shouldRun 은 그
+  // 순간 다시 확인해, 이미 화면 밖으로 나간 메시지의 작업을 버린다.
+  // 이 함수는 절대 reject 하지 않는다.
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
     if (this._cache.has(masked)) {
@@ -777,7 +752,6 @@ var Translator = class {
       (outcome) => outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome
     );
   }
-  /** Turn a masked cache/job value into a result for one specific message. */
   _restore(maskedValue, tokens) {
     if (typeof maskedValue !== "string") return skip();
     const segments = unmaskSegments(maskedValue, tokens);
@@ -810,7 +784,6 @@ var Translator = class {
       this._aborters.delete(controller);
     }
   }
-  /** @returns {{status: "done", masked: string} | {status: "skip"}} */
   _resolveSuccess(maskedKey, raw) {
     const maskedTranslation = stripWrappingQuotes(raw, maskedKey).trim();
     if (!maskedTranslation || normalize2(maskedTranslation) === normalize2(maskedKey)) {
@@ -937,8 +910,7 @@ function createStores() {
         return null;
       }
     },
-    // The three lookups below resolve mentions for display. `null` means
-    // "unknown", and the caller falls back to the raw token.
+    // 아래 세 조회는 멘션 표시용이다. null 은 "모름" 이고 호출자는 원본 토큰으로 물러난다.
     userName(userId) {
       try {
         const user = UserStore?.getUser?.(userId);
@@ -1146,9 +1118,9 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       if (!alive || running) return;
       running = true;
       translator.translate(text, {
-        // Only work that has actually left the queue shows "번역 중".
-        // Flipping every queued message at once would grow hundreds
-        // of messages by a line at the same time while scrolling.
+        // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
+        // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
+        // 커지면서 화면이 밀린다.
         onStart: () => {
           if (alive) setResult({ status: "pending" });
         },
@@ -1317,7 +1289,6 @@ var MessagePatch = class {
     });
     return appendChild(ret, block);
   }
-  /** @returns {string|null} the target guild this message belongs to, if any */
   _targetGuildId(message) {
     if (!message || typeof message.content !== "string" || !message.content.trim()) return null;
     if (!TRANSLATABLE_TYPES.has(message.type)) return null;
@@ -1352,9 +1323,6 @@ var STYLES = `
     overflow-anchor: none;
 }
 .mollu-translation {
-    /* A translation appears after the message is laid out. Excluding it from
-       scroll anchoring lets the browser hold on to real message content
-       instead, so arriving translations do not shove the viewport around. */
     overflow-anchor: none;
     contain: layout style;
     margin-top: 2px;

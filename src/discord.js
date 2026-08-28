@@ -1,12 +1,9 @@
 import { logger } from "./lib/logger.js";
 
-// Discord's own React instance. Components must be built with this one.
+// Discord 자신의 React 인스턴스. 컴포넌트는 반드시 이걸로 만들어야 한다.
 export const React = BdApi.React;
 
-/**
- * Small read-only facade over the Flux stores the plugin needs. Kept here so the
- * rest of the code never touches BdApi.Webpack directly.
- */
+// 필요한 Flux 스토어에 대한 읽기 전용 파사드. BdApi.Webpack 접근을 이 파일로 격리한다.
 export function createStores() {
     const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
     const UserStore = BdApi.Webpack.getStore("UserStore");
@@ -27,8 +24,7 @@ export function createStores() {
                 return null;
             }
         },
-        // The three lookups below resolve mentions for display. `null` means
-        // "unknown", and the caller falls back to the raw token.
+        // 아래 세 조회는 멘션 표시용이다. null 은 "모름" 이고 호출자는 원본 토큰으로 물러난다.
         userName(userId) {
             try {
                 const user = UserStore?.getUser?.(userId);
@@ -54,22 +50,15 @@ export function createStores() {
     };
 }
 
-/**
- * Locate Discord's `MessageContent` component so its render can be patched.
- *
- * Discord ships production builds without `displayName` and with hashed CSS
- * class names, so we match on stable substrings of the component's source and
- * fall back through a few marker sets. `byComponentType` unwraps
- * memo/forwardRef before the string check.
- *
- * @returns {{ module: object, key: string } | null} arguments for BdApi.Patcher
- */
+// Discord 프로덕션 빌드에는 displayName 이 없고 CSS 클래스명도 해시되어 있어,
+// 컴포넌트 소스의 안정적인 문자열 조각으로 찾고 여러 마커 조합으로 폴백한다.
+// 이 플러그인에서 가장 깨지기 쉬운 부분이므로 markerSets 만 고치면 되도록 분리했다.
 export function findMessageContent() {
     const { Filters } = BdApi.Webpack;
 
-    // MessageContent's function destructures these props:
+    // MessageContent 는 이 props 를 구조분해한다:
     //   {className, message, children, content, onUpdate, contentRef, compact}
-    // `contentRef` + `onUpdate` + `compact` together are effectively unique to it.
+    // contentRef + onUpdate + compact 조합이 사실상 이 컴포넌트에만 나타난다.
     const markerSets = [
         ["contentRef", "onUpdate", "compact"],
         ["contentRef", "onUpdate", "message", "content"],
@@ -85,7 +74,7 @@ export function findMessageContent() {
         }
     }
 
-    // Last resort: some builds still expose the displayName.
+    // 최후 수단: 일부 빌드는 아직 displayName 을 노출한다.
     if (typeof Filters.byDisplayName === "function") {
         const target = tryWithKey(Filters.byDisplayName("MessageContent"));
         if (target) {

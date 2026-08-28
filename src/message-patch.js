@@ -3,15 +3,9 @@ import { React } from "./discord.js";
 import { TranslationBlock } from "./ui/translation-block.js";
 import { logger } from "./lib/logger.js";
 
-// Message types we translate: 0 = default, 19 = reply. Everything else
-// (joins, boosts, pins, calls, ...) is skipped.
+// 0 = 일반, 19 = 답장. 입장/부스트/고정/통화 등 나머지는 건너뛴다.
 const TRANSLATABLE_TYPES = new Set([0, 19]);
 
-/**
- * Patches `MessageContent`'s render to append a <TranslationBlock/> beneath the
- * message text whenever the message is in a target server and not already
- * Korean. The block itself owns the async translate + re-render.
- */
 export class MessagePatch {
     constructor({ target, settings, translator, languageDetector, stores }) {
         this._target = target;
@@ -59,7 +53,6 @@ export class MessagePatch {
         return appendChild(ret, block);
     }
 
-    /** @returns {string|null} the target guild this message belongs to, if any */
     _targetGuildId(message) {
         if (!message || typeof message.content !== "string" || !message.content.trim()) return null;
         if (!TRANSLATABLE_TYPES.has(message.type)) return null;
@@ -78,14 +71,13 @@ export class MessagePatch {
     }
 }
 
-// MessageContent's return is a single element (fragment/div). Production Discord
-// does not freeze element props, but cloning is safer than mutating in place.
+// props 를 제자리에서 고치는 대신 복제한다.
 function appendChild(ret, child) {
     if (Array.isArray(ret)) return [...ret, child];
     if (ret && ret.props) {
         const children = ret.props.children;
-        // Passed as separate arguments rather than one array, so React does not
-        // demand a `key` on Discord's own children.
+        // 배열 하나가 아니라 개별 인자로 넘긴다. 그래야 React 가 Discord 자체
+        // 자식 요소들에 key 를 요구하지 않는다.
         return children == null
             ? React.cloneElement(ret, undefined, child)
             : React.cloneElement(ret, undefined, children, child);

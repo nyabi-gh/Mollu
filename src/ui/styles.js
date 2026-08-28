@@ -1,3 +1,6 @@
+// overflow-anchor: none 인 이유 — 번역문은 메시지 레이아웃이 끝난 뒤에 나타난다.
+// 스크롤 앵커링 대상에서 빼야 브라우저가 실제 메시지 본문을 기준으로 잡아,
+// 도착한 번역문이 화면을 밀어내지 않는다.
 export const STYLES = `
 .mollu-translation__anchor {
     display: block;
@@ -8,9 +11,6 @@ export const STYLES = `
     overflow-anchor: none;
 }
 .mollu-translation {
-    /* A translation appears after the message is laid out. Excluding it from
-       scroll anchoring lets the browser hold on to real message content
-       instead, so arriving translations do not shove the viewport around. */
     overflow-anchor: none;
     contain: layout style;
     margin-top: 2px;

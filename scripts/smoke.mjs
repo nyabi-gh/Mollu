@@ -1,9 +1,5 @@
-// Lightweight sanity checks with no test framework:
-//   1. pure source logic (tokenizer round-trip, language detection)
-//   2. the bundled plugin loads under a stub BdApi and exposes start/stop/settings
-//
-// Run with `npm test`. This is not a substitute for loading the plugin in
-// BetterDiscord — the webpack lookup and React patching can only be verified there.
+// 테스트 프레임워크 없이 돌리는 스모크 체크. BetterDiscord 에 실제로 올려 보는 것을
+// 대체하지는 못한다 — webpack 탐색과 React 패칭은 거기서만 확인할 수 있다.
 
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -33,7 +29,7 @@ async function checkAsync(name, fn) {
     }
 }
 
-// --- 1. source logic ---------------------------------------------------------
+// --- 1. 소스 로직 ------------------------------------------------------------
 
 const { mask, unmask } = await import("../src/translation/tokenizer.js");
 const { LanguageDetector } = await import("../src/translation/language-detector.js");
@@ -101,10 +97,10 @@ check("language detector: too short is skipped", () => {
     assert.equal(detector.needsTranslation("k"), false);
 });
 
-// --- 2. bundle smoke -------------------------------------------------------
+// --- 2. 번들 로드 ------------------------------------------------------------
 
 installBdApiStub();
-// Derived from meta.json so a rename cannot leave this pointing at a stale file.
+// meta.json 에서 유도한다. 이름을 바꿔도 옛 파일을 가리키지 않게.
 const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
 const bundlePath = join(root, "dist", `${meta.name}.plugin.js`);
 
@@ -134,7 +130,7 @@ check("start() and stop() do not throw (webpack lookup fails gracefully)", () =>
     instance.stop();
 });
 
-// --- 3. cache / token-restore regressions ----------------------------------
+// --- 3. 캐시 / 토큰 복원 회귀 -------------------------------------------------
 
 await checkAsync("queue: work whose caller lost interest is dropped, not run", async () => {
     const queue = new TaskQueue(() => 1);
@@ -222,8 +218,8 @@ await checkAsync("translator: pending is reported on start, not on enqueue", asy
         await promise;
         assert.equal(started, true);
 
-        // A message that scrolled away is answered as un-translated, and the
-        // failure backoff must not treat that as an error.
+        // 화면 밖으로 나간 메시지는 미번역으로 응답되며, 실패 백오프가 이를
+        // 오류로 취급하면 안 된다.
         const dropped = await translator.translate("something else entirely", {
             shouldRun: () => false,
         });
@@ -259,7 +255,7 @@ await checkAsync("translator: a 429 pauses everything instead of failing", async
         assert.ok(translator._pausedUntil > Date.now(), "every other request is held back");
         assert.equal(translator._failures.size, 0, "a 429 must not enter the failure backoff");
 
-        // A second message must wait for the window rather than burn more quota.
+        // 두 번째 메시지는 할당량을 더 태우지 않고 대기해야 한다.
         const before = calls;
         const pending = translator.translate("a different message");
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -281,15 +277,15 @@ await checkAsync("provider: a chain of thought never reaches the message list", 
                 status: 200,
             });
     try {
-        // Closed block: keep only what follows it.
+        // 닫힌 블록: 그 뒤에 오는 것만 남긴다.
         BdApi.Net.fetch = reply("<thought>Let me consider the tone.</thought>안녕하세요");
         assert.equal(
             (await new Translator({ settings: stubSettings() }).translate("hi there")).text,
             "안녕하세요",
         );
 
-        // Gemma 4's actual shape: reasoning runs until the budget is gone, so
-        // no translation was ever written. That is an error, not a result.
+        // Gemma 4 의 실제 형태: 예산이 다할 때까지 추론만 하고 번역문은 쓰이지
+        // 않는다. 이건 결과가 아니라 오류다.
         BdApi.Net.fetch = reply("<thought>*  Input: ...\n*  Option 1: ...", "length");
         const cut = await new Translator({ settings: stubSettings() }).translate("hi there");
         assert.equal(cut.status, "error");
@@ -305,7 +301,7 @@ check("net: a plain-http base url is refused before the key is sent", () => {
     assert.equal(normalizeBaseUrl("api.deepseek.com"), "https://api.deepseek.com");
 });
 
-// --- 4. rendering / settings ------------------------------------------------
+// --- 4. 렌더링 / 설정 ---------------------------------------------------------
 
 const { renderSegments } = await import("../src/ui/rich-text.js");
 const { Settings } = await import("../src/settings.js");
@@ -395,10 +391,10 @@ check("settings: data saved under the previous plugin name is carried over", () 
 });
 
 check("settings: every panel field persists, not just the switches", () => {
-    // Mirrors how BdApi renders a top-level setting: it strips `value`, passes
-    // `defaultValue`, and the input reports through the setting's own
-    // onChange. The panel-level onChange is wired for `switch` only, so a
-    // field without its own handler silently discards every edit.
+    // BdApi 가 최상위 설정을 렌더하는 방식을 그대로 흉내 낸다: value 를 떼고
+    // defaultValue 로 넘기며, 입력은 설정 항목 자신의 onChange 로만 보고한다.
+    // 패널 레벨 onChange 는 switch 에만 연결되므로, 자기 핸들러가 없는 칸은
+    // 모든 편집을 조용히 버린다.
     const settings = new Settings();
     const fields = settings.buildPanel().__spec.settings;
 
@@ -490,7 +486,7 @@ await checkAsync("gemini: gemma never receives reasoning_effort, which it reject
             baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
         });
         await new Translator({ settings }).translate("hello there");
-        // "Thinking budget is not supported for this model." — HTTP 400.
+        // "Thinking budget is not supported for this model." — HTTP 400 으로 거부된다.
         assert.ok(!("reasoning_effort" in body));
     } finally {
         BdApi.Net.fetch = previous;
@@ -510,11 +506,11 @@ await checkAsync("manual mode: nothing is sent until it is asked for", async () 
         const settings = stubSettings();
         const translator = new Translator({ settings });
 
-        // A cache miss must stay a miss until something explicitly asks.
+        // 캐시 미스는 무언가가 명시적으로 요청하기 전까지 미스로 남아야 한다.
         assert.equal(translator.peek("hello there").status, "unknown");
         assert.equal(calls, 0, "peek() must never reach the provider");
 
-        // The button's handler is the same translate() call the observer makes.
+        // 버튼 핸들러는 observer 가 부르는 것과 같은 translate() 호출이다.
         assert.equal((await translator.translate("hello there")).text, "안녕");
         assert.equal(calls, 1);
     } finally {
@@ -556,10 +552,10 @@ check("settings: listeners fire and unsubscribe, and pasted values are trimmed",
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
-// --- helpers ------------------------------------------------------------
+// --- 헬퍼 --------------------------------------------------------------------
 
-// Mirrors how BetterDiscord evaluates a plugin file: wrap in a Function with
-// require/module/exports and run it. Avoids Node's ESM/CJS handling entirely.
+// BetterDiscord 가 플러그인 파일을 평가하는 방식을 흉내 낸다: require/module/exports
+// 를 넘기는 Function 으로 감싸 실행한다. Node 의 ESM/CJS 처리를 완전히 피한다.
 function loadPlugin(path) {
     const source = readFileSync(path, "utf8");
     const moduleObj = { filename: path, exports: {} };

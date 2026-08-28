@@ -17,16 +17,10 @@ const skip = () => ({ status: "skip" });
 const done = (text, segments) => ({ status: "done", text, segments });
 const error = (message) => ({ status: "error", message });
 
-/**
- * Owns the cache, the concurrency-limited queue and provider dispatch.
- * Callers use `peek()` for a synchronous cache read and `translate()` for the
- * async path (deduplicated per masked source text).
- *
- * Cached and in-flight values are kept in **masked** form. Two different
- * messages can share one masked key ("hi 【0】"), so the placeholders must only
- * be resolved against the tokens of the message being rendered — otherwise a
- * cache hit shows another message's mention or link.
- */
+// 캐시와 값은 마스킹된 형태로 보관한다. 서로 다른 두 메시지가 같은 마스킹 키
+// ("hi 【0】")를 공유할 수 있으므로, placeholder 는 반드시 지금 렌더 중인 메시지의
+// 토큰으로만 복원해야 한다. 아니면 캐시가 맞았을 때 다른 메시지의 멘션이나
+// 링크가 표시된다.
 export class Translator {
     constructor({ settings, onError }) {
         this._settings = settings;
@@ -62,10 +56,6 @@ export class Translator {
         this._cache.save();
     }
 
-    /**
-     * Synchronous cache lookup for the first render.
-     * @returns {TranslationResult}
-     */
     peek(text) {
         const { masked, tokens } = mask(text);
         if (this._cache.has(masked)) return this._restore(this._cache.get(masked), tokens);
@@ -73,22 +63,18 @@ export class Translator {
         return { status: "unknown" };
     }
 
-    /**
-     * @param {string} text
-     * @param {{onStart?: () => void, shouldRun?: () => boolean}} [hooks]
-     *   `onStart` fires when the request actually leaves the queue, so the UI
-     *   can show "번역 중" for in-flight work only. `shouldRun` is re-checked at
-     *   that moment and drops work whose message has scrolled away.
-     * @returns {Promise<TranslationResult>} never rejects.
-     */
+    // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
+    // 이때 "번역 중" 을 띄워야 스크롤 중 화면이 밀리지 않는다. shouldRun 은 그
+    // 순간 다시 확인해, 이미 화면 밖으로 나간 메시지의 작업을 버린다.
+    // 이 함수는 절대 reject 하지 않는다.
     translate(text, hooks = {}) {
         const { masked, tokens } = mask(text);
 
         if (this._cache.has(masked)) {
             return Promise.resolve(this._restore(this._cache.get(masked), tokens));
         }
-        // Not cached: the verdict depends on `maxChars`, so raising the setting
-        // must let the message through on the next render.
+        // 캐시하지 않는다. maxChars 에 따라 달라지는 판정이라, 설정을 올리면
+        // 다음 렌더에서 통과해야 한다.
         if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
         if (this._isBackingOff(masked)) {
             return Promise.resolve(error("최근 실패로 재시도를 미루는 중"));
@@ -98,8 +84,8 @@ export class Translator {
         if (!job) {
             job = this._queue
                 .run(async () => {
-                    // A rate-limit pause is served here rather than by failing:
-                    // the message keeps its place instead of showing an error.
+                    // 한도 대기를 실패가 아니라 여기서 처리한다. 그래야 메시지가
+                    // 오류를 띄우는 대신 자기 자리를 지킨다.
                     await this._awaitResume();
                     if (this._stopped) throw aborted();
                     if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
@@ -119,7 +105,6 @@ export class Translator {
         );
     }
 
-    /** Turn a masked cache/job value into a result for one specific message. */
     _restore(maskedValue, tokens) {
         if (typeof maskedValue !== "string") return skip();
         const segments = unmaskSegments(maskedValue, tokens);
@@ -159,7 +144,6 @@ export class Translator {
         }
     }
 
-    /** @returns {{status: "done", masked: string} | {status: "skip"}} */
     _resolveSuccess(maskedKey, raw) {
         const maskedTranslation = stripWrappingQuotes(raw, maskedKey).trim();
         if (!maskedTranslation || normalize(maskedTranslation) === normalize(maskedKey)) {
@@ -172,15 +156,15 @@ export class Translator {
 
     _resolveFailure(maskedKey, err) {
         const message = (err && err.message) || String(err);
-        // Aborts come from stop()/queue.clear(), not from the provider.
+        // Abort 는 프로바이더가 아니라 stop()/queue.clear() 에서 온다.
         if (err && err.name === "AbortError") return error(message);
-        // The message scrolled out of view before its turn came up. Not a
-        // failure: report it as un-answered so the caller can ask again.
+        // 차례가 오기 전에 화면 밖으로 나간 경우. 실패가 아니므로 미응답으로
+        // 알려 호출자가 다시 요청할 수 있게 한다.
         if (err && err.name === "SkippedError") return { status: "unknown" };
 
-        // 429 is a quota verdict on the account, not on this message. Pause
-        // everything for the window the server asked for and tell the caller to
-        // come back, so a burst does not turn into a wall of "번역 실패".
+        // 429 는 이 메시지가 아니라 계정에 대한 한도 판정이다. 서버가 요구한
+        // 시간만큼 전체를 멈추고 호출자에게 다시 오라고 알린다. 그래야 한꺼번에
+        // 몰린 요청이 "번역 실패" 벽으로 바뀌지 않는다.
         if (err && err.status === 429) {
             const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
             this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
@@ -230,11 +214,9 @@ const QUOTE_PAIRS = [
     ["『", "』"],
 ];
 
-/**
- * Models like to wrap a translation in quotes. Strip them only when they really
- * do wrap the whole string: `"A" 하고 "B"` merely starts and ends with a quote,
- * and a source that was quoted itself keeps the author's quotes.
- */
+// 모델은 번역문을 따옴표로 감싸는 버릇이 있다. 문자열 전체를 실제로 감쌀 때만
+// 벗긴다. `"가" 하고 "나"` 는 단지 따옴표로 시작하고 끝날 뿐이고, 원문 자체가
+// 따옴표로 감싸여 있었다면 작성자의 따옴표이므로 보존한다.
 function stripWrappingQuotes(value, source) {
     const text = String(value).trim();
     if (text.length < 2) return text;
@@ -253,7 +235,6 @@ function stripWrappingQuotes(value, source) {
     return text;
 }
 
-/** Drop leading/trailing whitespace from the outer text segments. */
 function trimEdges(segments) {
     const out = segments.slice();
     while (out.length && out[0].type === "text" && !out[0].value.trim()) out.shift();

@@ -1,10 +1,9 @@
 import { REQUEST_TIMEOUT_MS } from "../constants.js";
 import { logger } from "./logger.js";
 
-// BdApi.Net.fetch runs over Node's http(s) in the main process, so it is not
-// subject to Discord's renderer CSP and can reach arbitrary API hosts. It
-// returns a standard Response. Plain `fetch` is only a fallback for very old
-// BetterDiscord builds and will usually be blocked by CSP.
+// BdApi.Net.fetch 는 메인 프로세스의 Node http(s) 로 나가므로 렌더러 CSP 를 받지
+// 않고 임의의 API 호스트에 닿는다. 표준 fetch 는 아주 오래된 BD 빌드용 폴백이며
+// 대개 CSP 에 막힌다.
 function resolveFetch() {
     if (typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function") {
         return BdApi.Net.fetch.bind(BdApi.Net);
@@ -18,13 +17,8 @@ export function hasNativeFetch() {
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
-/**
- * Validate a user-entered API base URL before an API key is sent to it.
- * Plain http is refused except for a local proxy, because the key travels in an
- * Authorization header.
- *
- * @returns {string} origin + path, without a trailing slash
- */
+// 키를 보내기 전에 사용자가 입력한 base URL 을 검증한다. 키가 Authorization
+// 헤더로 나가므로 로컬 프록시를 제외한 평문 http 는 거부한다.
 export function normalizeBaseUrl(raw, fallback = "") {
     const input = String(raw ?? "").trim() || String(fallback);
     const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(input) ? input : `https://${input}`;
@@ -44,11 +38,8 @@ export function normalizeBaseUrl(raw, fallback = "") {
     return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
-/**
- * How long a rejected request asked us to wait, in ms; 0 when it did not say.
- * Reads the standard Retry-After header, then google.rpc.RetryInfo, which is
- * what the Gemini API returns inside a 429 payload.
- */
+// 서버가 요구한 대기 시간(ms). 알려 주지 않으면 0. 표준 Retry-After 헤더를 먼저
+// 보고, 없으면 Gemini 가 429 본문에 넣는 google.rpc.RetryInfo 를 읽는다.
 function retryAfterMs(res, body) {
     const header = res.headers?.get?.("retry-after");
     if (header) {
@@ -69,10 +60,6 @@ function withDeadline(signal, timeout) {
     return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, deadline]) : signal;
 }
 
-/**
- * POST a JSON body and parse a JSON response.
- * Throws an Error (with `.status` when available) on a non-2xx response.
- */
 export async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIMEOUT_MS } = {}) {
     const doFetch = resolveFetch();
     if (!doFetch) throw new Error("no fetch implementation available");
@@ -81,8 +68,8 @@ export async function postJson(url, { headers = {}, body, signal, timeout = REQU
         method: "POST",
         headers: { "Content-Type": "application/json", ...headers },
         body: typeof body === "string" ? body : JSON.stringify(body),
-        // The `timeout` option is BdApi.Net.fetch's; standard fetch ignores it,
-        // so the fallback path gets the same deadline through its signal.
+        // timeout 은 BdApi.Net.fetch 전용 옵션이라 표준 fetch 는 무시한다.
+        // 폴백 경로에는 signal 로 같은 마감을 건다.
         signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
         timeout,
     });
@@ -90,8 +77,8 @@ export async function postJson(url, { headers = {}, body, signal, timeout = REQU
     const text = await res.text().catch(() => "");
     const ok = typeof res.ok === "boolean" ? res.ok : res.status >= 200 && res.status < 300;
     if (!ok) {
-        // The body can echo request material, so it goes to the log only — the
-        // Error message is what ends up in a user-visible toast.
+        // 응답 본문은 요청 내용을 되비출 수 있어 로그로만 보낸다. Error 메시지는
+        // 사용자에게 토스트로 노출된다.
         if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
         const err = new Error(`HTTP ${res.status}`);
         err.status = res.status;

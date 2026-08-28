@@ -1,19 +1,14 @@
 import { MASK_PATTERN } from "./tokenizer.js";
 
-// Hangul syllables + jamo (including half-width and extended blocks).
 const HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
 
-// Hoisted: needsTranslation() runs on every render of every message in a target
-// server, and recompiling this pattern per call was the bulk of its cost.
+// 호이스팅: needsTranslation() 은 대상 서버 모든 메시지의 매 렌더마다 실행되는데,
+// 호출마다 이 패턴을 재컴파일하는 것이 비용의 대부분이었다.
 const MASK_RE = new RegExp(MASK_PATTERN, "g");
 const NON_LETTER = /[^\p{L}]/gu;
 
-/**
- * Decides whether a message should be translated. A message counts as Korean
- * (and is skipped) when the share of Hangul among its letters reaches the
- * configured threshold. Non-letters, code, links and Discord tokens are ignored
- * so "lol <@123> 😄" is judged only on "lol".
- */
+// 글자가 아닌 것, 코드, 링크, Discord 토큰은 판정에서 제외한다. 그래서
+// "lol <@123> 😄" 는 "lol" 만 보고 판단한다.
 export class LanguageDetector {
     constructor(settings) {
         this._settings = settings;
