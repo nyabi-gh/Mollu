@@ -1,4 +1,4 @@
-<p align="center"><a href="README.md">한국어</a> · <b>English</b></p>
+[한국어](README.md) · **English**
 
 # Mollu
 
