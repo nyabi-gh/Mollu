@@ -62,6 +62,19 @@ export class Translator {
         this._cache.save();
     }
 
+    get cacheSize() {
+        return this._cache.size;
+    }
+
+    // 실패 기록도 함께 비운다. 캐시를 지우는 이유는 대개 다시 시도하기 위해서인데,
+    // 백오프가 남아 있으면 그 다음 요청이 조용히 거절된다.
+    clearCache() {
+        const cleared = this._cache.size;
+        this._cache.clear();
+        this._failures.clear();
+        return cleared;
+    }
+
     peek(text) {
         const { masked, tokens } = mask(text);
         const key = this._cacheKey(masked, this._settings.current.targetLanguage);

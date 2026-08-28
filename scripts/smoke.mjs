@@ -194,6 +194,18 @@ check('cache: a "no translation needed" verdict survives a restart', () => {
     assert.equal(reloaded.get("ko\u0001bonjour"), "안녕");
 });
 
+check("cache: clearing empties the store and the saved copy", () => {
+    const saved = captureSave(() => {
+        const cache = new TranslationCache();
+        cache.set("ko\u0001hello there", "안녕");
+        assert.equal(cache.size, 1);
+        cache.clear();
+        assert.equal(cache.size, 0);
+    });
+    // 저장까지 하지 않으면 다음 실행에 그대로 되살아난다.
+    assert.deepEqual(saved, []);
+});
+
 await checkAsync("translator: a shared cache key restores each message's own tokens", async () => {
     const previous = BdApi.Net.fetch;
     BdApi.Net.fetch = async () =>
@@ -726,6 +738,28 @@ await checkAsync("gemini: gemma never receives reasoning_effort, which it reject
     }
 });
 
+await checkAsync("translator: clearing the cache also lifts the failure backoff", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response("nope", { status: 400 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal(calls, 1, "the second attempt is held by the backoff");
+
+        // 캐시를 비우는 이유는 대개 다시 시도하기 위해서다.
+        translator.clearCache();
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal(calls, 2);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 await checkAsync("translator: every block waiting on the same text is told it started", async () => {
     const previous = BdApi.Net.fetch;
     BdApi.Net.fetch = async () =>
@@ -857,6 +891,21 @@ check("hotkey: only the exact combo fires, and never mid-composition", () => {
     // 한글 조합 중의 keydown 을 단축키로 읽으면 타이핑이 망가진다.
     assert.ok(!matchesHotkey(combo, event({ isComposing: true })));
     assert.ok(!matchesHotkey(null, event()));
+});
+
+check("settings: the advanced section carries a working cache-clear button", () => {
+    let cleared = 0;
+    const settings = new Settings({ clearCache: () => (cleared += 1) });
+    const advanced = settings._panelSpec().settings.find((entry) => entry.id === "advanced");
+    assert.ok(advanced, "the advanced category is missing");
+
+    const button = advanced.settings.find((entry) => entry.id === "clearCache");
+    assert.equal(button.type, "button");
+    // 값이 없는 항목이라 설정을 쓰는 onChange 가 붙으면 안 된다.
+    assert.ok(!("onChange" in button));
+
+    button.onClick();
+    assert.equal(cleared, 1);
 });
 
 check("settings: the panel is a live component, not a one-shot spec", () => {

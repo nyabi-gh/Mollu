@@ -7,7 +7,9 @@ import { React } from "./discord.js";
 import { logger } from "./lib/logger.js";
 
 export class Settings {
-    constructor() {
+    // actions 는 값이 아니라 동작인 패널 항목(캐시 비우기 등)이 부르는 콜백이다.
+    constructor(actions = {}) {
+        this._actions = actions;
         const stored = migrate(safeLoad());
         this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
@@ -107,6 +109,9 @@ export class Settings {
             // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
             // switch 에서 생기는 중복은 set() 이 무시한다.
             onChange: (_categoryId, settingId, value) => this.set(settingId, value),
+            // 패널은 프로바이더를 바꿀 때마다 다시 마운트되므로 접힘 상태를 밖에 둔다.
+            onDrawerToggle: (id, shown) => DRAWERS.set(id, shown),
+            getDrawerState: (id, fallback) => DRAWERS.get(id) ?? fallback,
             settings: withChangeHandlers(this, [
                 {
                     type: "dropdown",
@@ -278,11 +283,29 @@ export class Settings {
                     value: v.showErrors,
                 },
                 {
-                    type: "switch",
-                    id: "debugLog",
-                    name: t("settings.debugLog"),
-                    note: t("settings.debugLog.note"),
-                    value: v.debugLog,
+                    type: "category",
+                    id: "advanced",
+                    name: t("settings.advanced"),
+                    collapsible: true,
+                    shown: true,
+                    settings: withChangeHandlers(this, [
+                        {
+                            type: "switch",
+                            id: "debugLog",
+                            name: t("settings.debugLog"),
+                            note: t("settings.debugLog.note"),
+                            value: v.debugLog,
+                        },
+                        {
+                            type: "button",
+                            id: "clearCache",
+                            name: t("settings.clearCache"),
+                            note: t("settings.clearCache.note"),
+                            children: t("settings.clearCache.action"),
+                            color: "red",
+                            onClick: () => this._actions.clearCache?.(),
+                        },
+                    ]),
                 },
             ]),
         };
@@ -293,12 +316,17 @@ export class Settings {
 // 만든다. 타자를 치는 동안 다시 마운트되면 포커스를 잃으므로 텍스트 칸은 넣지 않는다.
 const PANEL_REBUILD = new Set(["provider", "uiLanguage"]);
 
-// 모든 항목에 자기 onChange 를 붙인다. BdApi 가 실제로 호출하는 건 이것뿐이다.
+// 카테고리 id -> 펼침 여부. 패널이 다시 마운트되어도 살아남아야 한다.
+const DRAWERS = new Map();
+
+// 값을 가진 항목에 자기 onChange 를 붙인다. BdApi 가 실제로 호출하는 건 이것뿐이다.
+// 버튼은 값이 없고, 카테고리의 onChange 는 BD 자신이 채운다.
 function withChangeHandlers(settings, items) {
-    return items.map((item) => ({
-        ...item,
-        onChange: (value) => settings.set(item.id, value),
-    }));
+    return items.map((item) =>
+        item.type === "button" || item.type === "category"
+            ? item
+            : { ...item, onChange: (value) => settings.set(item.id, value) },
+    );
 }
 
 // 붙여넣은 키와 URL 에는 공백이 딸려 오기 쉬운데, 그대로 두면 401 이나 잘못된

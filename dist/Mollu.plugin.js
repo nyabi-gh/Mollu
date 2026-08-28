@@ -128,6 +128,7 @@ var STRINGS = {
     "toast.outgoingOn": "Your messages will be sent in {language}",
     "toast.outgoingOff": "Your messages will be sent as you type them",
     "toast.outgoingFailed": "Sent untranslated · {message}",
+    "toast.cacheCleared": "Cleared {count} cached translations",
     "error.noApiKey": "No API key configured",
     "error.emptyResponse": "Empty response",
     "error.reasoningOnly": "Response was cut off while the model was still reasoning",
@@ -172,6 +173,14 @@ var STRINGS = {
     "settings.translateOwnMessages": "Translate my own messages",
     "settings.showPending": "Show while translating",
     "settings.showErrors": "Show translation failures",
+    "settings.advanced": "Advanced",
+    "settings.clearCache": "Translation cache",
+    "settings.clearCache.note": "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
+    "settings.clearCache.action": "Clear",
+    "clearCache.title": "Clear the translation cache?",
+    "clearCache.body": "{count} saved translations will be deleted. Messages already on screen will be sent to the API again, at the usual cost.",
+    "clearCache.confirm": "Clear",
+    "clearCache.cancel": "Cancel",
     "settings.debugLog": "Log why a message was skipped",
     "settings.debugLog.note": "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
@@ -198,6 +207,7 @@ var STRINGS = {
     "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
     "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
     "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
+    "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
     "error.noApiKey": "API 키가 설정되지 않았습니다",
     "error.emptyResponse": "빈 응답",
     "error.reasoningOnly": "모델이 추론하는 도중에 응답이 잘렸습니다",
@@ -242,6 +252,14 @@ var STRINGS = {
     "settings.translateOwnMessages": "내 메시지도 번역",
     "settings.showPending": "번역 중 표시",
     "settings.showErrors": "번역 실패 시 표시",
+    "settings.advanced": "고급",
+    "settings.clearCache": "번역 캐시",
+    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
+    "settings.clearCache.action": "비우기",
+    "clearCache.title": "번역 캐시를 비울까요?",
+    "clearCache.body": "저장된 번역 {count}개가 삭제됩니다. 화면에 있는 메시지는 다시 API 로 전송되고 그만큼 비용이 듭니다.",
+    "clearCache.confirm": "비우기",
+    "clearCache.cancel": "취소",
     "settings.debugLog": "번역하지 않은 사유 기록",
     "settings.debugLog.note": "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
@@ -781,7 +799,9 @@ function tryWithKey(filter) {
 
 // src/settings.js
 var Settings = class {
-  constructor() {
+  // actions 는 값이 아니라 동작인 패널 항목(캐시 비우기 등)이 부르는 콜백이다.
+  constructor(actions = {}) {
+    this._actions = actions;
     const stored = migrate(safeLoad());
     this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
     this._guildIdSet = parseGuildIds(this._values.guildIds);
@@ -866,6 +886,9 @@ var Settings = class {
       // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
       // switch 에서 생기는 중복은 set() 이 무시한다.
       onChange: (_categoryId, settingId, value) => this.set(settingId, value),
+      // 패널은 프로바이더를 바꿀 때마다 다시 마운트되므로 접힘 상태를 밖에 둔다.
+      onDrawerToggle: (id4, shown) => DRAWERS.set(id4, shown),
+      getDrawerState: (id4, fallback) => DRAWERS.get(id4) ?? fallback,
       settings: withChangeHandlers(this, [
         {
           type: "dropdown",
@@ -1031,22 +1054,40 @@ var Settings = class {
           value: v.showErrors
         },
         {
-          type: "switch",
-          id: "debugLog",
-          name: t("settings.debugLog"),
-          note: t("settings.debugLog.note"),
-          value: v.debugLog
+          type: "category",
+          id: "advanced",
+          name: t("settings.advanced"),
+          collapsible: true,
+          shown: true,
+          settings: withChangeHandlers(this, [
+            {
+              type: "switch",
+              id: "debugLog",
+              name: t("settings.debugLog"),
+              note: t("settings.debugLog.note"),
+              value: v.debugLog
+            },
+            {
+              type: "button",
+              id: "clearCache",
+              name: t("settings.clearCache"),
+              note: t("settings.clearCache.note"),
+              children: t("settings.clearCache.action"),
+              color: "red",
+              onClick: () => this._actions.clearCache?.()
+            }
+          ])
         }
       ])
     };
   }
 };
 var PANEL_REBUILD = /* @__PURE__ */ new Set(["provider", "uiLanguage"]);
+var DRAWERS = /* @__PURE__ */ new Map();
 function withChangeHandlers(settings, items) {
-  return items.map((item) => ({
-    ...item,
-    onChange: (value) => settings.set(item.id, value)
-  }));
+  return items.map(
+    (item) => item.type === "button" || item.type === "category" ? item : { ...item, onChange: (value) => settings.set(item.id, value) }
+  );
 }
 var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
 var CREDENTIAL_FIELDS = /* @__PURE__ */ new Set(["apiKey", "model", "baseUrl"]);
@@ -1217,6 +1258,14 @@ var TranslationCache = class {
     } catch {
     }
   }
+  get size() {
+    return this._map.size;
+  }
+  // 저장까지 함께 끝낸다. 지웠는데 다음 실행에 되살아나면 지운 것이 아니다.
+  clear() {
+    this._map.clear();
+    this.save();
+  }
   has(key) {
     return this._map.has(key);
   }
@@ -1332,6 +1381,17 @@ var Translator = class {
     this._starts.clear();
     this._failures.clear();
     this._cache.save();
+  }
+  get cacheSize() {
+    return this._cache.size;
+  }
+  // 실패 기록도 함께 비운다. 캐시를 지우는 이유는 대개 다시 시도하기 위해서인데,
+  // 백오프가 남아 있으면 그 다음 요청이 조용히 거절된다.
+  clearCache() {
+    const cleared = this._cache.size;
+    this._cache.clear();
+    this._failures.clear();
+    return cleared;
   }
   peek(text) {
     const { masked, tokens } = mask(text);
@@ -2129,7 +2189,7 @@ var STYLES = `
 var Mollu = class {
   constructor(meta) {
     this._meta = meta;
-    this._settings = new Settings();
+    this._settings = new Settings({ clearCache: () => this._confirmClearCache() });
     this._detector = new LanguageDetector(this._settings);
     this._translator = new Translator({
       settings: this._settings,
@@ -2233,6 +2293,25 @@ var Mollu = class {
       onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error")
     });
     this._outgoing.install();
+  }
+  // 지운 캐시는 되살릴 수 없고 다시 채우려면 다시 결제해야 한다. 한 번 묻는다.
+  _confirmClearCache() {
+    const count = this._translator.cacheSize;
+    const clear = () => {
+      this._translator.clearCache();
+      this._toast(t("toast.cacheCleared", { count }), "info");
+    };
+    try {
+      BdApi.UI.showConfirmationModal(t("clearCache.title"), t("clearCache.body", { count }), {
+        danger: true,
+        confirmText: t("clearCache.confirm"),
+        cancelText: t("clearCache.cancel"),
+        onConfirm: clear
+      });
+    } catch (e) {
+      logger.warn("confirmation modal unavailable", e);
+      clear();
+    }
   }
   _toggle(id4, onKey, offKey) {
     const next = !this._settings.current[id4];

@@ -16,7 +16,7 @@ import { logger } from "./lib/logger.js";
 export default class Mollu {
     constructor(meta) {
         this._meta = meta;
-        this._settings = new Settings();
+        this._settings = new Settings({ clearCache: () => this._confirmClearCache() });
         this._detector = new LanguageDetector(this._settings);
         this._translator = new Translator({
             settings: this._settings,
@@ -141,6 +141,27 @@ export default class Mollu {
             onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error"),
         });
         this._outgoing.install();
+    }
+
+    // 지운 캐시는 되살릴 수 없고 다시 채우려면 다시 결제해야 한다. 한 번 묻는다.
+    _confirmClearCache() {
+        const count = this._translator.cacheSize;
+        const clear = () => {
+            this._translator.clearCache();
+            this._toast(t("toast.cacheCleared", { count }), "info");
+        };
+        try {
+            BdApi.UI.showConfirmationModal(t("clearCache.title"), t("clearCache.body", { count }), {
+                danger: true,
+                confirmText: t("clearCache.confirm"),
+                cancelText: t("clearCache.cancel"),
+                onConfirm: clear,
+            });
+        } catch (e) {
+            // 확인 모달은 안전장치일 뿐이고, 버튼을 누른 것 자체가 이미 요청이다.
+            logger.warn("confirmation modal unavailable", e);
+            clear();
+        }
     }
 
     _toggle(id, onKey, offKey) {

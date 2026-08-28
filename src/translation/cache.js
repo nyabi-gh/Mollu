@@ -68,6 +68,16 @@ export class TranslationCache {
         }
     }
 
+    get size() {
+        return this._map.size;
+    }
+
+    // 저장까지 함께 끝낸다. 지웠는데 다음 실행에 되살아나면 지운 것이 아니다.
+    clear() {
+        this._map.clear();
+        this.save();
+    }
+
     has(key) {
         return this._map.has(key);
     }

@@ -20,6 +20,7 @@ const STRINGS = {
         "toast.outgoingOn": "Your messages will be sent in {language}",
         "toast.outgoingOff": "Your messages will be sent as you type them",
         "toast.outgoingFailed": "Sent untranslated · {message}",
+        "toast.cacheCleared": "Cleared {count} cached translations",
 
         "error.noApiKey": "No API key configured",
         "error.emptyResponse": "Empty response",
@@ -77,6 +78,16 @@ const STRINGS = {
         "settings.translateOwnMessages": "Translate my own messages",
         "settings.showPending": "Show while translating",
         "settings.showErrors": "Show translation failures",
+        "settings.advanced": "Advanced",
+        "settings.clearCache": "Translation cache",
+        "settings.clearCache.note":
+            "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
+        "settings.clearCache.action": "Clear",
+        "clearCache.title": "Clear the translation cache?",
+        "clearCache.body":
+            "{count} saved translations will be deleted. Messages already on screen will be sent to the API again, at the usual cost.",
+        "clearCache.confirm": "Clear",
+        "clearCache.cancel": "Cancel",
         "settings.debugLog": "Log why a message was skipped",
         "settings.debugLog.note":
             "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
@@ -109,6 +120,7 @@ const STRINGS = {
         "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
         "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
         "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
+        "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
 
         "error.noApiKey": "API 키가 설정되지 않았습니다",
         "error.emptyResponse": "빈 응답",
@@ -165,6 +177,16 @@ const STRINGS = {
         "settings.translateOwnMessages": "내 메시지도 번역",
         "settings.showPending": "번역 중 표시",
         "settings.showErrors": "번역 실패 시 표시",
+        "settings.advanced": "고급",
+        "settings.clearCache": "번역 캐시",
+        "settings.clearCache.note":
+            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
+        "settings.clearCache.action": "비우기",
+        "clearCache.title": "번역 캐시를 비울까요?",
+        "clearCache.body":
+            "저장된 번역 {count}개가 삭제됩니다. 화면에 있는 메시지는 다시 API 로 전송되고 그만큼 비용이 듭니다.",
+        "clearCache.confirm": "비우기",
+        "clearCache.cancel": "취소",
         "settings.debugLog": "번역하지 않은 사유 기록",
         "settings.debugLog.note":
             "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
