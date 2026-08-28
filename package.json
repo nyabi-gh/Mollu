@@ -1,16 +1,25 @@
 {
-  "name": "korean-auto-translator",
-  "version": "1.0.0",
-  "description": "BetterDiscord plugin that auto-translates non-Korean messages in selected servers to Korean via an AI API",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "node scripts/build.mjs",
-    "deploy": "node scripts/build.mjs --install",
-    "watch": "node scripts/build.mjs --watch --install",
-    "test": "node scripts/smoke.mjs"
-  },
-  "devDependencies": {
-    "esbuild": "^0.28.2"
-  }
+    "name": "korean-auto-translator",
+    "version": "1.0.0",
+    "description": "BetterDiscord plugin that auto-translates non-Korean messages in selected servers to Korean via an AI API",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "node scripts/build.mjs",
+        "deploy": "node scripts/build.mjs --install",
+        "watch": "node scripts/build.mjs --watch --install",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "pretest": "npm run build",
+        "test": "node scripts/smoke.mjs"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "esbuild": "^0.28.2",
+        "eslint": "^10.9.1",
+        "globals": "^17.11.0",
+        "prettier": "^3.9.6"
+    },
+    "license": "MIT"
 }

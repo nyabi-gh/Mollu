@@ -29,7 +29,9 @@ npm install
 npm run build          # dist/KoreanAutoTranslator.plugin.js 생성
 npm run deploy         # 빌드 후 BetterDiscord plugins 폴더로 복사
 npm run watch          # 소스 변경 감지 → 자동 빌드 + 복사
-npm test               # 토크나이저 / 언어 판정 / 번들 로드 스모크 체크
+npm test               # 빌드 후 토크나이저 / 언어 판정 / 번들 로드 스모크 체크
+npm run lint           # ESLint
+npm run format         # Prettier 적용 (검사만 하려면 npm run format:check)
 ```
 
 > **Windows**: 명령은 동일합니다. PowerShell에서 `npm install` → `npm run deploy` 를 실행하면 `%AppData%\BetterDiscord\plugins` 로 자동 복사됩니다 (`scripts/build.mjs` 가 OS를 감지). `package.json` 스크립트에 셸 종속 코드는 없습니다.

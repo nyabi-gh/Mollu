@@ -1,0 +1,4 @@
+# Check out LF on every platform. Prettier is configured with endOfLine "lf",
+# so a CRLF checkout (Windows git's core.autocrlf default) would make
+# `npm run format:check` fail on every file.
+* text=auto eol=lf
