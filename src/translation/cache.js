@@ -1,4 +1,4 @@
-import { NAME, CACHE_LIMIT, CACHE_KEY, LEGACY_CACHE_KEYS } from "../constants.js";
+import { NAME, LEGACY_NAMES, CACHE_LIMIT, CACHE_KEY, LEGACY_CACHE_KEYS } from "../constants.js";
 
 /**
  * Keyed by masked source text; values are stored **masked** as well, so a hit
@@ -12,15 +12,20 @@ export class TranslationCache {
     }
 
     load() {
-        try {
-            for (const legacy of LEGACY_CACHE_KEYS) {
-                if (BdApi.Data.load(NAME, legacy) != null) BdApi.Data.delete(NAME, legacy);
+        // Entries written under a superseded key hold message text in a format
+        // that is no longer safe to serve, so they are dropped, not migrated.
+        for (const store of [NAME, ...LEGACY_NAMES]) {
+            for (const key of LEGACY_CACHE_KEYS) {
+                try {
+                    if (BdApi.Data.load(store, key) != null) BdApi.Data.delete(store, key);
+                } catch {
+                    /* ignore */
+                }
             }
-        } catch {
-            /* ignore */
         }
+
         try {
-            const stored = BdApi.Data.load(NAME, CACHE_KEY);
+            const stored = readCache();
             if (!Array.isArray(stored)) return;
             for (const entry of stored) {
                 if (Array.isArray(entry) && entry.length === 2) this._map.set(entry[0], entry[1]);
@@ -67,4 +72,13 @@ export class TranslationCache {
             if (--drop <= 0) break;
         }
     }
+}
+
+/** Current store first, then any store this plugin used under an older name. */
+function readCache() {
+    for (const store of [NAME, ...LEGACY_NAMES]) {
+        const stored = BdApi.Data.load(store, CACHE_KEY);
+        if (Array.isArray(stored)) return stored;
+    }
+    return null;
 }

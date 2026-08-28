@@ -104,7 +104,9 @@ check("language detector: too short is skipped", () => {
 // --- 2. bundle smoke -------------------------------------------------------
 
 installBdApiStub();
-const bundlePath = join(root, "dist", "KoreanAutoTranslator.plugin.js");
+// Derived from meta.json so a rename cannot leave this pointing at a stale file.
+const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
+const bundlePath = join(root, "dist", `${meta.name}.plugin.js`);
 
 let Plugin;
 check("bundle loads under stub BdApi (BetterDiscord-style wrapper)", () => {
@@ -113,21 +115,21 @@ check("bundle loads under stub BdApi (BetterDiscord-style wrapper)", () => {
 });
 
 check("plugin instance has the BetterDiscord lifecycle", () => {
-    const instance = new Plugin({ name: "KoreanAutoTranslator", version: "1.0.0" });
+    const instance = new Plugin({ name: meta.name, version: meta.version });
     assert.equal(typeof instance.start, "function");
     assert.equal(typeof instance.stop, "function");
     assert.equal(typeof instance.getSettingsPanel, "function");
 });
 
 check("getSettingsPanel returns a panel spec with an onChange", () => {
-    const instance = new Plugin({ name: "KoreanAutoTranslator" });
+    const instance = new Plugin({ name: meta.name });
     const panel = instance.getSettingsPanel();
     assert.ok(Array.isArray(panel.__spec.settings) && panel.__spec.settings.length > 0);
     assert.equal(typeof panel.__spec.onChange, "function");
 });
 
 check("start() and stop() do not throw (webpack lookup fails gracefully)", () => {
-    const instance = new Plugin({ name: "KoreanAutoTranslator" });
+    const instance = new Plugin({ name: meta.name });
     instance.start();
     instance.stop();
 });
@@ -157,7 +159,7 @@ await checkAsync("queue: work whose caller lost interest is dropped, not run", a
 
 const { TranslationCache } = await import("../src/translation/cache.js");
 const { Translator } = await import("../src/translation/translator.js");
-const { CACHE_LIMIT, CACHE_KEY } = await import("../src/constants.js");
+const { CACHE_LIMIT, CACHE_KEY, NAME, LEGACY_NAMES } = await import("../src/constants.js");
 
 check("cache: save() keeps the newest entries, not the oldest", () => {
     const saved = captureSave(() => {
@@ -305,6 +307,26 @@ check("translator: an over-long message is re-checked after maxChars is raised",
         "unknown",
         "the skip must not have been cached",
     );
+});
+
+check("settings: data saved under the previous plugin name is carried over", () => {
+    const previous = BdApi.Data;
+    const store = new Map([
+        [`${LEGACY_NAMES[0]}::settings`, { apiKey: "sk-old", guildIds: "123456789012345678" }],
+    ]);
+    BdApi.Data = {
+        load: (name, key) => store.get(`${name}::${key}`) ?? null,
+        save: (name, key, value) => store.set(`${name}::${key}`, value),
+        delete: (name, key) => store.delete(`${name}::${key}`),
+    };
+    try {
+        const settings = new Settings();
+        assert.equal(settings.current.apiKey, "sk-old", "the key must survive a rename");
+        assert.deepEqual([...settings.guildIdSet], ["123456789012345678"]);
+        assert.ok(store.has(`${NAME}::settings`), "carried-over values are rewritten under the new name");
+    } finally {
+        BdApi.Data = previous;
+    }
 });
 
 check("settings: the stored api key is never rendered into the panel", () => {

@@ -2,7 +2,12 @@
 
 // Must match `name` in meta.json. Used as the BdApi caller id, data-store name,
 // and injected <style> id.
-export const NAME = "KoreanAutoTranslator";
+export const NAME = "Mollu";
+
+// Data-store names this plugin used before it was renamed. Settings and cache
+// are read from these once so a rename does not silently drop the user's API
+// key and target servers.
+export const LEGACY_NAMES = ["KoreanAutoTranslator"];
 
 export const DEFAULT_SETTINGS = Object.freeze({
     provider: "deepseek",

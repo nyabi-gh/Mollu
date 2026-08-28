@@ -49,7 +49,7 @@ export class MessagePatch {
         if (!this._detector.needsTranslation(message.content)) return ret;
 
         const block = React.createElement(TranslationBlock, {
-            key: "kat-translation",
+            key: "mollu-translation",
             text: message.content,
             guildId,
             stores: this._stores,

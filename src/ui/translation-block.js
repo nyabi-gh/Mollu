@@ -89,7 +89,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         null,
         React.createElement("div", {
             ref: anchorRef,
-            className: "kat-translation__anchor",
+            className: "mollu-translation__anchor",
             "aria-hidden": "true",
         }),
         renderBody(status, result, { showPending, showErrors, stores, guildId }),
@@ -102,23 +102,27 @@ function renderBody(status, result, { showPending, showErrors, stores, guildId }
         return showPending
             ? React.createElement(
                   "div",
-                  { className: "kat-translation kat-translation--pending" },
+                  { className: "mollu-translation mollu-translation--pending" },
                   "번역 중…",
               )
             : null;
     }
     if (status === "error") {
         return showErrors
-            ? React.createElement("div", { className: "kat-translation kat-translation--error" }, "번역 실패")
+            ? React.createElement(
+                  "div",
+                  { className: "mollu-translation mollu-translation--error" },
+                  "번역 실패",
+              )
             : null;
     }
     return React.createElement(
         "div",
-        { className: "kat-translation" },
-        React.createElement("span", { className: "kat-translation__badge" }, "KO"),
+        { className: "mollu-translation" },
+        React.createElement("span", { className: "mollu-translation__badge" }, "KO"),
         React.createElement(
             "span",
-            { className: "kat-translation__text" },
+            { className: "mollu-translation__text" },
             ...renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId),
         ),
     );

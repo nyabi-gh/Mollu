@@ -34,7 +34,7 @@ function renderToken(token, stores, guildId, key) {
         const [, animated, name, id] = emoji;
         return React.createElement("img", {
             key,
-            className: "kat-translation__emoji",
+            className: "mollu-translation__emoji",
             src: `${EMOJI_CDN}/${id}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
             alt: `:${name}:`,
             title: `:${name}:`,
@@ -56,12 +56,12 @@ function renderToken(token, stores, guildId, key) {
         const formatted = formatTimestamp(Number(timestamp[1]), timestamp[2]);
         return formatted == null
             ? token
-            : React.createElement("span", { key, className: "kat-translation__mention" }, formatted);
+            : React.createElement("span", { key, className: "mollu-translation__mention" }, formatted);
     }
 
     const code = FENCED_CODE.exec(token) || INLINE_CODE.exec(token);
     if (code) {
-        return React.createElement("code", { key, className: "kat-translation__code" }, code[1]);
+        return React.createElement("code", { key, className: "mollu-translation__code" }, code[1]);
     }
 
     return token;
@@ -69,7 +69,7 @@ function renderToken(token, stores, guildId, key) {
 
 function mention(key, name, sigil, fallback) {
     if (!name) return fallback;
-    return React.createElement("span", { key, className: "kat-translation__mention" }, `${sigil}${name}`);
+    return React.createElement("span", { key, className: "mollu-translation__mention" }, `${sigil}${name}`);
 }
 
 // Discord's <t:unix:style> styles. Rendered with the viewer's own locale.

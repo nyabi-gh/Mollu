@@ -9,7 +9,7 @@ import { STYLES } from "./ui/styles.js";
 import { disconnectVisibility } from "./ui/visibility.js";
 import { logger } from "./lib/logger.js";
 
-export default class KoreanAutoTranslator {
+export default class Mollu {
     constructor(meta) {
         this._meta = meta;
         this._settings = new Settings();

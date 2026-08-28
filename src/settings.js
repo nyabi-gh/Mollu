@@ -1,4 +1,4 @@
-import { NAME, DEFAULT_SETTINGS } from "./constants.js";
+import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
 import { logger } from "./lib/logger.js";
 
 /**
@@ -12,6 +12,9 @@ export class Settings {
         this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
         this._listeners = new Set();
+        // Settings carried over from a previous name only live under the old
+        // store until something writes them back.
+        if (!BdApi.Data.load(NAME, "settings")) this._persist();
     }
 
     get current() {
@@ -184,13 +187,25 @@ function fingerprint(key) {
 
 function safeLoad() {
     try {
-        const loaded = BdApi.Data.load(NAME, "settings");
+        const loaded = BdApi.Data.load(NAME, "settings") || loadLegacy();
         logger.info("설정 로드:", loaded ? `apiKey=${!!loaded.apiKey}` : "저장된 값 없음");
         return loaded || {};
     } catch (e) {
         logger.error("설정 로드 실패", e);
         return {};
     }
+}
+
+/** Settings saved under a previous plugin name, carried over once. */
+function loadLegacy() {
+    for (const legacy of LEGACY_NAMES) {
+        const stored = BdApi.Data.load(legacy, "settings");
+        if (stored) {
+            logger.info(`이전 이름(${legacy})의 설정을 가져왔습니다`);
+            return stored;
+        }
+    }
+    return null;
 }
 
 function parseGuildIds(raw) {

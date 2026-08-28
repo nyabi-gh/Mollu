@@ -1,6 +1,8 @@
-# KoreanAutoTranslator
+# Mollu
 
 지정한 Discord 서버에서 **한국어가 아닌 메시지**를 AI API로 자동 번역해 원문 아래에 붙여 보여 주는 BetterDiscord 플러그인입니다.
+
+> 이전 이름은 `KoreanAutoTranslator` 입니다. 저장돼 있던 API 키·대상 서버·번역 캐시는 첫 실행 때 자동으로 인계됩니다. 다만 **`plugins` 폴더에 남아 있는 `KoreanAutoTranslator.plugin.js` 는 지워야 합니다.** 두 파일이 함께 있으면 플러그인이 두 벌 로드됩니다.
 
 - 대상 서버는 설정에서 서버 ID 목록으로 지정합니다.
 - 한글 비율이 임계값 이상인 메시지는 번역하지 않습니다.
@@ -26,7 +28,7 @@
 
 ```sh
 npm install
-npm run build          # dist/KoreanAutoTranslator.plugin.js 생성
+npm run build          # dist/Mollu.plugin.js 생성
 npm run deploy         # 빌드 후 BetterDiscord plugins 폴더로 복사
 npm run watch          # 소스 변경 감지 → 자동 빌드 + 복사
 npm test               # 빌드 후 토크나이저 / 언어 판정 / 번들 로드 스모크 체크
@@ -36,12 +38,12 @@ npm run format         # Prettier 적용 (검사만 하려면 npm run format:che
 
 > **Windows**: 명령은 동일합니다. PowerShell에서 `npm install` → `npm run deploy` 를 실행하면 `%AppData%\BetterDiscord\plugins` 로 자동 복사됩니다 (`scripts/build.mjs` 가 OS를 감지). `package.json` 스크립트에 셸 종속 코드는 없습니다.
 
-`dist/` 는 커밋하지 않습니다. 배포 시에는 `npm run build` 결과물인 `dist/KoreanAutoTranslator.plugin.js` 한 파일만 배포하면 됩니다.
+`dist/` 는 커밋하지 않습니다. 배포 시에는 `npm run build` 결과물인 `dist/Mollu.plugin.js` 한 파일만 배포하면 됩니다.
 
 ## 설치
 
 1. `npm run build`
-2. `dist/KoreanAutoTranslator.plugin.js` 를 BetterDiscord `plugins` 폴더에 넣습니다.
+2. `dist/Mollu.plugin.js` 를 BetterDiscord `plugins` 폴더에 넣습니다.
    - Windows: `%AppData%\BetterDiscord\plugins`
    - macOS: `~/Library/Application Support/BetterDiscord/plugins`
    - Linux: `~/.config/BetterDiscord/plugins`
@@ -100,7 +102,7 @@ scripts/
 
 ## 알려진 제약
 
-- **`MessageContent` 탐색이 가장 취약한 부분입니다.** Discord가 내부 구조를 바꾸면 번역이 표시되지 않을 수 있습니다. 그 경우 콘솔(Ctrl+Shift+I)에 `[KoreanAutoTranslator] MessageContent ...` 로그가 없거나 에러 토스트가 뜹니다. `src/discord.js` 의 `markerSets` 만 고치면 되도록 분리해 두었습니다.
+- **`MessageContent` 탐색이 가장 취약한 부분입니다.** Discord가 내부 구조를 바꾸면 번역이 표시되지 않을 수 있습니다. 그 경우 콘솔(Ctrl+Shift+I)에 `[Mollu] MessageContent ...` 로그가 없거나 에러 토스트가 뜹니다. `src/discord.js` 의 `markerSets` 만 고치면 되도록 분리해 두었습니다.
 - 스트리밍 응답은 사용하지 않습니다. 번역은 완료 후 한 번에 표시됩니다.
 - 메시지 수정 시 새 내용으로 다시 번역합니다(이전 캐시는 남습니다).
 
@@ -112,8 +114,8 @@ scripts/
 
 번역 결과는 **디스크에 평문으로 캐시됩니다.** 원문(치환된 형태)과 번역문 쌍이 최대 3000개까지 BetterDiscord 데이터 폴더에 남습니다.
 
-- Windows: `%AppData%\BetterDiscord\data\<release>\KoreanAutoTranslator\`
-- macOS: `~/Library/Application Support/BetterDiscord/data/<release>/KoreanAutoTranslator/`
-- Linux: `~/.config/BetterDiscord/data/<release>/KoreanAutoTranslator/`
+- Windows: `%AppData%\BetterDiscord\data\<release>\Mollu\`
+- macOS: `~/Library/Application Support/BetterDiscord/data/<release>/Mollu/`
+- Linux: `~/.config/BetterDiscord/data/<release>/Mollu/`
 
-API 키도 같은 위치에 평문으로 저장되며, 설정 패널에서도 가려지지 않은 채 표시됩니다. **화면 공유 중에는 설정 패널을 열지 마세요.** 캐시와 키를 지우려면 플러그인을 비활성화한 뒤 위 폴더의 `KoreanAutoTranslator` 디렉터리를 삭제하면 됩니다.
+API 키도 같은 위치에 평문으로 저장되며, 설정 패널에서도 가려지지 않은 채 표시됩니다. **화면 공유 중에는 설정 패널을 열지 마세요.** 캐시와 키를 지우려면 플러그인을 비활성화한 뒤 위 폴더의 `Mollu` 디렉터리를 삭제하면 됩니다.

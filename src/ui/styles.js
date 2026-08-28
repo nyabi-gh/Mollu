@@ -1,5 +1,5 @@
 export const STYLES = `
-.kat-translation__anchor {
+.mollu-translation__anchor {
     display: block;
     height: 0;
     margin: 0;
@@ -7,7 +7,7 @@ export const STYLES = `
     pointer-events: none;
     overflow-anchor: none;
 }
-.kat-translation {
+.mollu-translation {
     /* A translation appears after the message is laid out. Excluding it from
        scroll anchoring lets the browser hold on to real message content
        instead, so arriving translations do not shove the viewport around. */
@@ -20,7 +20,7 @@ export const STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
 }
-.kat-translation__badge {
+.mollu-translation__badge {
     display: inline-block;
     margin-right: 6px;
     padding: 0 5px;
@@ -32,20 +32,20 @@ export const STYLES = `
     color: var(--text-muted, #949ba4);
     background: var(--background-modifier-accent, rgba(148, 155, 164, 0.16));
 }
-.kat-translation__emoji {
+.mollu-translation__emoji {
     width: 1.375em;
     height: 1.375em;
     margin: 0 1px;
     object-fit: contain;
     vertical-align: -0.3em;
 }
-.kat-translation__mention {
+.mollu-translation__mention {
     padding: 0 2px;
     border-radius: 3px;
     color: var(--mention-foreground, #c9cdfb);
     background: var(--mention-background, rgba(88, 101, 242, 0.24));
 }
-.kat-translation__code {
+.mollu-translation__code {
     padding: 0 3px;
     border-radius: 3px;
     font-family: var(--font-code, monospace);
@@ -53,11 +53,11 @@ export const STYLES = `
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
 }
-.kat-translation--pending {
+.mollu-translation--pending {
     opacity: 0.6;
     font-style: italic;
 }
-.kat-translation--error {
+.mollu-translation--error {
     color: var(--text-danger, #f23f43);
 }
 `;
