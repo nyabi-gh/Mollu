@@ -1,6 +1,7 @@
 import { React } from "../discord.js";
 import { renderSegments } from "./rich-text.js";
 import { observeVisibility } from "./visibility.js";
+import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
 
 // A message is only translated once it has actually been in the viewport for
 // this long. Scrolling straight past a message never triggers a request.
@@ -26,6 +27,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         let visible = false;
         let dwell = null;
         let running = false;
+        let rateLimitRetries = 0;
 
         const known = translator.peek(text);
         if (known.status === "done" || known.status === "skip") {
@@ -50,6 +52,20 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                 .then((res) => {
                     if (!alive) return;
                     running = false;
+
+                    // Rate limited. The message is still on screen, so nothing
+                    // else will re-trigger it: re-queue once the window passes.
+                    if (res.status === "retry") {
+                        setResult({ status: "idle" });
+                        if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+                            rateLimitRetries += 1;
+                            dwell = setTimeout(run, res.after + jitter());
+                        } else {
+                            setResult({ status: "error", message: "rate limited" });
+                        }
+                        return;
+                    }
+
                     // Dropped while queued — wait for the message to come back.
                     setResult(res.status === "unknown" ? { status: "idle" } : res);
                 });
@@ -96,8 +112,15 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
     );
 }
 
+// Spreads the retries of many blocks waking at once, so they do not all hit the
+// provider on the same tick and trip the limit again.
+function jitter() {
+    return Math.floor(Math.random() * 2000);
+}
+
 function renderBody(status, result, { showPending, showErrors, stores, guildId }) {
     if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
+    if (status === "retry") return null;
     if (status === "pending") {
         return showPending
             ? React.createElement(

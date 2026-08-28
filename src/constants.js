@@ -47,6 +47,14 @@ export const ERROR_TOAST_COOLDOWN_MS = 15000;
 // Per-request timeout handed to BdApi.Net.fetch (its own default is 8s).
 export const REQUEST_TIMEOUT_MS = 30000;
 
+// A 429 pauses every request, not just the one that was rejected: the limit is
+// per account, so retrying the others immediately just burns more quota. Used
+// when the response does not say how long to wait.
+export const RATE_LIMIT_PAUSE_MS = 20000;
+export const MAX_RATE_LIMIT_PAUSE_MS = 120000;
+// How many times one message re-queues itself after being rate limited.
+export const MAX_RATE_LIMIT_RETRIES = 3;
+
 // After a failed translation the same text is not retried for this long.
 // Without it every re-render of a message re-issues the request.
 export const FAILURE_BACKOFF_MS = 60000;

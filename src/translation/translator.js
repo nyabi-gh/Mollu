@@ -2,11 +2,16 @@ import { mask, unmaskSegments } from "./tokenizer.js";
 import { TranslationCache } from "./cache.js";
 import { TaskQueue } from "./queue.js";
 import { getProvider } from "./providers/index.js";
-import { FAILURE_BACKOFF_MS, FAILURE_RECORD_LIMIT } from "../constants.js";
+import {
+    FAILURE_BACKOFF_MS,
+    FAILURE_RECORD_LIMIT,
+    RATE_LIMIT_PAUSE_MS,
+    MAX_RATE_LIMIT_PAUSE_MS,
+} from "../constants.js";
 import { logger } from "../lib/logger.js";
 
 /** @typedef {import("./tokenizer.js").Segment} Segment */
-/** @typedef {{status: "done", text: string, segments: Segment[]} | {status: "skip"} | {status: "error", message: string} | {status: "pending"} | {status: "unknown"}} TranslationResult */
+/** @typedef {{status: "done", text: string, segments: Segment[]} | {status: "skip"} | {status: "error", message: string} | {status: "pending"} | {status: "retry", after: number} | {status: "unknown"}} TranslationResult */
 
 const skip = () => ({ status: "skip" });
 const done = (text, segments) => ({ status: "done", text, segments });
@@ -31,13 +36,18 @@ export class Translator {
         this._inflight = new Map(); // masked key -> Promise<masked outcome>
         this._failures = new Map(); // masked key -> timestamp of last failure
         this._aborters = new Set();
+        this._pausedUntil = 0; // set by a 429; blocks every provider call
+        this._stopped = false;
     }
 
     start() {
+        this._stopped = false;
+        this._pausedUntil = 0;
         this._cache.load();
     }
 
     stop() {
+        this._stopped = true;
         this._queue.clear();
         for (const controller of this._aborters) {
             try {
@@ -87,7 +97,12 @@ export class Translator {
         let job = this._inflight.get(masked);
         if (!job) {
             job = this._queue
-                .run(() => {
+                .run(async () => {
+                    // A rate-limit pause is served here rather than by failing:
+                    // the message keeps its place instead of showing an error.
+                    await this._awaitResume();
+                    if (this._stopped) throw aborted();
+                    if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
                     if (hooks.onStart) hooks.onStart();
                     return this._callProvider(masked);
                 }, hooks.shouldRun)
@@ -113,6 +128,12 @@ export class Translator {
             .join("")
             .trim();
         return text ? done(text, trimEdges(segments)) : skip();
+    }
+
+    _awaitResume() {
+        const wait = this._pausedUntil - Date.now();
+        if (wait <= 0) return Promise.resolve();
+        return new Promise((resolve) => setTimeout(resolve, wait));
     }
 
     _isBackingOff(maskedKey) {
@@ -157,6 +178,16 @@ export class Translator {
         // failure: report it as un-answered so the caller can ask again.
         if (err && err.name === "SkippedError") return { status: "unknown" };
 
+        // 429 is a quota verdict on the account, not on this message. Pause
+        // everything for the window the server asked for and tell the caller to
+        // come back, so a burst does not turn into a wall of "번역 실패".
+        if (err && err.status === 429) {
+            const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
+            this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
+            logger.warn(`rate limited: ${Math.round(after / 1000)}초 후 재시도`);
+            return { status: "retry", after };
+        }
+
         this._rememberFailure(maskedKey);
         logger.warn("translate failed:", message);
         this._onError(err);
@@ -171,6 +202,18 @@ export class Translator {
             if (at < cutoff) this._failures.delete(key);
         }
     }
+}
+
+function aborted() {
+    const err = new Error("중지됨");
+    err.name = "AbortError";
+    return err;
+}
+
+function skipped() {
+    const err = new Error("건너뜀");
+    err.name = "SkippedError";
+    return err;
 }
 
 function normalize(value) {

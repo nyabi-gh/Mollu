@@ -44,6 +44,24 @@ export function normalizeBaseUrl(raw, fallback = "") {
     return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
+/**
+ * How long a rejected request asked us to wait, in ms; 0 when it did not say.
+ * Reads the standard Retry-After header, then google.rpc.RetryInfo, which is
+ * what the Gemini API returns inside a 429 payload.
+ */
+function retryAfterMs(res, body) {
+    const header = res.headers?.get?.("retry-after");
+    if (header) {
+        const seconds = Number(header);
+        if (Number.isFinite(seconds)) return Math.max(0, seconds * 1000);
+        const at = Date.parse(header);
+        if (!Number.isNaN(at)) return Math.max(0, at - Date.now());
+    }
+
+    const retryDelay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(body || "");
+    return retryDelay ? Math.round(Number(retryDelay[1]) * 1000) : 0;
+}
+
 function withDeadline(signal, timeout) {
     if (!(timeout > 0) || typeof AbortSignal?.timeout !== "function") return signal;
     const deadline = AbortSignal.timeout(timeout);
@@ -77,6 +95,7 @@ export async function postJson(url, { headers = {}, body, signal, timeout = REQU
         if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
         const err = new Error(`HTTP ${res.status}`);
         err.status = res.status;
+        err.retryAfterMs = retryAfterMs(res, text);
         throw err;
     }
 

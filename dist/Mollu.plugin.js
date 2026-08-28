@@ -61,6 +61,9 @@ var CACHE_KEY = "cache-v2";
 var LEGACY_CACHE_KEYS = ["cache"];
 var ERROR_TOAST_COOLDOWN_MS = 15e3;
 var REQUEST_TIMEOUT_MS = 3e4;
+var RATE_LIMIT_PAUSE_MS = 2e4;
+var MAX_RATE_LIMIT_PAUSE_MS = 12e4;
+var MAX_RATE_LIMIT_RETRIES = 3;
 var FAILURE_BACKOFF_MS = 6e4;
 var FAILURE_RECORD_LIMIT = 500;
 var MAX_OUTPUT_TOKENS = 4096;
@@ -118,6 +121,17 @@ function normalizeBaseUrl(raw, fallback = "") {
   }
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
+function retryAfterMs(res, body) {
+  const header = res.headers?.get?.("retry-after");
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds)) return Math.max(0, seconds * 1e3);
+    const at = Date.parse(header);
+    if (!Number.isNaN(at)) return Math.max(0, at - Date.now());
+  }
+  const retryDelay = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(body || "");
+  return retryDelay ? Math.round(Number(retryDelay[1]) * 1e3) : 0;
+}
 function withDeadline(signal, timeout) {
   if (!(timeout > 0) || typeof AbortSignal?.timeout !== "function") return signal;
   const deadline = AbortSignal.timeout(timeout);
@@ -142,6 +156,7 @@ async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIM
     if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
     const err = new Error(`HTTP ${res.status}`);
     err.status = res.status;
+    err.retryAfterMs = retryAfterMs(res, text);
     throw err;
   }
   if (!text) return null;
@@ -673,11 +688,16 @@ var Translator = class {
     this._inflight = /* @__PURE__ */ new Map();
     this._failures = /* @__PURE__ */ new Map();
     this._aborters = /* @__PURE__ */ new Set();
+    this._pausedUntil = 0;
+    this._stopped = false;
   }
   start() {
+    this._stopped = false;
+    this._pausedUntil = 0;
     this._cache.load();
   }
   stop() {
+    this._stopped = true;
     this._queue.clear();
     for (const controller of this._aborters) {
       try {
@@ -719,7 +739,10 @@ var Translator = class {
     }
     let job = this._inflight.get(masked);
     if (!job) {
-      job = this._queue.run(() => {
+      job = this._queue.run(async () => {
+        await this._awaitResume();
+        if (this._stopped) throw aborted();
+        if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
         if (hooks.onStart) hooks.onStart();
         return this._callProvider(masked);
       }, hooks.shouldRun).then(
@@ -738,6 +761,11 @@ var Translator = class {
     const segments = unmaskSegments(maskedValue, tokens);
     const text = segments.map((segment) => segment.value).join("").trim();
     return text ? done(text, trimEdges(segments)) : skip();
+  }
+  _awaitResume() {
+    const wait = this._pausedUntil - Date.now();
+    if (wait <= 0) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, wait));
   }
   _isBackingOff(maskedKey) {
     const failedAt = this._failures.get(maskedKey);
@@ -774,6 +802,12 @@ var Translator = class {
     const message = err && err.message || String(err);
     if (err && err.name === "AbortError") return error(message);
     if (err && err.name === "SkippedError") return { status: "unknown" };
+    if (err && err.status === 429) {
+      const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
+      this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
+      logger.warn(`rate limited: ${Math.round(after / 1e3)}초 후 재시도`);
+      return { status: "retry", after };
+    }
     this._rememberFailure(maskedKey);
     logger.warn("translate failed:", message);
     this._onError(err);
@@ -788,6 +822,16 @@ var Translator = class {
     }
   }
 };
+function aborted() {
+  const err = new Error("중지됨");
+  err.name = "AbortError";
+  return err;
+}
+function skipped() {
+  const err = new Error("건너뜀");
+  err.name = "SkippedError";
+  return err;
+}
 function normalize2(value) {
   return String(value).toLowerCase().replace(/[\s\p{P}\p{S}]/gu, "");
 }
@@ -1068,6 +1112,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     let visible = false;
     let dwell = null;
     let running = false;
+    let rateLimitRetries = 0;
     const known = translator.peek(text);
     if (known.status === "done" || known.status === "skip") {
       setResult(known);
@@ -1088,6 +1133,16 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       }).then((res) => {
         if (!alive) return;
         running = false;
+        if (res.status === "retry") {
+          setResult({ status: "idle" });
+          if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+            rateLimitRetries += 1;
+            dwell = setTimeout(run, res.after + jitter());
+          } else {
+            setResult({ status: "error", message: "rate limited" });
+          }
+          return;
+        }
         setResult(res.status === "unknown" ? { status: "idle" } : res);
       });
     };
@@ -1125,8 +1180,12 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     renderBody(status, result, { showPending, showErrors, stores, guildId })
   );
 }
+function jitter() {
+  return Math.floor(Math.random() * 2e3);
+}
 function renderBody(status, result, { showPending, showErrors, stores, guildId }) {
   if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
+  if (status === "retry") return null;
   if (status === "pending") {
     return showPending ? React.createElement(
       "div",

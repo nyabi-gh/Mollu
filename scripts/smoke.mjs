@@ -234,6 +234,44 @@ await checkAsync("translator: pending is reported on start, not on enqueue", asy
     }
 });
 
+await checkAsync("translator: a 429 pauses everything instead of failing", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(
+            JSON.stringify({
+                error: {
+                    code: 429,
+                    status: "RESOURCE_EXHAUSTED",
+                    details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "7s" }],
+                },
+            }),
+            { status: 429 },
+        );
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const result = await translator.translate("hello there");
+
+        assert.equal(result.status, "retry", "a quota verdict is not this message's failure");
+        assert.equal(result.after, 7000, "the server's retryDelay is honoured");
+        assert.ok(translator._pausedUntil > Date.now(), "every other request is held back");
+        assert.equal(translator._failures.size, 0, "a 429 must not enter the failure backoff");
+
+        // A second message must wait for the window rather than burn more quota.
+        const before = calls;
+        const pending = translator.translate("a different message");
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        assert.equal(calls, before, "no provider call while paused");
+
+        translator._pausedUntil = 0;
+        assert.equal((await pending).status, "retry");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 check("net: a plain-http base url is refused before the key is sent", () => {
     assert.throws(() => normalizeBaseUrl("http://evil.example"), /https/);
     assert.equal(normalizeBaseUrl("  https://api.deepseek.com/  "), "https://api.deepseek.com");
