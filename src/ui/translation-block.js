@@ -34,11 +34,13 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         }
         setResult({ status: "idle" });
 
-        const run = () => {
+        const run = (force) => {
             if (!alive || running) return;
             running = true;
+            if (force) rateLimitRetries = 0;
             translator
                 .translate(text, {
+                    ignoreBackoff: force === true,
                     // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
                     // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
                     // 커지면서 화면이 밀린다.
@@ -124,7 +126,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             guildId,
             autoTranslate,
             badge: badgeFor(settings.current.targetLanguage),
-            onTrigger: () => triggerRef.current?.(),
+            onTrigger: () => triggerRef.current?.(true),
         }),
     );
 }
@@ -156,10 +158,16 @@ function renderBody(status, result, ctx) {
             : null;
     }
     if (status === "error") {
+        // 실패는 막다른 길이면 안 된다. 눌러서 다시 시도할 수 있게 한다.
         return showErrors
             ? React.createElement(
-                  "div",
-                  { className: "mollu-translation mollu-translation--error" },
+                  "button",
+                  {
+                      type: "button",
+                      className: "mollu-translation mollu-translation--error",
+                      title: t("block.errorTitle", { message: result?.message || "" }),
+                      onClick: onTrigger,
+                  },
                   t("block.error"),
               )
             : null;

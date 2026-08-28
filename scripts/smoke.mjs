@@ -155,7 +155,7 @@ await checkAsync("queue: work whose caller lost interest is dropped, not run", a
 
 const { TranslationCache } = await import("../src/translation/cache.js");
 const { Translator } = await import("../src/translation/translator.js");
-const { CACHE_LIMIT, CACHE_KEY, NAME, LEGACY_NAMES } = await import("../src/constants.js");
+const { CACHE_LIMIT, CACHE_KEY, NAME, LEGACY_NAMES, TRANSIENT_RETRIES } = await import("../src/constants.js");
 
 check("cache: save() keeps the newest entries, not the oldest", () => {
     const saved = captureSave(() => {
@@ -198,8 +198,15 @@ await checkAsync("translator: a failed translation is not retried immediately", 
     try {
         const translator = new Translator({ settings: stubSettings() });
         assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal(calls, 1 + TRANSIENT_RETRIES, "a 5xx is retried before the user sees it");
+
+        const afterFirst = calls;
         assert.equal((await translator.translate("hello there")).status, "error");
-        assert.equal(calls, 1, "the second attempt must be served from the failure backoff");
+        assert.equal(calls, afterFirst, "the second attempt is served from the failure backoff");
+
+        // Clicking the failure has to get past that backoff.
+        assert.equal((await translator.translate("hello there", { ignoreBackoff: true })).status, "error");
+        assert.ok(calls > afterFirst, "an explicit retry bypasses the backoff");
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -290,6 +297,79 @@ await checkAsync("provider: a chain of thought never reaches the message list", 
         const cut = await new Translator({ settings: stubSettings() }).translate("hi there");
         assert.equal(cut.status, "error");
         assert.match(cut.message, /추론/);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: a configuration error is not retried", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ error: "bad model" }), { status: 400 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        assert.equal((await translator.translate("hello there")).status, "error");
+        assert.equal(calls, 1, "a 400 says the same thing every time");
+
+        // A missing key never reaches the network at all.
+        calls = 0;
+        const settings = stubSettings();
+        settings.current.apiKey = "";
+        assert.equal((await new Translator({ settings }).translate("hello there")).status, "error");
+        assert.equal(calls, 0);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("deepl: protects placeholders with its own ignore tags", async () => {
+    const previous = BdApi.Net.fetch;
+    let seen = null;
+    BdApi.Net.fetch = async (url, options) => {
+        seen = { url, options, body: JSON.parse(options.body) };
+        return new Response(
+            JSON.stringify({
+                translations: [{ detected_source_language: "EN", text: "안녕 <x>0</x> 3 &lt; 5" }],
+            }),
+            { status: 200 },
+        );
+    };
+    try {
+        const settings = stubSettings();
+        Object.assign(settings.current, { provider: "deepl", baseUrl: "", model: "" });
+        settings.current.apiKey = "abc:fx";
+
+        const result = await new Translator({ settings }).translate("hi <@1> 3 < 5");
+
+        assert.equal(seen.url, "https://api-free.deepl.com/v2/translate", "a :fx key uses the free host");
+        assert.equal(seen.options.headers.Authorization, "DeepL-Auth-Key abc:fx");
+        assert.equal(seen.body.target_lang, "KO");
+        assert.deepEqual(seen.body.ignore_tags, ["x"]);
+        assert.equal(seen.body.tag_handling, "xml");
+        // The placeholder became a tag DeepL is told to leave alone, and the
+        // bare "<" was escaped so the XML parse does not break on it.
+        assert.equal(seen.body.text[0], "hi <x>0</x> 3 &lt; 5");
+        assert.equal(result.text, "안녕 <@1> 3 < 5");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("deepl: a pro key is sent to the pro host", async () => {
+    const previous = BdApi.Net.fetch;
+    let url = null;
+    BdApi.Net.fetch = async (requested) => {
+        url = requested;
+        return new Response(JSON.stringify({ translations: [{ text: "안녕" }] }), { status: 200 });
+    };
+    try {
+        const settings = stubSettings();
+        Object.assign(settings.current, { provider: "deepl", baseUrl: "", apiKey: "no-suffix-key" });
+        await new Translator({ settings }).translate("hello there");
+        assert.equal(url, "https://api.deepl.com/v2/translate");
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -525,6 +605,20 @@ check("settings: a target saved before the split becomes Brazilian", () => {
     }
 });
 
+check("settings: the model field is hidden for a backend without models", () => {
+    const settings = new Settings();
+    settings._set("provider", "deepl");
+    const ids = settings.buildPanel().__spec.settings.map((entry) => entry.id);
+    assert.ok(!ids.includes("model"), "DeepL has no model to choose");
+    assert.ok(ids.includes("apiKey") && ids.includes("targetLanguage"));
+
+    settings._set("provider", "gemini");
+    assert.ok(
+        settings.buildPanel().__spec.settings.some((entry) => entry.id === "model"),
+        "a backend with models still shows the field",
+    );
+});
+
 check("settings: switching provider swaps defaults and keeps both keys", () => {
     const settings = new Settings();
     settings._set("apiKey", "sk-deepseek");
@@ -677,6 +771,7 @@ function stubSettings() {
             apiKey: "test-key",
             model: "deepseek-v4-flash",
             baseUrl: "https://api.deepseek.com",
+            targetLanguage: "ko",
             maxChars: 3000,
             maxConcurrent: 2,
         },

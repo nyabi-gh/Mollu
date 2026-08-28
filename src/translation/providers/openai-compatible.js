@@ -1,4 +1,4 @@
-import { postJson, normalizeBaseUrl } from "../../lib/net.js";
+import { postJson, normalizeBaseUrl, configError } from "../../lib/net.js";
 import { MAX_OUTPUT_TOKENS, OUTPUT_TOKEN_HEADROOM } from "../../constants.js";
 import { systemPrompt } from "../prompt.js";
 import { getLanguage } from "../../languages.js";
@@ -9,7 +9,7 @@ import { t } from "../../i18n.js";
 // 다른 벤더에서는 400 이 된다.
 export async function chatCompletion({ text, settings, signal, defaults, extend }) {
     const apiKey = String(settings.apiKey || "").trim();
-    if (!apiKey) throw new Error(t("error.noApiKey"));
+    if (!apiKey) throw configError(t("error.noApiKey"));
 
     const base = normalizeBaseUrl(settings.baseUrl, defaults.baseUrl);
     const model = String(settings.model || defaults.model).trim();

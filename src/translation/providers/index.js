@@ -1,11 +1,13 @@
 import * as deepseek from "./deepseek.js";
 import * as gemini from "./gemini.js";
+import * as deepl from "./deepl.js";
 
 // OpenAI 호환 프로바이더를 추가하려면 id, label, defaults, translate 를 내보내는
 // 형제 모듈을 만들어 여기에 등록하면 된다.
 export const PROVIDERS = {
     [deepseek.id]: deepseek,
     [gemini.id]: gemini,
+    [deepl.id]: deepl,
 };
 
 export const DEFAULT_PROVIDER = deepseek.id;

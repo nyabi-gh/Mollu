@@ -75,6 +75,17 @@ export const STYLES = `
     font-style: italic;
 }
 .mollu-translation--error {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+    text-align: left;
     color: var(--text-danger, #f23f43);
+    cursor: pointer;
+}
+.mollu-translation--error:hover {
+    text-decoration: underline;
 }
 `;

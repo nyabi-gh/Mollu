@@ -116,13 +116,18 @@ export class Settings {
                     value: v.targetLanguage,
                     options: LANGUAGE_OPTIONS,
                 },
-                {
-                    type: "text",
-                    id: "model",
-                    name: t("settings.model"),
-                    note: t(`modelHint.${v.provider}`),
-                    value: v.model,
-                },
+                // DeepL 처럼 모델을 고르지 않는 백엔드에서는 칸 자체를 숨긴다.
+                ...(getProvider(v.provider).usesModel === false
+                    ? []
+                    : [
+                          {
+                              type: "text",
+                              id: "model",
+                              name: t("settings.model"),
+                              note: t(`modelHint.${v.provider}`),
+                              value: v.model,
+                          },
+                      ]),
                 {
                     type: "text",
                     id: "baseUrl",

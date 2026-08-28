@@ -5,6 +5,8 @@ const STRINGS = {
     en: {
         "block.pending": "Translating…",
         "block.error": "Translation failed",
+        "block.errorTitle": "{message} — click to try again",
+        "error.retryLater": "Waiting before trying again",
         "block.trigger": "Translate",
 
         "toast.outdatedBd": "BetterDiscord is out of date; API requests may be blocked. Please update.",
@@ -20,6 +22,8 @@ const STRINGS = {
         "error.badProtocol": "Unsupported protocol: {protocol}",
         "error.insecureUrl": "An http:// address sends the API key in the clear. Use https://.",
         "error.rateLimited": "Rate limited; retry delayed",
+        "error.unsupportedLanguage": "{provider} cannot translate into {language}",
+        "error.quotaExceeded": "The API key's translation quota is used up",
 
         "settings.provider": "Translation backend",
         "settings.provider.note":
@@ -55,6 +59,8 @@ const STRINGS = {
 
         "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
+        "keySource.deepl":
+            "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
         "modelHint.deepseek": "e.g. deepseek-v4-flash (cheap), deepseek-v4-pro (higher quality)",
         "modelHint.gemini":
             "e.g. gemini-3.1-flash-lite (default, ~1s). gemma-4-* reasons and cannot be told not to, so it takes 9-12s and returns its reasoning instead of a translation.",
@@ -63,6 +69,8 @@ const STRINGS = {
     ko: {
         "block.pending": "번역 중…",
         "block.error": "번역 실패",
+        "block.errorTitle": "{message} — 클릭하면 다시 시도합니다",
+        "error.retryLater": "재시도를 기다리는 중",
         "block.trigger": "번역",
 
         "toast.outdatedBd":
@@ -79,6 +87,8 @@ const STRINGS = {
         "error.badProtocol": "지원하지 않는 프로토콜입니다: {protocol}",
         "error.insecureUrl": "http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.",
         "error.rateLimited": "한도 초과로 재시도를 미루는 중",
+        "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
+        "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
 
         "settings.provider": "번역 백엔드",
         "settings.provider.note":
@@ -113,6 +123,8 @@ const STRINGS = {
 
         "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+        "keySource.deepl":
+            "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
         "modelHint.deepseek": "예: deepseek-v4-flash(저렴), deepseek-v4-pro(고품질)",
         "modelHint.gemini":
             "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",

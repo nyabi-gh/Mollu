@@ -48,6 +48,11 @@ export const RATE_LIMIT_PAUSE_MS = 20000;
 export const MAX_RATE_LIMIT_PAUSE_MS = 120000;
 export const MAX_RATE_LIMIT_RETRIES = 3;
 
+// 네트워크 오류나 5xx 처럼 다시 하면 될 법한 실패는 사용자에게 보이기 전에
+// 이만큼 다시 시도한다. 400/401 같은 설정 오류는 재시도해도 같은 답이라 제외.
+export const TRANSIENT_RETRIES = 2;
+export const TRANSIENT_RETRY_DELAY_MS = 1500;
+
 // 이 시간 동안 같은 텍스트를 재요청하지 않는다. 없으면 메시지가 다시 렌더될
 // 때마다 요청이 나간다.
 export const FAILURE_BACKOFF_MS = 60000;

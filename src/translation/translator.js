@@ -7,6 +7,8 @@ import {
     FAILURE_RECORD_LIMIT,
     RATE_LIMIT_PAUSE_MS,
     MAX_RATE_LIMIT_PAUSE_MS,
+    TRANSIENT_RETRIES,
+    TRANSIENT_RETRY_DELAY_MS,
 } from "../constants.js";
 import { t } from "../i18n.js";
 import { logger } from "../lib/logger.js";
@@ -84,9 +86,9 @@ export class Translator {
         // 캐시하지 않는다. maxChars 에 따라 달라지는 판정이라, 설정을 올리면
         // 다음 렌더에서 통과해야 한다.
         if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
-        if (this._isBackingOff(key)) {
-            return Promise.resolve(error(t("error.rateLimited")));
-        }
+        // 사용자가 실패 표시를 눌러 다시 시도하는 경우 백오프를 건너뛴다.
+        if (hooks.ignoreBackoff) this._failures.delete(key);
+        else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
 
         let job = this._inflight.get(key);
         if (!job) {
@@ -98,7 +100,7 @@ export class Translator {
                     if (this._stopped) throw aborted();
                     if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
                     if (hooks.onStart) hooks.onStart();
-                    return this._callProvider(masked);
+                    return this._callWithRetries(masked);
                 }, hooks.shouldRun)
                 .then(
                     (raw) => this._resolveSuccess(key, masked, raw),
@@ -123,10 +125,22 @@ export class Translator {
         return text ? done(text, trimEdges(segments)) : skip();
     }
 
+    // 일시적인 실패는 사용자에게 보이기 전에 몇 번 더 해 본다.
+    async _callWithRetries(maskedText) {
+        for (let attempt = 0; ; attempt += 1) {
+            try {
+                return await this._callProvider(maskedText);
+            } catch (err) {
+                if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
+                logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
+                await sleep(TRANSIENT_RETRY_DELAY_MS * (attempt + 1));
+            }
+        }
+    }
+
     _awaitResume() {
         const wait = this._pausedUntil - Date.now();
-        if (wait <= 0) return Promise.resolve();
-        return new Promise((resolve) => setTimeout(resolve, wait));
+        return wait > 0 ? sleep(wait) : Promise.resolve();
     }
 
     _isBackingOff(maskedKey) {
@@ -194,6 +208,18 @@ export class Translator {
             if (at < cutoff) this._failures.delete(key);
         }
     }
+}
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 429 는 전역 일시정지로 따로 처리하므로 여기서는 제외한다.
+function isTransient(err) {
+    if (!err || err.name === "AbortError" || err.name === "SkippedError") return false;
+    if (err.name === "ConfigError") return false;
+    if (err.status === undefined) return true;
+    return err.status === 408 || err.status >= 500;
 }
 
 function aborted() {

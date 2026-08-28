@@ -64,6 +64,8 @@ var REQUEST_TIMEOUT_MS = 3e4;
 var RATE_LIMIT_PAUSE_MS = 2e4;
 var MAX_RATE_LIMIT_PAUSE_MS = 12e4;
 var MAX_RATE_LIMIT_RETRIES = 3;
+var TRANSIENT_RETRIES = 2;
+var TRANSIENT_RETRY_DELAY_MS = 1500;
 var FAILURE_BACKOFF_MS = 6e4;
 var FAILURE_RECORD_LIMIT = 500;
 var MAX_OUTPUT_TOKENS = 4096;
@@ -98,6 +100,8 @@ var STRINGS = {
   en: {
     "block.pending": "Translating…",
     "block.error": "Translation failed",
+    "block.errorTitle": "{message} — click to try again",
+    "error.retryLater": "Waiting before trying again",
     "block.trigger": "Translate",
     "toast.outdatedBd": "BetterDiscord is out of date; API requests may be blocked. Please update.",
     "toast.noMessageContent": "Could not find the message component. Check the console log.",
@@ -111,6 +115,8 @@ var STRINGS = {
     "error.badProtocol": "Unsupported protocol: {protocol}",
     "error.insecureUrl": "An http:// address sends the API key in the clear. Use https://.",
     "error.rateLimited": "Rate limited; retry delayed",
+    "error.unsupportedLanguage": "{provider} cannot translate into {language}",
+    "error.quotaExceeded": "The API key's translation quota is used up",
     "settings.provider": "Translation backend",
     "settings.provider.note": "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately. The fields below only refresh after you close and reopen this panel.",
     "settings.apiKey": "{provider} API key",
@@ -138,6 +144,7 @@ var STRINGS = {
     "settings.showErrors": "Show translation failures",
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
+    "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
     "modelHint.deepseek": "e.g. deepseek-v4-flash (cheap), deepseek-v4-pro (higher quality)",
     "modelHint.gemini": "e.g. gemini-3.1-flash-lite (default, ~1s). gemma-4-* reasons and cannot be told not to, so it takes 9-12s and returns its reasoning instead of a translation.",
     "language.auto": "Match Discord"
@@ -145,6 +152,8 @@ var STRINGS = {
   ko: {
     "block.pending": "번역 중…",
     "block.error": "번역 실패",
+    "block.errorTitle": "{message} — 클릭하면 다시 시도합니다",
+    "error.retryLater": "재시도를 기다리는 중",
     "block.trigger": "번역",
     "toast.outdatedBd": "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
     "toast.noMessageContent": "메시지 컴포넌트를 찾지 못했습니다. 콘솔 로그를 확인하세요.",
@@ -158,6 +167,8 @@ var STRINGS = {
     "error.badProtocol": "지원하지 않는 프로토콜입니다: {protocol}",
     "error.insecureUrl": "http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.",
     "error.rateLimited": "한도 초과로 재시도를 미루는 중",
+    "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
+    "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
     "settings.provider": "번역 백엔드",
     "settings.provider.note": "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다. 아래 칸의 표시는 설정 창을 닫았다 열어야 갱신됩니다.",
     "settings.apiKey": "{provider} API 키",
@@ -185,6 +196,7 @@ var STRINGS = {
     "settings.showErrors": "번역 실패 시 표시",
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+    "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
     "modelHint.deepseek": "예: deepseek-v4-flash(저렴), deepseek-v4-pro(고품질)",
     "modelHint.gemini": "예: gemini-3.1-flash-lite(기본·약 1초). gemma-4-* 는 추론을 끌 수 없어 9~12초가 걸리고 번역문 대신 추론이 나옵니다.",
     "language.auto": "Discord 설정에 맞춤"
@@ -222,6 +234,11 @@ function resolveFetch() {
 function hasNativeFetch() {
   return typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function";
 }
+function configError(message) {
+  const err = new Error(message);
+  err.name = "ConfigError";
+  return err;
+}
 var LOOPBACK_HOSTS = /* @__PURE__ */ new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 function normalizeBaseUrl(raw, fallback = "") {
   const input = String(raw ?? "").trim() || String(fallback);
@@ -230,13 +247,13 @@ function normalizeBaseUrl(raw, fallback = "") {
   try {
     url = new URL(withScheme);
   } catch {
-    throw new Error(t("error.badBaseUrl", { url: input }));
+    throw configError(t("error.badBaseUrl", { url: input }));
   }
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error(t("error.badProtocol", { protocol: url.protocol }));
+    throw configError(t("error.badProtocol", { protocol: url.protocol }));
   }
   if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-    throw new Error(t("error.insecureUrl"));
+    throw configError(t("error.insecureUrl"));
   }
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
@@ -356,11 +373,11 @@ function combine(...patterns) {
 }
 
 // src/translation/providers/openai-compatible.js
-async function chatCompletion({ text, settings, signal, defaults: defaults3, extend: extend3 }) {
+async function chatCompletion({ text, settings, signal, defaults: defaults4, extend: extend3 }) {
   const apiKey = String(settings.apiKey || "").trim();
-  if (!apiKey) throw new Error(t("error.noApiKey"));
-  const base = normalizeBaseUrl(settings.baseUrl, defaults3.baseUrl);
-  const model = String(settings.model || defaults3.model).trim();
+  if (!apiKey) throw configError(t("error.noApiKey"));
+  const base = normalizeBaseUrl(settings.baseUrl, defaults4.baseUrl);
+  const model = String(settings.model || defaults4.model).trim();
   const body = {
     model,
     messages: [
@@ -442,10 +459,92 @@ function extend2(body, { model }) {
   if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
 }
 
+// src/translation/providers/deepl.js
+var deepl_exports = {};
+__export(deepl_exports, {
+  defaults: () => defaults3,
+  id: () => id3,
+  label: () => label3,
+  translate: () => translate3,
+  usesModel: () => usesModel
+});
+var id3 = "deepl";
+var label3 = "DeepL";
+var usesModel = false;
+var FREE_BASE = "https://api-free.deepl.com";
+var PRO_BASE = "https://api.deepl.com";
+var defaults3 = Object.freeze({ model: "", baseUrl: FREE_BASE });
+var TARGET_LANG = {
+  ko: "KO",
+  en: "EN-US",
+  ja: "JA",
+  zh: "ZH-HANS",
+  es: "ES",
+  fr: "FR",
+  de: "DE",
+  "pt-BR": "PT-BR",
+  "pt-PT": "PT-PT",
+  ru: "RU",
+  vi: "VI",
+  th: "TH",
+  id: "ID",
+  ar: "AR",
+  hi: "HI"
+};
+async function translate3({ text, settings, signal }) {
+  const apiKey = String(settings.apiKey || "").trim();
+  if (!apiKey) throw configError(t("error.noApiKey"));
+  const targetLang = TARGET_LANG[settings.targetLanguage];
+  if (!targetLang) {
+    throw configError(
+      t("error.unsupportedLanguage", {
+        language: getLanguage(settings.targetLanguage).label,
+        provider: label3
+      })
+    );
+  }
+  let json;
+  try {
+    json = await postJson(`${endpoint(apiKey, settings.baseUrl)}/v2/translate`, {
+      headers: { Authorization: `DeepL-Auth-Key ${apiKey}` },
+      signal,
+      body: {
+        text: [protect(text)],
+        target_lang: targetLang,
+        tag_handling: "xml",
+        ignore_tags: ["x"],
+        preserve_formatting: true
+      }
+    });
+  } catch (err) {
+    if (err && err.status === 456) throw configError(t("error.quotaExceeded"));
+    throw err;
+  }
+  const output = json?.translations?.[0]?.text;
+  if (typeof output !== "string" || !output.trim()) throw new Error(t("error.emptyResponse"));
+  return restore(output).trim();
+}
+function endpoint(apiKey, baseUrl) {
+  const base = normalizeBaseUrl(baseUrl, FREE_BASE);
+  const isFreeKey = apiKey.endsWith(":fx");
+  if (!isFreeKey && base === FREE_BASE) return PRO_BASE;
+  if (isFreeKey && base === PRO_BASE) return FREE_BASE;
+  return base;
+}
+var PLACEHOLDER = /【(\d+)】/g;
+var PROTECTED = /<x>(\d+)<\/x>/g;
+function protect(text) {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(PLACEHOLDER, (whole, index) => `<x>${index}</x>`);
+}
+function restore(text) {
+  return text.replace(PROTECTED, (whole, index) => `【${index}】`).replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
 // src/translation/providers/index.js
 var PROVIDERS = {
   [id]: deepseek_exports,
-  [id2]: gemini_exports
+  [id2]: gemini_exports,
+  [id3]: deepl_exports
 };
 var DEFAULT_PROVIDER = id;
 function getProvider(providerId) {
@@ -476,23 +575,23 @@ var Settings = class {
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
-  _set(id3, value) {
-    const next = coerce(id3, value, this._values[id3]);
-    if (next === KEEP || next === this._values[id3]) return;
-    if (id3 === "provider") {
+  _set(id4, value) {
+    const next = coerce(id4, value, this._values[id4]);
+    if (next === KEEP || next === this._values[id4]) return;
+    if (id4 === "provider") {
       this._stashProfile();
       this._values.provider = next;
       this._restoreProfile(next);
     } else {
-      this._values[id3] = next;
-      if (CREDENTIAL_FIELDS.has(id3)) this._stashProfile();
+      this._values[id4] = next;
+      if (CREDENTIAL_FIELDS.has(id4)) this._stashProfile();
     }
-    if (id3 === "guildIds") this._guildIdSet = parseGuildIds(next);
-    if (id3 === "uiLanguage") setLocale(next);
+    if (id4 === "guildIds") this._guildIdSet = parseGuildIds(next);
+    if (id4 === "uiLanguage") setLocale(next);
     this._persist();
     for (const listener of this._listeners) {
       try {
-        listener(id3, next);
+        listener(id4, next);
       } catch {
       }
     }
@@ -503,11 +602,11 @@ var Settings = class {
     this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
   }
   _restoreProfile(providerId) {
-    const { defaults: defaults3 } = getProvider(providerId);
+    const { defaults: defaults4 } = getProvider(providerId);
     const saved = this._values.profiles?.[providerId] ?? {};
     this._values.apiKey = saved.apiKey || "";
-    this._values.model = saved.model || defaults3.model;
-    this._values.baseUrl = saved.baseUrl || defaults3.baseUrl;
+    this._values.model = saved.model || defaults4.model;
+    this._values.baseUrl = saved.baseUrl || defaults4.baseUrl;
   }
   _persist() {
     try {
@@ -552,13 +651,16 @@ var Settings = class {
           value: v.targetLanguage,
           options: LANGUAGE_OPTIONS
         },
-        {
-          type: "text",
-          id: "model",
-          name: t("settings.model"),
-          note: t(`modelHint.${v.provider}`),
-          value: v.model
-        },
+        // DeepL 처럼 모델을 고르지 않는 백엔드에서는 칸 자체를 숨긴다.
+        ...getProvider(v.provider).usesModel === false ? [] : [
+          {
+            type: "text",
+            id: "model",
+            name: t("settings.model"),
+            note: t(`modelHint.${v.provider}`),
+            value: v.model
+          }
+        ],
         {
           type: "text",
           id: "baseUrl",
@@ -674,10 +776,10 @@ function normalize(values) {
   }
   return values;
 }
-function coerce(id3, value, previous) {
-  if (!TRIMMED_FIELDS.has(id3) || typeof value !== "string") return value;
+function coerce(id4, value, previous) {
+  if (!TRIMMED_FIELDS.has(id4) || typeof value !== "string") return value;
   const trimmed = value.trim();
-  if (id3 !== "apiKey") return trimmed;
+  if (id4 !== "apiKey") return trimmed;
   if (!trimmed) return previous ? KEEP : "";
   return trimmed === CLEAR_TOKEN ? "" : trimmed;
 }
@@ -940,9 +1042,8 @@ var Translator = class {
       return Promise.resolve(this._restore(this._cache.get(key), tokens));
     }
     if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
-    if (this._isBackingOff(key)) {
-      return Promise.resolve(error(t("error.rateLimited")));
-    }
+    if (hooks.ignoreBackoff) this._failures.delete(key);
+    else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
     let job = this._inflight.get(key);
     if (!job) {
       job = this._queue.run(async () => {
@@ -950,7 +1051,7 @@ var Translator = class {
         if (this._stopped) throw aborted();
         if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
         if (hooks.onStart) hooks.onStart();
-        return this._callProvider(masked);
+        return this._callWithRetries(masked);
       }, hooks.shouldRun).then(
         (raw) => this._resolveSuccess(key, masked, raw),
         (err) => this._resolveFailure(key, err)
@@ -967,10 +1068,21 @@ var Translator = class {
     const text = segments.map((segment) => segment.value).join("").trim();
     return text ? done(text, trimEdges(segments)) : skip();
   }
+  // 일시적인 실패는 사용자에게 보이기 전에 몇 번 더 해 본다.
+  async _callWithRetries(maskedText) {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this._callProvider(maskedText);
+      } catch (err) {
+        if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
+        logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
+        await sleep(TRANSIENT_RETRY_DELAY_MS * (attempt + 1));
+      }
+    }
+  }
   _awaitResume() {
     const wait = this._pausedUntil - Date.now();
-    if (wait <= 0) return Promise.resolve();
-    return new Promise((resolve) => setTimeout(resolve, wait));
+    return wait > 0 ? sleep(wait) : Promise.resolve();
   }
   _isBackingOff(maskedKey) {
     const failedAt = this._failures.get(maskedKey);
@@ -1026,6 +1138,15 @@ var Translator = class {
     }
   }
 };
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function isTransient(err) {
+  if (!err || err.name === "AbortError" || err.name === "SkippedError") return false;
+  if (err.name === "ConfigError") return false;
+  if (err.status === void 0) return true;
+  return err.status === 408 || err.status >= 500;
+}
 function aborted() {
   const err = new Error("stopped");
   err.name = "AbortError";
@@ -1202,11 +1323,11 @@ function renderSegments(segments, stores, guildId) {
 function renderToken(token, stores, guildId, key) {
   const emoji = CUSTOM_EMOJI.exec(token);
   if (emoji) {
-    const [, animated, name, id3] = emoji;
+    const [, animated, name, id4] = emoji;
     return React.createElement("img", {
       key,
       className: "mollu-translation__emoji",
-      src: `${EMOJI_CDN}/${id3}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
+      src: `${EMOJI_CDN}/${id4}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
       alt: `:${name}:`,
       title: `:${name}:`,
       draggable: false
@@ -1323,10 +1444,12 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       return void 0;
     }
     setResult({ status: "idle" });
-    const run = () => {
+    const run = (force) => {
       if (!alive || running) return;
       running = true;
+      if (force) rateLimitRetries = 0;
       translator.translate(text, {
+        ignoreBackoff: force === true,
         // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
         // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
         // 커지면서 화면이 밀린다.
@@ -1395,7 +1518,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       guildId,
       autoTranslate,
       badge: badgeFor(settings.current.targetLanguage),
-      onTrigger: () => triggerRef.current?.()
+      onTrigger: () => triggerRef.current?.(true)
     })
   );
 }
@@ -1422,8 +1545,13 @@ function renderBody(status, result, ctx) {
   }
   if (status === "error") {
     return showErrors ? React.createElement(
-      "div",
-      { className: "mollu-translation mollu-translation--error" },
+      "button",
+      {
+        type: "button",
+        className: "mollu-translation mollu-translation--error",
+        title: t("block.errorTitle", { message: result?.message || "" }),
+        onClick: onTrigger
+      },
       t("block.error")
     ) : null;
   }
@@ -1441,8 +1569,8 @@ function renderBody(status, result, ctx) {
 function useDisplaySettings(settings) {
   const [display, setDisplay] = React.useState(() => pickDisplay(settings));
   React.useEffect(() => {
-    const unsubscribe = settings.onChange((id3) => {
-      if (MIRRORED.has(id3)) setDisplay(pickDisplay(settings));
+    const unsubscribe = settings.onChange((id4) => {
+      if (MIRRORED.has(id4)) setDisplay(pickDisplay(settings));
     });
     return () => {
       unsubscribe();
@@ -1598,7 +1726,18 @@ var STYLES = `
     font-style: italic;
 }
 .mollu-translation--error {
+    display: block;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: inherit;
+    font-size: 0.95rem;
+    text-align: left;
     color: var(--text-danger, #f23f43);
+    cursor: pointer;
+}
+.mollu-translation--error:hover {
+    text-decoration: underline;
 }
 `;
 

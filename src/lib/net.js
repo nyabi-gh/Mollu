@@ -16,6 +16,13 @@ export function hasNativeFetch() {
     return typeof BdApi !== "undefined" && BdApi.Net && typeof BdApi.Net.fetch === "function";
 }
 
+// 다시 시도해도 같은 답이 오는 오류. 재시도 대상에서 제외된다.
+export function configError(message) {
+    const err = new Error(message);
+    err.name = "ConfigError";
+    return err;
+}
+
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 
 // 키를 보내기 전에 사용자가 입력한 base URL 을 검증한다. 키가 Authorization
@@ -28,13 +35,13 @@ export function normalizeBaseUrl(raw, fallback = "") {
     try {
         url = new URL(withScheme);
     } catch {
-        throw new Error(t("error.badBaseUrl", { url: input }));
+        throw configError(t("error.badBaseUrl", { url: input }));
     }
     if (url.protocol !== "https:" && url.protocol !== "http:") {
-        throw new Error(t("error.badProtocol", { protocol: url.protocol }));
+        throw configError(t("error.badProtocol", { protocol: url.protocol }));
     }
     if (url.protocol === "http:" && !LOOPBACK_HOSTS.has(url.hostname)) {
-        throw new Error(t("error.insecureUrl"));
+        throw configError(t("error.insecureUrl"));
     }
     return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
