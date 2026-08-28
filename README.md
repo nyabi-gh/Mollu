@@ -38,19 +38,21 @@ npm run format         # Prettier 적용 (검사만 하려면 npm run format:che
 
 > **Windows**: 명령은 동일합니다. PowerShell에서 `npm install` → `npm run deploy` 를 실행하면 `%AppData%\BetterDiscord\plugins` 로 자동 복사됩니다 (`scripts/build.mjs` 가 OS를 감지). `package.json` 스크립트에 셸 종속 코드는 없습니다.
 
-`dist/` 는 커밋하지 않습니다. 배포 시에는 `npm run build` 결과물인 `dist/Mollu.plugin.js` 한 파일만 배포하면 됩니다.
+빌드 산출물 `dist/Mollu.plugin.js` 는 **저장소에 커밋합니다.** 받는 쪽이 빌드 환경 없이 파일 하나만 받아 쓸 수 있어야 하기 때문입니다. 소스를 고쳤으면 `npm run build` 결과도 함께 커밋해야 하며, CI가 커밋된 파일과 소스가 일치하는지 검사합니다.
 
 ## 설치
 
-1. `npm run build`
-2. `dist/Mollu.plugin.js` 를 BetterDiscord `plugins` 폴더에 넣습니다.
-   - Windows: `%AppData%\BetterDiscord\plugins`
+플러그인은 의존성이 전혀 없는 **파일 하나**입니다. 쓰는 쪽에는 Node.js 도 npm 도 빌드도 필요 없습니다.
+
+1. `dist/Mollu.plugin.js` 를 받습니다. 빌드해 둔 파일이 저장소에 커밋되어 있습니다.
+2. BetterDiscord `plugins` 폴더에 넣습니다.
+   - Windows: `%AppData%\BetterDiscord\plugins` (탐색기 주소창에 그대로 붙여넣으면 열립니다)
    - macOS: `~/Library/Application Support/BetterDiscord/plugins`
    - Linux: `~/.config/BetterDiscord/plugins`
    - 또는 BetterDiscord 설정 → Plugins → **Open Plugins Folder**
-3. 플러그인 목록에서 활성화합니다.
+3. 플러그인 목록에서 **Mollu** 를 켭니다.
 
-`npm run deploy` 를 쓰면 2번을 자동으로 해 줍니다.
+소스를 고쳐서 쓸 때만 `npm run build`(빌드) 또는 `npm run deploy`(빌드 후 plugins 폴더로 자동 복사)가 필요하며, Windows·macOS·Linux 명령이 동일합니다.
 
 ## 설정
 
@@ -112,10 +114,10 @@ scripts/
 
 전송 전에 멘션·이모지·코드·링크·타임스탬프는 placeholder로 치환되므로 스노우플레이크 ID와 URL은 모델에 노출되지 않습니다.
 
-번역 결과는 **디스크에 평문으로 캐시됩니다.** 원문(치환된 형태)과 번역문 쌍이 최대 3000개까지 BetterDiscord 데이터 폴더에 남습니다.
+번역 결과는 **디스크에 평문으로 캐시됩니다.** 원문(치환된 형태)과 번역문 쌍이 최대 3000개까지 저장되며, **API 키도 같은 파일에 평문으로** 들어갑니다. 위치는 `plugins` 폴더 안입니다.
 
-- Windows: `%AppData%\BetterDiscord\data\<release>\Mollu\`
-- macOS: `~/Library/Application Support/BetterDiscord/data/<release>/Mollu/`
-- Linux: `~/.config/BetterDiscord/data/<release>/Mollu/`
+- Windows: `%AppData%\BetterDiscord\plugins\Mollu.config.json`
+- macOS: `~/Library/Application Support/BetterDiscord/plugins/Mollu.config.json`
+- Linux: `~/.config/BetterDiscord/plugins/Mollu.config.json`
 
-API 키도 같은 위치에 평문으로 저장되며, 설정 패널에서도 가려지지 않은 채 표시됩니다. **화면 공유 중에는 설정 패널을 열지 마세요.** 캐시와 키를 지우려면 플러그인을 비활성화한 뒤 위 폴더의 `Mollu` 디렉터리를 삭제하면 됩니다.
+설정 패널에서 키는 뒤 4자리만 보이지만 이 파일에는 전체가 남습니다. 캐시와 키를 지우려면 플러그인을 비활성화한 뒤 이 파일을 삭제하면 됩니다.

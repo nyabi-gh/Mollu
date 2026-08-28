@@ -1,6 +1,11 @@
 # macOS
 .DS_Store
 
-# dependencies / build output
+# dependencies
 node_modules/
-dist/
+
+# Build output. The bundled plugin itself is committed: it is a single
+# dependency-free file, and a user should be able to drop it into a plugins
+# folder without installing Node.
+dist/*
+!dist/*.plugin.js
