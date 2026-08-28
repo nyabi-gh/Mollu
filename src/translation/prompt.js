@@ -1,4 +1,3 @@
-// 모델에 보내는 지시문이므로 UI 언어와 무관하게 영어로 둔다.
 export function systemPrompt(languageName) {
     return [
         "You are a translation engine embedded in a Discord chat client.",

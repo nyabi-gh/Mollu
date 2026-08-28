@@ -3,7 +3,7 @@
  * @author Nyabi
  * @version 1.0.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
- * @source https://github.com/Nyabi/mollu
+ * @source https://github.com/nyattic/mollu
  */
 
 var __defProp = Object.defineProperty;
@@ -39,25 +39,16 @@ var DEFAULT_SETTINGS = Object.freeze({
   apiKey: "",
   model: "deepseek-v4-flash",
   baseUrl: "https://api.deepseek.com",
-  // 켜면 guildIds 를 무시하고 참여 중인 모든 서버를 대상으로 삼는다.
   allGuilds: false,
   guildIds: "",
-  // 번역 결과 언어. languages.js 의 code.
   targetLanguage: "ko",
-  // "auto" 면 Discord 로캘을 따른다.
   uiLanguage: "auto",
-  // 프로바이더별 {apiKey, model, baseUrl}. DEFAULT_SETTINGS 는 인스턴스 사이에
-  // 공유되므로, 제자리 수정이 조용히 새어 나가지 않도록 얼려 둔다.
   profiles: Object.freeze({}),
   skipThreshold: 30,
   maxChars: 3e3,
   maxConcurrent: 3,
   autoTranslate: true,
-  // 전역 단축키. BD 의 keybind 입력이 쓰는 event.key 이름 배열이고, 비우면
-  // 단축키를 쓰지 않는다. DEFAULT_SETTINGS 는 공유되므로 함께 얼려 둔다.
   hotkey: Object.freeze(["Control", "Shift", "T"]),
-  // 내가 보내는 메시지를 번역해서 내보낸다. 남에게 나가는 글을 고쳐 쓰므로
-  // 기본은 꺼짐이고, 대상 서버 안에서만 동작한다.
   translateOutgoing: false,
   outgoingLanguage: "en",
   outgoingHotkey: Object.freeze(["Control", "Shift", "O"]),
@@ -65,14 +56,16 @@ var DEFAULT_SETTINGS = Object.freeze({
   translateOwnMessages: false,
   showPending: true,
   showErrors: false,
-  // 켜면 번역하지 않은 메시지마다 그 사유를 콘솔에 남긴다.
-  debugLog: false
+  debugLog: false,
+  autoUpdate: true
 });
 var CACHE_LIMIT = 3e3;
 var CACHE_SAVE_DEBOUNCE_MS = 1e4;
 var CACHE_KEY = "cache-v3";
 var LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
 var ERROR_TOAST_COOLDOWN_MS = 15e3;
+var UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1e3;
+var UPDATE_CHECK_DELAY_MS = 15e3;
 var TRACE_LIMIT = 500;
 var REQUEST_TIMEOUT_MS = 3e4;
 var RATE_LIMIT_PAUSE_MS = 2e4;
@@ -129,6 +122,10 @@ var STRINGS = {
     "toast.outgoingOff": "Your messages will be sent as you type them",
     "toast.outgoingFailed": "Sent untranslated · {message}",
     "toast.cacheCleared": "Cleared {count} cached translations",
+    "toast.updated": "Updated to v{version}",
+    "toast.upToDate": "Already up to date (v{version})",
+    "toast.updateUnavailable": "No update source is configured for this build",
+    "toast.updateFailed": "Could not check for updates · {message}",
     "error.noApiKey": "No API key configured",
     "error.emptyResponse": "Empty response",
     "error.reasoningOnly": "Response was cut off while the model was still reasoning",
@@ -174,6 +171,11 @@ var STRINGS = {
     "settings.showPending": "Show while translating",
     "settings.showErrors": "Show translation failures",
     "settings.advanced": "Advanced",
+    "settings.autoUpdate": "Update automatically",
+    "settings.autoUpdate.note": "Checks the repository in the plugin's metadata every few hours and installs a newer build. BetterDiscord reloads the plugin on its own once the file is replaced.",
+    "settings.checkUpdate": "Updates",
+    "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
+    "settings.checkUpdate.action": "Check",
     "settings.clearCache": "Translation cache",
     "settings.clearCache.note": "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
     "settings.clearCache.action": "Clear",
@@ -208,6 +210,10 @@ var STRINGS = {
     "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
     "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
     "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
+    "toast.updated": "v{version} 로 업데이트했습니다",
+    "toast.upToDate": "이미 최신 버전입니다 (v{version})",
+    "toast.updateUnavailable": "이 빌드에는 업데이트 주소가 설정되어 있지 않습니다",
+    "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
     "error.noApiKey": "API 키가 설정되지 않았습니다",
     "error.emptyResponse": "빈 응답",
     "error.reasoningOnly": "모델이 추론하는 도중에 응답이 잘렸습니다",
@@ -253,6 +259,11 @@ var STRINGS = {
     "settings.showPending": "번역 중 표시",
     "settings.showErrors": "번역 실패 시 표시",
     "settings.advanced": "고급",
+    "settings.autoUpdate": "자동 업데이트",
+    "settings.autoUpdate.note": "플러그인 정보에 적힌 저장소를 몇 시간마다 확인해 더 새로운 빌드를 설치합니다. 파일이 바뀌면 BetterDiscord 가 알아서 다시 불러옵니다.",
+    "settings.checkUpdate": "업데이트",
+    "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
+    "settings.checkUpdate.action": "확인",
     "settings.clearCache": "번역 캐시",
     "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
     "settings.clearCache.action": "비우기",
@@ -342,6 +353,22 @@ function withDeadline(signal, timeout) {
   if (!signal) return deadline;
   return typeof AbortSignal.any === "function" ? AbortSignal.any([signal, deadline]) : signal;
 }
+async function getText(url, { signal, timeout = REQUEST_TIMEOUT_MS } = {}) {
+  const doFetch = resolveFetch();
+  if (!doFetch) throw new Error("no fetch implementation available");
+  const res = await doFetch(url, {
+    method: "GET",
+    signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
+    timeout
+  });
+  const ok = typeof res.ok === "boolean" ? res.ok : res.status >= 200 && res.status < 300;
+  if (!ok) {
+    const err = new Error(`HTTP ${res.status}`);
+    err.status = res.status;
+    throw err;
+  }
+  return res.text();
+}
 async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIMEOUT_MS } = {}) {
   const doFetch = resolveFetch();
   if (!doFetch) throw new Error("no fetch implementation available");
@@ -349,8 +376,6 @@ async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIM
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
     body: typeof body === "string" ? body : JSON.stringify(body),
-    // timeout 은 BdApi.Net.fetch 전용 옵션이라 표준 fetch 는 무시한다.
-    // 폴백 경로에는 signal 로 같은 마감을 건다.
     signal: hasNativeFetch() ? signal : withDeadline(signal, timeout),
     timeout
   });
@@ -514,9 +539,6 @@ __export(gemini_exports, {
 var id2 = "gemini";
 var label2 = "Google Gemini / Gemma";
 var defaults2 = Object.freeze({
-  // 실제 API 로 채팅 길이 메시지를 측정한 결과 약 1초에 번역문만 돌려준다.
-  // gemma-4-* 는 9~12초가 걸리고 예산을 전부 <thought> 블록에 써서 번역문이
-  // 나오지 않는데, 추론을 끌 수도 없다(아래 extend 참고).
   model: "gemini-3.1-flash-lite",
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
 });
@@ -731,7 +753,6 @@ function createStores() {
         return null;
       }
     },
-    // 아래 세 조회는 멘션 표시용이다. null 은 "모름" 이고 호출자는 원본 토큰으로 물러난다.
     userName(userId) {
       try {
         const user = UserStore?.getUser?.(userId);
@@ -799,7 +820,6 @@ function tryWithKey(filter) {
 
 // src/settings.js
 var Settings = class {
-  // actions 는 값이 아니라 동작인 패널 항목(캐시 비우기 등)이 부르는 콜백이다.
   constructor(actions = {}) {
     this._actions = actions;
     const stored = migrate(safeLoad());
@@ -840,7 +860,6 @@ var Settings = class {
       }
     }
   }
-  // 현재 프로바이더를 떠나기 전에 자격증명을 기억해 둔다.
   _stashProfile() {
     const { provider, apiKey, model, baseUrl } = this._values;
     this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
@@ -859,9 +878,6 @@ var Settings = class {
       logger.error("failed to save settings", e);
     }
   }
-  // BD 의 설정 항목은 defaultValue 로 한 번 초기화되는 비제어 컴포넌트라, 값만
-  // 바꿔 다시 렌더해도 화면은 그대로다. 프로바이더나 UI 언어처럼 패널 전체의
-  // 표시를 바꾸는 편집은 key 를 갈아 끼워 통째로 다시 마운트시킨다.
   buildPanel() {
     const settings = this;
     function MolluSettings() {
@@ -880,13 +896,7 @@ var Settings = class {
   _panelSpec() {
     const v = this._values;
     return {
-      // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
-      // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
-      // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
-      // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
-      // switch 에서 생기는 중복은 set() 이 무시한다.
       onChange: (_categoryId, settingId, value) => this.set(settingId, value),
-      // 패널은 프로바이더를 바꿀 때마다 다시 마운트되므로 접힘 상태를 밖에 둔다.
       onDrawerToggle: (id4, shown) => DRAWERS.set(id4, shown),
       getDrawerState: (id4, fallback) => DRAWERS.get(id4) ?? fallback,
       settings: withChangeHandlers(this, [
@@ -902,8 +912,6 @@ var Settings = class {
           type: "text",
           id: "apiKey",
           name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
-          // 저장된 키는 렌더하지 않는다. BD 텍스트 입력에는 마스킹
-          // 모드가 없고, 화면 공유 중 이 패널은 실제 노출 위험이다.
           note: v.apiKey ? t("settings.apiKey.note", { clear: CLEAR_TOKEN }) : t(`keySource.${v.provider}`),
           placeholder: v.apiKey ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) }) : "sk-...",
           value: ""
@@ -916,7 +924,6 @@ var Settings = class {
           value: v.targetLanguage,
           options: LANGUAGE_OPTIONS
         },
-        // DeepL 처럼 모델을 고르지 않는 백엔드에서는 칸 자체를 숨긴다.
         ...getProvider(v.provider).usesModel === false ? [] : [
           {
             type: "text",
@@ -946,7 +953,6 @@ var Settings = class {
           name: t("settings.guildIds"),
           note: t("settings.guildIds.note"),
           value: v.guildIds,
-          // 목록을 무시하는 동안에는 칸도 비활성으로 보여 준다.
           disableWith: "allGuilds"
         },
         {
@@ -1068,6 +1074,21 @@ var Settings = class {
               value: v.debugLog
             },
             {
+              type: "switch",
+              id: "autoUpdate",
+              name: t("settings.autoUpdate"),
+              note: t("settings.autoUpdate.note"),
+              value: v.autoUpdate
+            },
+            {
+              type: "button",
+              id: "checkUpdate",
+              name: t("settings.checkUpdate"),
+              note: t("settings.checkUpdate.note"),
+              children: t("settings.checkUpdate.action"),
+              onClick: () => this._actions.checkUpdate?.()
+            },
+            {
               type: "button",
               id: "clearCache",
               name: t("settings.clearCache"),
@@ -1149,27 +1170,16 @@ function parseGuildIds(raw) {
 
 // src/translation/tokenizer.js
 var PATTERNS = [
-  // 원문에 이미 들어 있는 리터럴 【n】. 먼저 마스킹해야 아래에서 생성하는
-  // placeholder 와 충돌하지 않는다.
   "\\u3010\\d+\\u3011",
   "```[\\s\\S]*?```",
-  // fenced code block
   "`[^`\\n]+`",
-  // inline code
   "<a?:\\w+:\\d+>",
-  // custom emoji
   "<@[!&]?\\d+>",
-  // user / role mention
   "<#\\d+>",
-  // channel mention
   "<id:[a-z]+>",
-  // guild navigation mention
   "<t:\\d+(?::[tTdDfFR])?>",
-  // unix timestamp
   "@(?:everyone|here)",
-  // mass mention
   "https?://\\S+"
-  // url
 ];
 var MASK_PATTERN = PATTERNS.join("|");
 var OPEN = "【";
@@ -1261,7 +1271,6 @@ var TranslationCache = class {
   get size() {
     return this._map.size;
   }
-  // 저장까지 함께 끝낸다. 지웠는데 다음 실행에 되살아나면 지운 것이 아니다.
   clear() {
     this._map.clear();
     this.save();
@@ -1307,16 +1316,12 @@ var TaskQueue = class {
     this._active = 0;
     this._pending = [];
   }
-  // shouldRun 은 작업이 큐 맨 앞에 왔을 때 다시 확인한다. 호출자가 관심을 잃은
-  // 작업(화면 밖으로 나간 메시지)은 슬롯을 차지하지 않고 버려진다.
   run(task, shouldRun) {
     return new Promise((resolve, reject) => {
       this._pending.push({ task, resolve, reject, shouldRun });
       this._drain();
     });
   }
-  // 대기 중인 호출자를 방치하지 않고 reject 한다. settle 되지 않는 Promise 는
-  // UI 를 "번역 중…" 에 영원히 묶어 둔다.
   clear() {
     const dropped = this._pending;
     this._pending = [];
@@ -1385,8 +1390,6 @@ var Translator = class {
   get cacheSize() {
     return this._cache.size;
   }
-  // 실패 기록도 함께 비운다. 캐시를 지우는 이유는 대개 다시 시도하기 위해서인데,
-  // 백오프가 남아 있으면 그 다음 요청이 조용히 거절된다.
   clearCache() {
     const cleared = this._cache.size;
     this._cache.clear();
@@ -1400,14 +1403,9 @@ var Translator = class {
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
   }
-  // 같은 원문이라도 대상 언어가 다르면 다른 번역이다.
   _cacheKey(masked, language) {
     return `${language}${masked}`;
   }
-  // onStart 는 요청이 실제로 큐를 떠날 때 호출된다. 큐에 들어간 시점이 아니라
-  // 이때 "번역 중" 을 띄워야 스크롤 중 화면이 밀리지 않는다. shouldRun 은 그
-  // 순간 다시 확인해, 이미 화면 밖으로 나간 메시지의 작업을 버린다.
-  // 이 함수는 절대 reject 하지 않는다.
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
     const language = hooks.language || this._settings.current.targetLanguage;
@@ -1463,7 +1461,6 @@ var Translator = class {
     const text = segments.map((segment) => segment.value).join("").trim();
     return text ? done(text, trimEdges(segments)) : skip();
   }
-  // 일시적인 실패는 사용자에게 보이기 전에 몇 번 더 해 본다.
   async _callWithRetries(maskedText, language) {
     for (let attempt = 0; ; attempt += 1) {
       try {
@@ -1494,8 +1491,6 @@ var Translator = class {
       const provider = getProvider(settings.provider);
       return await provider.translate({
         text: maskedText,
-        // 프로바이더는 settings.targetLanguage 만 본다. 호출 단위 언어를
-        // 그 자리에 얹어 넘기고, 저장된 설정은 건드리지 않는다.
         settings: language === settings.targetLanguage ? settings : { ...settings, targetLanguage: language },
         signal: controller.signal
       });
@@ -1598,8 +1593,6 @@ var LanguageDetector = class {
   constructor(settings) {
     this._settings = settings;
   }
-  // language 를 넘기면 그 언어로 판정한다. 받는 메시지와 보내는 메시지의
-  // 대상 언어가 서로 다르기 때문이다.
   needsTranslation(text, language) {
     if (typeof text !== "string") return false;
     const letters = this._letters(text);
@@ -1612,8 +1605,6 @@ var LanguageDetector = class {
     }
     return inTarget / letters.length < this._threshold();
   }
-  // 값이 없거나 숫자가 아니면 기본값으로 돌아간다. NaN 과의 비교는 항상 false 라,
-  // 그대로 두면 번역이 통째로 조용히 꺼진다.
   _threshold() {
     const raw = this._settings.current.skipThreshold;
     const configured = typeof raw === "number" ? raw : Number.parseFloat(raw);
@@ -1781,9 +1772,6 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       if (force) rateLimitRetries = 0;
       translator.translate(text, {
         ignoreBackoff: force === true,
-        // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
-        // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
-        // 커지면서 화면이 밀린다.
         onStart: () => {
           if (alive) setResult({ status: "pending" });
         },
@@ -1967,7 +1955,6 @@ var MessagePatch = class {
     });
     return appendChild(ret, block);
   }
-  // {guildId} 또는 {reason}. 사유는 진단 로그에만 쓰이고, 꺼져 있으면 버려진다.
   _resolve(message) {
     if (!message || typeof message.content !== "string" || !message.content.trim()) {
       return { reason: "no text content" };
@@ -1992,7 +1979,6 @@ var MessagePatch = class {
     }
     return { guildId };
   }
-  // 같은 메시지가 렌더마다 다시 판정되므로 사유당 한 번만 남긴다.
   _trace(message, reason) {
     if (!this._settings.current.debugLog) return;
     const id4 = message?.id ?? "?";
@@ -2047,8 +2033,6 @@ var OutgoingPatch = class {
       this._unpatch = null;
     }
   }
-  // 번역하지 않는 경우에는 원래 호출을 그대로 돌려준다. async 로 감싸면 반환값이
-  // Promise 로 바뀌므로, 보내는 경로의 대부분은 건드리지 않고 지나가게 한다.
   _onSend(self, args, original) {
     let text = null;
     try {
@@ -2063,8 +2047,6 @@ var OutgoingPatch = class {
     try {
       const result = await this._translator.translate(text, {
         language: this._settings.current.outgoingLanguage,
-        // 보내는 사람이 기다리고 있다. 실패 백오프에 걸려 조용히 원문이
-        // 나가는 것보다 한 번 더 시도하는 편이 낫다.
         ignoreBackoff: true
       });
       if (result.status === "done" && result.text) {
@@ -2078,7 +2060,6 @@ var OutgoingPatch = class {
     }
     return original.apply(self, args);
   }
-  // 번역해서 보낼 원문, 아니면 null.
   _pick(args) {
     const settings = this._settings.current;
     if (!settings.translateOutgoing || !settings.apiKey) return null;
@@ -2094,6 +2075,100 @@ var OutgoingPatch = class {
     return content;
   }
 };
+
+// src/updater.js
+var RAW_HOST = "https://raw.githubusercontent.com";
+var MAX_BYTES = 5 * 1024 * 1024;
+function rawUrlFor(source, branch = "main") {
+  const match = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(String(source || ""));
+  return match ? `${RAW_HOST}/${match[1]}/${match[2]}/${branch}/dist/${NAME}.plugin.js` : null;
+}
+function readVersion(text) {
+  if (typeof text !== "string" || !new RegExp(`@name\\s+${NAME}\\s`).test(text)) return null;
+  const match = /@version\s+(\S+)/.exec(text);
+  return match ? match[1] : null;
+}
+function isNewer(remote, current) {
+  const parse = (value) => String(value).split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const from = parse(remote);
+  const to = parse(current);
+  for (let i = 0; i < Math.max(from.length, to.length); i += 1) {
+    const diff = (from[i] ?? 0) - (to[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  return false;
+}
+var Updater = class {
+  constructor({ meta, settings, interval, delay, onResult }) {
+    this._meta = meta;
+    this._settings = settings;
+    this._interval = interval;
+    this._delay = delay;
+    this._onResult = onResult || (() => {
+    });
+    this._timers = [];
+  }
+  start() {
+    this._schedule(setTimeout(() => this._tick(), this._delay));
+    this._schedule(setInterval(() => this._tick(), this._interval));
+  }
+  stop() {
+    for (const timer of this._timers) {
+      clearTimeout(timer);
+      clearInterval(timer);
+    }
+    this._timers = [];
+  }
+  async check({ announce = false } = {}) {
+    const url = rawUrlFor(this._meta?.source);
+    if (!url) {
+      logger.warn(`no update url; meta.source is not a github repository: ${this._meta?.source}`);
+      if (announce) this._onResult({ status: "unavailable" });
+      return null;
+    }
+    let text;
+    try {
+      text = await getText(url);
+    } catch (e) {
+      logger.warn("update check failed:", e && e.message || e);
+      if (announce) this._onResult({ status: "failed", message: e && e.message || "unknown" });
+      return null;
+    }
+    const version = readVersion(text);
+    if (!version || text.length > MAX_BYTES) {
+      logger.warn(`the file at ${url} is not a ${NAME} build`);
+      if (announce) this._onResult({ status: "failed", message: "unexpected file" });
+      return null;
+    }
+    const current = this._meta?.version ?? "0";
+    if (!isNewer(version, current)) {
+      if (announce) this._onResult({ status: "current", version: current });
+      return null;
+    }
+    try {
+      writePlugin(text);
+    } catch (e) {
+      logger.error("could not write the plugin file", e);
+      this._onResult({ status: "failed", message: e && e.message || "unknown" });
+      return null;
+    }
+    logger.info(`updated to v${version}; BetterDiscord will reload the plugin`);
+    this._onResult({ status: "updated", version });
+    return version;
+  }
+  _schedule(timer) {
+    timer?.unref?.();
+    this._timers.push(timer);
+  }
+  _tick() {
+    if (this._settings.current.autoUpdate) this.check();
+  }
+};
+function writePlugin(text) {
+  const fs = require("fs");
+  const path = require("path");
+  fs.writeFileSync(path.join(BdApi.Plugins.folder, `${NAME}.plugin.js`), text);
+}
 
 // src/ui/styles.js
 var STYLES = `
@@ -2189,7 +2264,10 @@ var STYLES = `
 var Mollu = class {
   constructor(meta) {
     this._meta = meta;
-    this._settings = new Settings({ clearCache: () => this._confirmClearCache() });
+    this._settings = new Settings({
+      clearCache: () => this._confirmClearCache(),
+      checkUpdate: () => this._updater.check({ announce: true })
+    });
     this._detector = new LanguageDetector(this._settings);
     this._translator = new Translator({
       settings: this._settings,
@@ -2209,6 +2287,13 @@ var Mollu = class {
         onTrigger: () => this._toggle("translateOutgoing", "toast.outgoingOn", "toast.outgoingOff")
       })
     ];
+    this._updater = new Updater({
+      meta,
+      settings: this._settings,
+      interval: UPDATE_CHECK_INTERVAL_MS,
+      delay: UPDATE_CHECK_DELAY_MS,
+      onResult: (result) => this._reportUpdate(result)
+    });
     this._lastErrorToast = 0;
   }
   getName() {
@@ -2222,6 +2307,7 @@ var Mollu = class {
       BdApi.DOM.addStyle(NAME, STYLES);
       this._translator.start();
       for (const hotkey of this._hotkeys) hotkey.install();
+      this._updater.start();
       const stores = createStores();
       this._installOutgoing(stores);
       if (!hasNativeFetch()) {
@@ -2268,6 +2354,7 @@ var Mollu = class {
       logger.error("outgoing unpatch failed", e);
     }
     for (const hotkey of this._hotkeys) hotkey.remove();
+    this._updater.stop();
     BdApi.Patcher.unpatchAll(NAME);
     BdApi.DOM.removeStyle(NAME);
     disconnectVisibility();
@@ -2276,8 +2363,6 @@ var Mollu = class {
     this._outgoing = null;
     logger.info("stopped");
   }
-  // 보내는 메시지 번역은 자동 번역과 달리 남에게 나가는 글을 바꾸므로, 찾지
-  // 못하면 조용히 없는 기능이 된다. 번역 자체는 그와 무관하게 계속 동작한다.
   _installOutgoing(stores) {
     const target = findMessageActions();
     if (!target) {
@@ -2294,7 +2379,6 @@ var Mollu = class {
     });
     this._outgoing.install();
   }
-  // 지운 캐시는 되살릴 수 없고 다시 채우려면 다시 결제해야 한다. 한 번 묻는다.
   _confirmClearCache() {
     const count = this._translator.cacheSize;
     const clear = () => {
@@ -2312,6 +2396,12 @@ var Mollu = class {
       logger.warn("confirmation modal unavailable", e);
       clear();
     }
+  }
+  _reportUpdate({ status, version, message }) {
+    if (status === "updated") this._toast(t("toast.updated", { version }), "success");
+    else if (status === "current") this._toast(t("toast.upToDate", { version }), "info");
+    else if (status === "unavailable") this._toast(t("toast.updateUnavailable"), "warning");
+    else this._toast(t("toast.updateFailed", { message: message || "unknown" }), "error");
   }
   _toggle(id4, onKey, offKey) {
     const next = !this._settings.current[id4];

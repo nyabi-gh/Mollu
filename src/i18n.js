@@ -1,6 +1,3 @@
-// UI 문자열. 이 플러그인은 한국어 사용자만 쓰는 게 아니므로 패널과 토스트는
-// 번역해 두고, 로그 메시지는 진단용이라 영어로 통일한다.
-
 const STRINGS = {
     en: {
         "block.pending": "Translating…",
@@ -21,6 +18,10 @@ const STRINGS = {
         "toast.outgoingOff": "Your messages will be sent as you type them",
         "toast.outgoingFailed": "Sent untranslated · {message}",
         "toast.cacheCleared": "Cleared {count} cached translations",
+        "toast.updated": "Updated to v{version}",
+        "toast.upToDate": "Already up to date (v{version})",
+        "toast.updateUnavailable": "No update source is configured for this build",
+        "toast.updateFailed": "Could not check for updates · {message}",
 
         "error.noApiKey": "No API key configured",
         "error.emptyResponse": "Empty response",
@@ -79,6 +80,12 @@ const STRINGS = {
         "settings.showPending": "Show while translating",
         "settings.showErrors": "Show translation failures",
         "settings.advanced": "Advanced",
+        "settings.autoUpdate": "Update automatically",
+        "settings.autoUpdate.note":
+            "Checks the repository in the plugin's metadata every few hours and installs a newer build. BetterDiscord reloads the plugin on its own once the file is replaced.",
+        "settings.checkUpdate": "Updates",
+        "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
+        "settings.checkUpdate.action": "Check",
         "settings.clearCache": "Translation cache",
         "settings.clearCache.note":
             "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
@@ -121,6 +128,10 @@ const STRINGS = {
         "toast.outgoingOff": "보내는 메시지를 입력한 그대로 보냅니다",
         "toast.outgoingFailed": "번역하지 못해 원문 그대로 보냈습니다 · {message}",
         "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
+        "toast.updated": "v{version} 로 업데이트했습니다",
+        "toast.upToDate": "이미 최신 버전입니다 (v{version})",
+        "toast.updateUnavailable": "이 빌드에는 업데이트 주소가 설정되어 있지 않습니다",
+        "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
 
         "error.noApiKey": "API 키가 설정되지 않았습니다",
         "error.emptyResponse": "빈 응답",
@@ -178,6 +189,12 @@ const STRINGS = {
         "settings.showPending": "번역 중 표시",
         "settings.showErrors": "번역 실패 시 표시",
         "settings.advanced": "고급",
+        "settings.autoUpdate": "자동 업데이트",
+        "settings.autoUpdate.note":
+            "플러그인 정보에 적힌 저장소를 몇 시간마다 확인해 더 새로운 빌드를 설치합니다. 파일이 바뀌면 BetterDiscord 가 알아서 다시 불러옵니다.",
+        "settings.checkUpdate": "업데이트",
+        "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
+        "settings.checkUpdate.action": "확인",
         "settings.clearCache": "번역 캐시",
         "settings.clearCache.note":
             "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
@@ -206,7 +223,6 @@ export const UI_LANGUAGES = ["en", "ko"];
 
 let active = "en";
 
-// "auto" 는 Discord(=브라우저) 로캘을 따른다. 지원하지 않는 로캘이면 영어.
 export function setLocale(preference) {
     const wanted = preference === "auto" || !preference ? detect() : preference;
     active = STRINGS[wanted] ? wanted : "en";

@@ -15,6 +15,7 @@ export default [
                 // Provided by the CommonJS wrapper BetterDiscord evaluates the
                 // bundle in; only referenced by the build footer.
                 module: "readonly",
+                require: "readonly",
             },
         },
         rules: {
@@ -23,6 +24,7 @@ export default [
             "no-var": "error",
             "prefer-const": "error",
             "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+            "no-empty": ["error", { allowEmptyCatch: true }],
         },
     },
     {

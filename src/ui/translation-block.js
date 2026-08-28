@@ -5,8 +5,6 @@ import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
 import { badgeFor } from "../languages.js";
 import { t } from "../i18n.js";
 
-// 이 시간만큼 실제로 화면에 머문 메시지만 번역한다. 스크롤로 스쳐 지나간
-// 메시지는 요청을 만들지 않는다.
 const DWELL_MS = 350;
 
 function initialResult(translator, text) {
@@ -34,8 +32,6 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         }
         setResult({ status: "idle" });
 
-        // 타이머가 발화하면 핸들을 비운다. 남겨 두면 아래 재예약 조건에 걸려
-        // 다시 화면에 들어와도 요청이 나가지 않는다.
         const schedule = (delay) => {
             dwell = setTimeout(() => {
                 dwell = null;
@@ -50,9 +46,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             translator
                 .translate(text, {
                     ignoreBackoff: force === true,
-                    // 큐를 실제로 떠난 작업만 "번역 중" 을 띄운다. 큐에 넣는
-                    // 시점에 띄우면 스크롤 중 수백 개 메시지가 동시에 한 줄씩
-                    // 커지면서 화면이 밀린다.
+
                     onStart: () => {
                         if (alive) setResult({ status: "pending" });
                     },
@@ -62,8 +56,6 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                     if (!alive) return;
                     running = false;
 
-                    // 한도 초과. 메시지가 아직 화면에 있으면 다시 트리거될 일이
-                    // 없으므로, 대기 시간이 지난 뒤 직접 다시 큐에 넣는다.
                     if (res.status === "retry") {
                         setResult({ status: "idle" });
                         if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
@@ -75,15 +67,12 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                         return;
                     }
 
-                    // 큐에서 버려진 경우 — 메시지가 다시 보일 때까지 기다린다.
                     setResult(res.status === "unknown" ? { status: "idle" } : res);
                 });
         };
 
         triggerRef.current = run;
 
-        // 수동 모드에서는 사용자가 누르기 전까지 아무것도 보내지 않으므로,
-        // 관찰할 뷰포트가 없고 요청은 항상 유효하다.
         if (!autoTranslate) {
             visible = true;
             return () => {
@@ -114,14 +103,10 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
-        // 대상 언어나 길이 제한이 바뀌면 판정이 달라진다. 이미 화면에 있는
-        // 블록도 그 자리에서 다시 판단해야 설정이 즉시 반영된 것처럼 보인다.
     }, [text, autoTranslate, targetLanguage, maxChars]);
 
     const status = result && result.status;
 
-    // 앵커는 모든 상태에서 마운트를 유지한다. 그래야 노드 identity 와 거기 붙은
-    // 가시성 구독이 상태 변화를 넘어 살아남는다.
     return React.createElement(
         React.Fragment,
         null,
@@ -142,8 +127,6 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
     );
 }
 
-// 동시에 깨어난 블록들의 재시도를 흩뜨린다. 안 그러면 같은 틱에 몰려 나가 또
-// 한도를 친다.
 function jitter() {
     return Math.floor(Math.random() * 2000);
 }
@@ -169,7 +152,6 @@ function renderBody(status, result, ctx) {
             : null;
     }
     if (status === "error") {
-        // 실패는 막다른 길이면 안 된다. 눌러서 다시 시도할 수 있게 한다.
         return showErrors
             ? React.createElement(
                   "button",
@@ -195,8 +177,6 @@ function renderBody(status, result, ctx) {
     );
 }
 
-// 표시용 설정을 state 로 미러링한다. 그래야 토글이 이미 화면에 있는 블록에도
-// 즉시 반영된다.
 function useDisplaySettings(settings) {
     const [display, setDisplay] = React.useState(() => pickDisplay(settings));
 
@@ -212,9 +192,6 @@ function useDisplaySettings(settings) {
     return display;
 }
 
-// 블록이 렌더 중에 읽거나 번역 여부를 다시 정하는 데 쓰는 설정. 바뀌면 다시
-// 렌더해야 한다. skipThreshold 는 여기 없다 — 그 판정은 블록이 붙기 전에
-// message-patch.js 에서 끝나므로 메시지가 다시 렌더되어야 반영된다.
 const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate", "targetLanguage", "maxChars"]);
 
 function pickDisplay(settings) {

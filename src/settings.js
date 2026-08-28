@@ -7,7 +7,6 @@ import { React } from "./discord.js";
 import { logger } from "./lib/logger.js";
 
 export class Settings {
-    // actions 는 값이 아니라 동작인 패널 항목(캐시 비우기 등)이 부르는 콜백이다.
     constructor(actions = {}) {
         this._actions = actions;
         const stored = migrate(safeLoad());
@@ -15,7 +14,7 @@ export class Settings {
         this._guildIdSet = parseGuildIds(this._values.guildIds);
         this._listeners = new Set();
         setLocale(this._values.uiLanguage);
-        // 이전 이름에서 인계한 값은 무언가가 다시 쓰기 전까지 옛 저장소에만 있다.
+
         if (!BdApi.Data.load(NAME, "settings")) this._persist();
     }
 
@@ -34,8 +33,7 @@ export class Settings {
 
     set(id, value) {
         const next = coerce(id, value, this._values[id]);
-        // KEEP 은 적용하면 안 되는 편집. 값이 그대로면 같은 편집이 두 번 온
-        // 것이므로(buildPanel 참고) 다시 쓸 필요가 없다.
+
         if (next === KEEP || next === this._values[id]) return;
 
         if (id === "provider") {
@@ -52,13 +50,10 @@ export class Settings {
         for (const listener of this._listeners) {
             try {
                 listener(id, next);
-            } catch {
-                /* a listener error must not block persistence */
-            }
+            } catch {}
         }
     }
 
-    // 현재 프로바이더를 떠나기 전에 자격증명을 기억해 둔다.
     _stashProfile() {
         const { provider, apiKey, model, baseUrl } = this._values;
         this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
@@ -80,9 +75,6 @@ export class Settings {
         }
     }
 
-    // BD 의 설정 항목은 defaultValue 로 한 번 초기화되는 비제어 컴포넌트라, 값만
-    // 바꿔 다시 렌더해도 화면은 그대로다. 프로바이더나 UI 언어처럼 패널 전체의
-    // 표시를 바꾸는 편집은 key 를 갈아 끼워 통째로 다시 마운트시킨다.
     buildPanel() {
         const settings = this;
         function MolluSettings() {
@@ -103,13 +95,8 @@ export class Settings {
     _panelSpec() {
         const v = this._values;
         return {
-            // BetterDiscord 는 패널 레벨 onChange 를 switch 타입에만 연결한다.
-            // 나머지 타입은 Kr({...setting, defaultValue, disabled}) 로 렌더되어
-            // 오직 설정 항목 자신의 onChange 로만 값을 알린다. 패널 콜백만 넘기면
-            // API 키·서버 ID·모델·숫자 설정이 전부 조용히 버려진다. 둘 다 연결하고,
-            // switch 에서 생기는 중복은 set() 이 무시한다.
             onChange: (_categoryId, settingId, value) => this.set(settingId, value),
-            // 패널은 프로바이더를 바꿀 때마다 다시 마운트되므로 접힘 상태를 밖에 둔다.
+
             onDrawerToggle: (id, shown) => DRAWERS.set(id, shown),
             getDrawerState: (id, fallback) => DRAWERS.get(id) ?? fallback,
             settings: withChangeHandlers(this, [
@@ -125,8 +112,7 @@ export class Settings {
                     type: "text",
                     id: "apiKey",
                     name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
-                    // 저장된 키는 렌더하지 않는다. BD 텍스트 입력에는 마스킹
-                    // 모드가 없고, 화면 공유 중 이 패널은 실제 노출 위험이다.
+
                     note: v.apiKey
                         ? t("settings.apiKey.note", { clear: CLEAR_TOKEN })
                         : t(`keySource.${v.provider}`),
@@ -143,7 +129,7 @@ export class Settings {
                     value: v.targetLanguage,
                     options: LANGUAGE_OPTIONS,
                 },
-                // DeepL 처럼 모델을 고르지 않는 백엔드에서는 칸 자체를 숨긴다.
+
                 ...(getProvider(v.provider).usesModel === false
                     ? []
                     : [
@@ -175,7 +161,7 @@ export class Settings {
                     name: t("settings.guildIds"),
                     note: t("settings.guildIds.note"),
                     value: v.guildIds,
-                    // 목록을 무시하는 동안에는 칸도 비활성으로 보여 준다.
+
                     disableWith: "allGuilds",
                 },
                 {
@@ -297,6 +283,21 @@ export class Settings {
                             value: v.debugLog,
                         },
                         {
+                            type: "switch",
+                            id: "autoUpdate",
+                            name: t("settings.autoUpdate"),
+                            note: t("settings.autoUpdate.note"),
+                            value: v.autoUpdate,
+                        },
+                        {
+                            type: "button",
+                            id: "checkUpdate",
+                            name: t("settings.checkUpdate"),
+                            note: t("settings.checkUpdate.note"),
+                            children: t("settings.checkUpdate.action"),
+                            onClick: () => this._actions.checkUpdate?.(),
+                        },
+                        {
                             type: "button",
                             id: "clearCache",
                             name: t("settings.clearCache"),
@@ -312,15 +313,10 @@ export class Settings {
     }
 }
 
-// 이 항목을 바꾸면 다른 칸의 이름·설명·값·표시 여부까지 달라지므로 패널을 다시
-// 만든다. 타자를 치는 동안 다시 마운트되면 포커스를 잃으므로 텍스트 칸은 넣지 않는다.
 const PANEL_REBUILD = new Set(["provider", "uiLanguage"]);
 
-// 카테고리 id -> 펼침 여부. 패널이 다시 마운트되어도 살아남아야 한다.
 const DRAWERS = new Map();
 
-// 값을 가진 항목에 자기 onChange 를 붙인다. BdApi 가 실제로 호출하는 건 이것뿐이다.
-// 버튼은 값이 없고, 카테고리의 onChange 는 BD 자신이 채운다.
 function withChangeHandlers(settings, items) {
     return items.map((item) =>
         item.type === "button" || item.type === "category"
@@ -329,35 +325,24 @@ function withChangeHandlers(settings, items) {
     );
 }
 
-// 붙여넣은 키와 URL 에는 공백이 딸려 오기 쉬운데, 그대로 두면 401 이나 잘못된
-// 엔드포인트가 된다.
 const TRIMMED_FIELDS = new Set(["apiKey", "baseUrl", "model"]);
 
 const CREDENTIAL_FIELDS = new Set(["apiKey", "model", "baseUrl"]);
 
-// 항상 비어 보이는 API 키 칸에서 빈 입력은 "유지" 를 뜻하므로, 저장된 키를
-// 지우려면 이 값을 입력한다.
 const CLEAR_TOKEN = "-";
 
-// 적용하면 안 되는 편집에 대해 coerce() 가 돌려주는 표식.
 const KEEP = Symbol("keep");
 
-// 기본값과 병합하기 전에 적용해야 한다. 병합 후에는 기본값이 이미 들어와 있어
-// "저장된 적 없음" 과 구분할 수 없다.
 function migrate(stored) {
     if (!stored || typeof stored !== "object") return stored;
 
-    // skipThreshold 의 옛 이름.
     if (stored.skipThreshold === undefined && typeof stored.koreanThreshold === "number") {
         stored.skipThreshold = stored.koreanThreshold;
     }
     delete stored.koreanThreshold;
 
-    // 포르투갈어를 지역 변종으로 나누기 전 값.
     if (stored.targetLanguage === "pt") stored.targetLanguage = "pt-BR";
 
-    // 단축키는 "Ctrl+Shift+T" 문자열이었다가 BD keybind 입력이 쓰는 키 이름
-    // 배열이 됐다. 문자열을 그대로 두면 패널 자체가 렌더되지 않는다.
     for (const field of ["hotkey", "outgoingHotkey"]) {
         if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
     }
@@ -377,7 +362,6 @@ function coerce(id, value, previous) {
     const trimmed = value.trim();
     if (id !== "apiKey") return trimmed;
 
-    // 칸이 비어 보이므로 빈 입력은 "삭제" 가 아니라 "변경 없음" 이다.
     if (!trimmed) return previous ? KEEP : "";
     return trimmed === CLEAR_TOKEN ? "" : trimmed;
 }

@@ -2,28 +2,21 @@ import { MASK_PATTERN } from "./tokenizer.js";
 import { getLanguage } from "../languages.js";
 import { DEFAULT_SETTINGS } from "../constants.js";
 
-// 호이스팅: needsTranslation() 은 대상 서버 모든 메시지의 매 렌더마다 실행되는데,
-// 호출마다 이 패턴을 재컴파일하는 것이 비용의 대부분이었다.
 const MASK_RE = new RegExp(MASK_PATTERN, "g");
 const NON_LETTER = /[^\p{L}]/gu;
 
-// 글자가 아닌 것, 코드, 링크, Discord 토큰은 판정에서 제외한다. 그래서
-// "lol <@123> 😄" 는 "lol" 만 보고 판단한다.
 export class LanguageDetector {
     constructor(settings) {
         this._settings = settings;
     }
 
-    // language 를 넘기면 그 언어로 판정한다. 받는 메시지와 보내는 메시지의
-    // 대상 언어가 서로 다르기 때문이다.
     needsTranslation(text, language) {
         if (typeof text !== "string") return false;
         const letters = this._letters(text);
         if (letters.length < 2) return false;
 
         const { script } = getLanguage(language ?? this._settings.current.targetLanguage);
-        // 라틴 문자 대상 언어는 보내기 전에 구분할 수 없다. 모델에 맡기고,
-        // 원문과 같은 결과가 오면 표시하지 않는 경로로 처리한다.
+
         if (!script) return true;
 
         let inTarget = 0;
@@ -33,11 +26,9 @@ export class LanguageDetector {
         return inTarget / letters.length < this._threshold();
     }
 
-    // 값이 없거나 숫자가 아니면 기본값으로 돌아간다. NaN 과의 비교는 항상 false 라,
-    // 그대로 두면 번역이 통째로 조용히 꺼진다.
     _threshold() {
         const raw = this._settings.current.skipThreshold;
-        // Number(null) 은 0 이라 "미설정" 과 "0%" 를 구분하지 못한다.
+
         const configured = typeof raw === "number" ? raw : Number.parseFloat(raw);
         const percent = Number.isFinite(configured) ? configured : DEFAULT_SETTINGS.skipThreshold;
         return percent / 100;

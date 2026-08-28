@@ -1,6 +1,5 @@
 import { NAME } from "../constants.js";
 
-// BdApi.Logger 가 없는 환경(스모크 테스트 등)에서는 console 로 물러난다.
 function call(level, args) {
     const api = typeof BdApi !== "undefined" && BdApi.Logger;
     if (api && typeof api[level] === "function") {

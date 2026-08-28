@@ -1,6 +1,3 @@
-// 테스트 프레임워크 없이 돌리는 스모크 체크. BetterDiscord 에 실제로 올려 보는 것을
-// 대체하지는 못한다 — webpack 탐색과 React 패칭은 거기서만 확인할 수 있다.
-
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,8 +25,6 @@ async function checkAsync(name, fn) {
         console.error(`FAIL  ${name}\n      ${e.message}`);
     }
 }
-
-// --- 1. 소스 로직 ------------------------------------------------------------
 
 const { mask, unmask } = await import("../src/translation/tokenizer.js");
 const { LanguageDetector } = await import("../src/translation/language-detector.js");
@@ -97,10 +92,7 @@ check("language detector: too short is skipped", () => {
     assert.equal(detector.needsTranslation("k"), false);
 });
 
-// --- 2. 번들 로드 ------------------------------------------------------------
-
 installBdApiStub();
-// meta.json 에서 유도한다. 이름을 바꿔도 옛 파일을 가리키지 않게.
 const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
 const bundlePath = join(root, "dist", `${meta.name}.plugin.js`);
 
@@ -129,8 +121,6 @@ check("start() and stop() do not throw (webpack lookup fails gracefully)", () =>
     instance.start();
     instance.stop();
 });
-
-// --- 3. 캐시 / 토큰 복원 회귀 -------------------------------------------------
 
 await checkAsync("queue: work whose caller lost interest is dropped, not run", async () => {
     const queue = new TaskQueue(() => 1);
@@ -178,7 +168,7 @@ check('cache: a "no translation needed" verdict survives a restart', () => {
         cache.set("ko\u0001bonjour", "안녕");
         cache.save();
     });
-    // null 을 버리면 "이미 대상 언어" 라는 판정을 세션마다 API 에 다시 물어보게 된다.
+
     assert.equal(saved.length, 2);
 
     const reloaded = new TranslationCache();
@@ -202,7 +192,7 @@ check("cache: clearing empties the store and the saved copy", () => {
         cache.clear();
         assert.equal(cache.size, 0);
     });
-    // 저장까지 하지 않으면 다음 실행에 그대로 되살아난다.
+
     assert.deepEqual(saved, []);
 });
 
@@ -215,7 +205,7 @@ await checkAsync("translator: a shared cache key restores each message's own tok
     try {
         const translator = new Translator({ settings: stubSettings() });
         const first = await translator.translate("hi <@111111111111111111>");
-        const second = await translator.translate("hi <@222222222222222222>"); // same masked key
+        const second = await translator.translate("hi <@222222222222222222>");
         assert.equal(first.text, "안녕 <@111111111111111111>");
         assert.equal(second.text, "안녕 <@222222222222222222>");
     } finally {
@@ -239,7 +229,6 @@ await checkAsync("translator: a failed translation is not retried immediately", 
         assert.equal((await translator.translate("hello there")).status, "error");
         assert.equal(calls, afterFirst, "the second attempt is served from the failure backoff");
 
-        // Clicking the failure has to get past that backoff.
         assert.equal((await translator.translate("hello there", { ignoreBackoff: true })).status, "error");
         assert.ok(calls > afterFirst, "an explicit retry bypasses the backoff");
     } finally {
@@ -260,8 +249,6 @@ await checkAsync("translator: pending is reported on start, not on enqueue", asy
         await promise;
         assert.equal(started, true);
 
-        // 화면 밖으로 나간 메시지는 미번역으로 응답되며, 실패 백오프가 이를
-        // 오류로 취급하면 안 된다.
         const dropped = await translator.translate("something else entirely", {
             shouldRun: () => false,
         });
@@ -297,7 +284,6 @@ await checkAsync("translator: a 429 pauses everything instead of failing", async
         assert.ok(translator._pausedUntil > Date.now(), "every other request is held back");
         assert.equal(translator._failures.size, 0, "a 429 must not enter the failure backoff");
 
-        // 두 번째 메시지는 할당량을 더 태우지 않고 대기해야 한다.
         const before = calls;
         const pending = translator.translate("a different message");
         await new Promise((resolve) => setTimeout(resolve, 50));
@@ -319,15 +305,12 @@ await checkAsync("provider: a chain of thought never reaches the message list", 
                 status: 200,
             });
     try {
-        // 닫힌 블록: 그 뒤에 오는 것만 남긴다.
         BdApi.Net.fetch = reply("<thought>Let me consider the tone.</thought>안녕하세요");
         assert.equal(
             (await new Translator({ settings: stubSettings() }).translate("hi there")).text,
             "안녕하세요",
         );
 
-        // Gemma 4 의 실제 형태: 예산이 다할 때까지 추론만 하고 번역문은 쓰이지
-        // 않는다. 이건 결과가 아니라 오류다.
         BdApi.Net.fetch = reply("<thought>*  Input: ...\n*  Option 1: ...", "length");
         const cut = await new Translator({ settings: stubSettings() }).translate("hi there");
         assert.equal(cut.status, "error");
@@ -349,7 +332,6 @@ await checkAsync("translator: a configuration error is not retried", async () =>
         assert.equal((await translator.translate("hello there")).status, "error");
         assert.equal(calls, 1, "a 400 says the same thing every time");
 
-        // A missing key never reaches the network at all.
         calls = 0;
         const settings = stubSettings();
         settings.current.apiKey = "";
@@ -384,8 +366,7 @@ await checkAsync("deepl: protects placeholders with its own ignore tags", async 
         assert.equal(seen.body.target_lang, "KO");
         assert.deepEqual(seen.body.ignore_tags, ["x"]);
         assert.equal(seen.body.tag_handling, "xml");
-        // The placeholder became a tag DeepL is told to leave alone, and the
-        // bare "<" was escaped so the XML parse does not break on it.
+
         assert.equal(seen.body.text[0], "hi <x>0</x> 3 &lt; 5");
         assert.equal(result.text, "안녕 <@1> 3 < 5");
     } finally {
@@ -415,8 +396,6 @@ check("net: a plain-http base url is refused before the key is sent", () => {
     assert.equal(normalizeBaseUrl("  https://api.deepseek.com/  "), "https://api.deepseek.com");
     assert.equal(normalizeBaseUrl("api.deepseek.com"), "https://api.deepseek.com");
 });
-
-// --- 4. 렌더링 / 설정 ---------------------------------------------------------
 
 const { renderSegments } = await import("../src/ui/rich-text.js");
 const { Settings } = await import("../src/settings.js");
@@ -506,10 +485,6 @@ check("settings: data saved under the previous plugin name is carried over", () 
 });
 
 check("settings: every panel field persists, not just the switches", () => {
-    // BdApi 가 최상위 설정을 렌더하는 방식을 그대로 흉내 낸다: value 를 떼고
-    // defaultValue 로 넘기며, 입력은 설정 항목 자신의 onChange 로만 보고한다.
-    // 패널 레벨 onChange 는 switch 에만 연결되므로, 자기 핸들러가 없는 칸은
-    // 모든 편집을 조용히 버린다.
     const settings = new Settings();
     const fields = settings._panelSpec().settings;
 
@@ -579,7 +554,6 @@ await checkAsync("target language: drives the prompt and the cache key", async (
         await translator.translate("안녕하세요 여러분");
         assert.match(prompts[0], /into natural, colloquial English/);
 
-        // Same source, different target: must not reuse the English answer.
         settings.current.targetLanguage = "ja";
         assert.equal(translator.peek("안녕하세요 여러분").status, "unknown");
         await translator.translate("안녕하세요 여러분");
@@ -590,13 +564,11 @@ await checkAsync("target language: drives the prompt and the cache key", async (
 });
 
 check("detector: a missing threshold falls back instead of disabling everything", () => {
-    // ratio < NaN is always false, so an unset value used to switch translation
-    // off silently — no block, no button, no error.
     for (const skipThreshold of [undefined, null, NaN, "", {}]) {
         const detect = new LanguageDetector({ current: { skipThreshold, targetLanguage: "ko" } });
         assert.equal(detect.needsTranslation("hello everyone"), true, `broken by ${String(skipThreshold)}`);
     }
-    // A real 0 still means "never translate", which is a legitimate setting.
+
     const zero = new LanguageDetector({ current: { skipThreshold: 0, targetLanguage: "ko" } });
     assert.equal(zero.needsTranslation("hello everyone"), false);
 });
@@ -731,7 +703,7 @@ await checkAsync("gemini: gemma never receives reasoning_effort, which it reject
             baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
         });
         await new Translator({ settings }).translate("hello there");
-        // "Thinking budget is not supported for this model." — HTTP 400 으로 거부된다.
+
         assert.ok(!("reasoning_effort" in body));
     } finally {
         BdApi.Net.fetch = previous;
@@ -751,7 +723,6 @@ await checkAsync("translator: clearing the cache also lifts the failure backoff"
         assert.equal((await translator.translate("hello there")).status, "error");
         assert.equal(calls, 1, "the second attempt is held by the backoff");
 
-        // 캐시를 비우는 이유는 대개 다시 시도하기 위해서다.
         translator.clearCache();
         assert.equal((await translator.translate("hello there")).status, "error");
         assert.equal(calls, 2);
@@ -771,7 +742,7 @@ await checkAsync("translator: every block waiting on the same text is told it st
             translator.translate("hello there", { onStart: () => started.push("first") }),
             translator.translate("hello there", { onStart: () => started.push("second") }),
         ]);
-        // 요청은 하나로 합쳐도, 합류한 블록이 빈 줄에 앉아 있으면 안 된다.
+
         assert.deepEqual(started, ["first", "second"]);
         assert.equal(both[0].text, both[1].text);
     } finally {
@@ -792,11 +763,9 @@ await checkAsync("manual mode: nothing is sent until it is asked for", async () 
         const settings = stubSettings();
         const translator = new Translator({ settings });
 
-        // 캐시 미스는 무언가가 명시적으로 요청하기 전까지 미스로 남아야 한다.
         assert.equal(translator.peek("hello there").status, "unknown");
         assert.equal(calls, 0, "peek() must never reach the provider");
 
-        // 버튼 핸들러는 observer 가 부르는 것과 같은 translate() 호출이다.
         assert.equal((await translator.translate("hello there")).text, "안녕");
         assert.equal(calls, 1);
     } finally {
@@ -813,17 +782,16 @@ check("settings: the stored api key is never rendered into the panel", () => {
     assert.ok(!JSON.stringify(field).includes("abcdefgh"), "no part of the key may leak into the panel");
     assert.ok(field.placeholder.includes("1234"), "a last-4 fingerprint identifies the saved key");
 
-    settings.set("apiKey", ""); // an empty edit means "unchanged"
+    settings.set("apiKey", "");
     assert.equal(settings.current.apiKey, "sk-abcdefgh1234");
 
-    settings.set("apiKey", "-"); // the documented way to erase it
+    settings.set("apiKey", "-");
     assert.equal(settings.current.apiKey, "");
 });
 
 const { parseHotkey, matchesHotkey, keysFromString } = await import("../src/hotkey.js");
 
 check("hotkey: a combo is parsed, and nonsense disables it instead of throwing", () => {
-    // BD 의 keybind 입력이 주는 형태: 누른 순서대로 모은 event.key 배열.
     assert.deepEqual(parseHotkey(["Control", "Shift", "T"]), {
         ctrl: true,
         shift: true,
@@ -840,12 +808,10 @@ check("hotkey: a combo is parsed, and nonsense disables it instead of throwing",
     });
     assert.equal(parseHotkey(["Meta", "K"]).meta, true, "macOS Command");
 
-    // 문자열로 저장하던 시절의 값도 그대로 읽힌다.
     assert.deepEqual(parseHotkey("Ctrl+Shift+T"), parseHotkey(["Control", "Shift", "T"]));
     assert.deepEqual(keysFromString("Ctrl+Shift+T"), ["Control", "Shift", "T"]);
     assert.deepEqual(keysFromString("cmd+K"), ["Meta", "K"]);
 
-    // 알아볼 수 없으면 단축키만 붙지 않는다. 설정 하나가 플러그인을 멈추면 안 된다.
     assert.equal(parseHotkey([]), null);
     assert.equal(parseHotkey(""), null);
     assert.equal(parseHotkey(["Control", "Shift"]), null, "a modifier alone is not a shortcut");
@@ -861,7 +827,6 @@ check("settings: a hotkey saved as text becomes a recordable keybind", () => {
         delete: (name, key) => store.delete(`${name}::${key}`),
     };
     try {
-        // 문자열이 남아 있으면 BD 의 keybind 입력이 렌더되지 않는다.
         const settings = new Settings();
         assert.deepEqual(settings.current.hotkey, ["Control", "Shift", "T"]);
         assert.deepEqual(settings.current.outgoingHotkey, ["Alt", "K"]);
@@ -888,9 +853,43 @@ check("hotkey: only the exact combo fires, and never mid-composition", () => {
     assert.ok(!matchesHotkey(combo, event({ ctrlKey: false })));
     assert.ok(!matchesHotkey(combo, event({ key: "R" })));
     assert.ok(!matchesHotkey(combo, event({ repeat: true })), "holding the key must not spam the toggle");
-    // 한글 조합 중의 keydown 을 단축키로 읽으면 타이핑이 망가진다.
+
     assert.ok(!matchesHotkey(combo, event({ isComposing: true })));
     assert.ok(!matchesHotkey(null, event()));
+});
+
+const { rawUrlFor, readVersion, isNewer } = await import("../src/updater.js");
+
+check("updater: the download url comes from meta.source and nowhere else", () => {
+    assert.equal(
+        rawUrlFor("https://github.com/nyattic/mollu"),
+        "https://raw.githubusercontent.com/nyattic/mollu/main/dist/Mollu.plugin.js",
+    );
+    assert.equal(
+        rawUrlFor("https://github.com/nyattic/mollu.git"),
+        rawUrlFor("https://github.com/nyattic/mollu"),
+    );
+
+    assert.equal(rawUrlFor("http://github.com/nyattic/mollu"), null);
+    assert.equal(rawUrlFor("https://evil.example/nyattic/mollu"), null);
+    assert.equal(rawUrlFor("https://github.com/nyattic/mollu/../../other"), null);
+    assert.equal(rawUrlFor(""), null);
+    assert.equal(rawUrlFor(undefined), null);
+});
+
+check("updater: a downloaded file is only written when it is a newer Mollu build", () => {
+    const banner = (name, version) => `/**\n * @name ${name}\n * @version ${version}\n */\nvar x = 1;`;
+    assert.equal(readVersion(banner("Mollu", "1.2.0")), "1.2.0");
+    assert.equal(readVersion(banner("Mollu2", "1.2.0")), null);
+    assert.equal(readVersion(banner("NotMollu", "1.2.0")), null);
+    assert.equal(readVersion("var x = 1;"), null);
+    assert.equal(readVersion(undefined), null);
+
+    assert.ok(isNewer("1.10.0", "1.9.0"), "a string compare would call this older");
+    assert.ok(isNewer("1.0.1", "1.0.0"));
+    assert.ok(isNewer("2.0", "1.9.9"));
+    assert.ok(!isNewer("1.0.0", "1.0.0"));
+    assert.ok(!isNewer("1.0.0", "1.1.0"), "a local build ahead of the remote is never overwritten");
 });
 
 check("settings: the advanced section carries a working cache-clear button", () => {
@@ -901,7 +900,7 @@ check("settings: the advanced section carries a working cache-clear button", () 
 
     const button = advanced.settings.find((entry) => entry.id === "clearCache");
     assert.equal(button.type, "button");
-    // 값이 없는 항목이라 설정을 쓰는 onChange 가 붙으면 안 된다.
+
     assert.ok(!("onChange" in button));
 
     button.onClick();
@@ -915,7 +914,7 @@ check("settings: the panel is a live component, not a one-shot spec", () => {
 
     const rendered = panel.type();
     assert.ok(rendered.__spec.settings.some((entry) => entry.id === "provider"));
-    // key 가 바뀌어야 BD 의 비제어 입력이 새 defaultValue 로 다시 마운트된다.
+
     assert.match(String(rendered.props.key), /^panel-/);
 });
 
@@ -933,8 +932,6 @@ check("settings: listeners fire and unsubscribe, and pasted values are trimmed",
     settings.set("showErrors", true);
     assert.equal(seen.length, 2, "no callbacks after unsubscribe");
 });
-
-// --- 5. 메시지 필터 -----------------------------------------------------------
 
 const { MessagePatch } = await import("../src/message-patch.js");
 
@@ -960,7 +957,6 @@ check("target servers: the list gates by default, the toggle opens every server"
         "the toggle must not bypass the author filters",
     );
 
-    // 슬래시 커맨드 응답(20)도 사람이 읽는 본문이다.
     assert.equal(guildOf({ allGuilds: true }, "", { type: 20 }), inList);
     assert.equal(guildOf({ allGuilds: true }, "", { type: 7 }), undefined, "a join notice has no body");
 });
@@ -975,8 +971,6 @@ check("diagnostics: a skipped message reports why", () => {
     assert.match(reasonFor({ allGuilds: true }, { content: "   " }), /no text content/);
 });
 
-// --- 6. 보내는 메시지 -----------------------------------------------------------
-
 const { OutgoingPatch } = await import("../src/outgoing-patch.js");
 
 check("outgoing: the gate opens only for a target server with the toggle on", () => {
@@ -990,12 +984,11 @@ check("outgoing: the gate opens only for a target server with the toggle on", ()
     assert.equal(pick({ translateOutgoing: true, apiKey: "" }), null, "no key");
     assert.equal(pick({ translateOutgoing: true }, "안녕하세요", "dm"), null, "not a server channel");
     assert.equal(pick({ translateOutgoing: true }, "   "), null, "nothing to translate");
-    // 슬래시 커맨드를 번역하면 명령 자체가 망가진다.
+
     assert.equal(pick({ translateOutgoing: true }, "/giphy 안녕"), null);
-    // 문자로 구분되는 언어라면 이미 그 언어인 글은 보내지 않는다.
+
     assert.equal(pick({ translateOutgoing: true, outgoingLanguage: "ko" }), null);
-    // 라틴 문자 대상 언어는 보내기 전에 구분할 수 없어 한 번은 왕복한다. 결과가
-    // 원문과 같으면 그대로 나가고, 그 판정은 캐시된다.
+
     assert.equal(pick({ translateOutgoing: true }, "hello there"), "hello there");
     assert.equal(
         outgoingWith({ translateOutgoing: true }, "222222222222222222")._pick([
@@ -1023,7 +1016,6 @@ await checkAsync(
         await patch._onSend(null, ["c", { content: "안녕하세요" }], original);
         assert.deepEqual(sent, ["hello there"]);
 
-        // 번역이 실패해도 원문은 반드시 나가고, 조용히 나가서도 안 된다.
         const failures = [];
         const failing = outgoingWith(
             { translateOutgoing: true },
@@ -1035,7 +1027,6 @@ await checkAsync(
         assert.deepEqual(sent, ["hello there", "안녕하세요"]);
         assert.deepEqual(failures, ["HTTP 401"]);
 
-        // translate() 가 약속을 어기고 throw 해도 마찬가지다.
         const throwing = outgoingWith({ translateOutgoing: true }, "1101573652786446417", {
             translate: async () => {
                 throw new Error("boom");
@@ -1049,17 +1040,13 @@ await checkAsync(
 check("outgoing: the gate is skipped without a promise when it does not apply", () => {
     const patch = outgoingWith({}, "1101573652786446417");
     const result = patch._onSend(null, ["c", { content: "안녕하세요" }], () => "sent");
-    // 보내는 경로 대부분은 그대로 지나가야 한다. Promise 로 감싸면 반환값이 바뀐다.
+
     assert.equal(result, "sent");
 });
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
-// --- 헬퍼 --------------------------------------------------------------------
-
-// BetterDiscord 가 플러그인 파일을 평가하는 방식을 흉내 낸다: require/module/exports
-// 를 넘기는 Function 으로 감싸 실행한다. Node 의 ESM/CJS 처리를 완전히 피한다.
 function loadPlugin(path) {
     const source = readFileSync(path, "utf8");
     const moduleObj = { filename: path, exports: {} };

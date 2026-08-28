@@ -1,7 +1,3 @@
-// 번역 대상 언어. script 는 "이미 이 언어로 쓰인 메시지" 를 값싸게 걸러내는 데
-// 쓴다. 라틴 문자를 쓰는 언어는 서로 구분할 수 없으므로 null 이고, 그 경우
-// 판정을 모델에 맡긴다(프롬프트가 이미 대상 언어면 그대로 돌려주게 되어 있고,
-// 원문과 같으면 표시하지 않는다).
 const HANGUL = /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-힣ힰ-퟿ﾠ-ￜ]/;
 const KANA = /[぀-ヿㇰ-ㇿｦ-ﾝ]/;
 const HAN = /[㐀-䶿一-鿿豈-﫿]/;
@@ -48,7 +44,6 @@ export function getLanguage(code) {
     return BY_CODE.get(code) || BY_CODE.get(DEFAULT_LANGUAGE);
 }
 
-// 번역문 앞에 붙는 짧은 표식. 지역 변종은 코드가 길어 따로 지정한다.
 export function badgeFor(code) {
     const language = getLanguage(code);
     return language.badge || language.code.toUpperCase();
