@@ -26,7 +26,8 @@ async function checkAsync(name, fn) {
     }
 }
 
-const { mask, unmask } = await import("../src/translation/tokenizer.js");
+const { mask, unmask, missingPlaceholders, appendPlaceholders } =
+    await import("../src/translation/tokenizer.js");
 const { LanguageDetector } = await import("../src/translation/language-detector.js");
 const { normalizeBaseUrl } = await import("../src/lib/net.js");
 
@@ -56,6 +57,35 @@ check("tokenizer: ordinary '(1)' in a translation is not swallowed", () => {
         unmask("【0】 와 【1】 를 보세요 (1)", tokens),
         "https://a.example 와 https://b.example 를 보세요 (1)",
     );
+});
+
+check("tokenizer: a dropped placeholder is detected, an intact translation is not flagged", () => {
+    const { masked } = mask("hey <@1> see https://a.example now");
+    assert.equal(masked, "hey \u30100\u3011 see \u30101\u3011 now");
+
+    assert.deepEqual(missingPlaceholders("\u30100\u3011 \u30101\u3011 \ubd10", masked), []);
+    assert.deepEqual(missingPlaceholders("[1] \ubd10 [0]", masked), [], "loose brackets still count");
+    assert.deepEqual(missingPlaceholders("\u30101\u3011 \ubd10", masked), [0], "the mention vanished");
+    assert.deepEqual(missingPlaceholders("\uc548\ub155", masked), [0, 1], "both vanished");
+
+    assert.deepEqual(
+        missingPlaceholders("\uc548\ub155", "\uc548\ub155\ud558\uc138\uc694"),
+        [],
+        "nothing to lose",
+    );
+});
+
+check("tokenizer: appending a dropped placeholder brings the token back", () => {
+    const original = "hey <@123456789012345678> see https://a.example now";
+    const { masked, tokens } = mask(original);
+
+    const dropped = "\u30100\u3011 \uc774\uc81c \ubd10";
+    const missing = missingPlaceholders(dropped, masked);
+    assert.deepEqual(missing, [1]);
+
+    const repaired = appendPlaceholders(dropped, missing);
+    assert.equal(unmask(repaired, tokens), "<@123456789012345678> \uc774\uc81c \ubd10 https://a.example");
+    assert.equal(appendPlaceholders(dropped, []), dropped, "an intact translation is untouched");
 });
 
 check("tokenizer: mismatched brackets are not placeholders", () => {
@@ -212,6 +242,57 @@ await checkAsync("translator: a shared cache key restores each message's own tok
         const second = await translator.translate("hi <@222222222222222222>");
         assert.equal(first.text, "안녕 <@111111111111111111>");
         assert.equal(second.text, "안녕 <@222222222222222222>");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: a link the model dropped is put back, and cached that way", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+
+        return new Response(
+            JSON.stringify({ choices: [{ message: { content: "\uc9c0\uae08 \u30100\u3011 \ubd10" } }] }),
+            {
+                status: 200,
+            },
+        );
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const source = "look <@111111111111111111> at https://a.example now";
+
+        const first = await translator.translate(source);
+        assert.equal(
+            first.text,
+            "\uc9c0\uae08 <@111111111111111111> \ubd10 https://a.example",
+            "the url the model swallowed is appended instead of vanishing",
+        );
+        assert.ok(
+            first.segments.some((seg) => seg.type === "token" && seg.value === "https://a.example"),
+            "it comes back as a token segment, not as literal text",
+        );
+
+        const second = await translator.translate(source);
+        assert.equal(calls, 1, "served from the cache");
+        assert.equal(second.text, first.text, "the cache holds the repaired translation, not the lossy one");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: an intact translation is left exactly as the model wrote it", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content: "\u30100\u3011 \ubd10" } }] }), {
+            status: 200,
+        });
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const result = await translator.translate("look at https://a.example");
+        assert.equal(result.text, "https://a.example \ubd10", "nothing is appended when nothing was lost");
     } finally {
         BdApi.Net.fetch = previous;
     }

@@ -1,4 +1,4 @@
-import { mask, unmaskSegments } from "./tokenizer.js";
+import { mask, unmaskSegments, missingPlaceholders, appendPlaceholders } from "./tokenizer.js";
 import { TranslationCache } from "./cache.js";
 import { TaskQueue } from "./queue.js";
 import { getProvider } from "./providers/index.js";
@@ -192,13 +192,25 @@ export class Translator {
     }
 
     _resolveSuccess(key, masked, raw) {
-        const maskedTranslation = stripWrappingQuotes(raw, masked).trim();
-        if (!maskedTranslation || normalize(maskedTranslation) === normalize(masked)) {
+        const cleaned = stripWrappingQuotes(raw, masked).trim();
+        if (!cleaned || normalize(cleaned) === normalize(masked)) {
             this._cache.set(key, null);
             return skip();
         }
+        const maskedTranslation = this._keepPlaceholders(cleaned, masked);
         this._cache.set(key, maskedTranslation);
         return { status: "done", masked: maskedTranslation };
+    }
+
+    _keepPlaceholders(translation, masked) {
+        const missing = missingPlaceholders(translation, masked);
+        if (missing.length === 0) return translation;
+
+        logger.warn(
+            `the model dropped ${missing.length} placeholder(s) [${missing.join(", ")}]; ` +
+                "appending them so the mentions, links or code they stand for are not lost",
+        );
+        return appendPlaceholders(translation, missing);
     }
 
     _resolveFailure(maskedKey, err) {

@@ -42,6 +42,33 @@ export function unmaskSegments(text, tokens) {
     return out;
 }
 
+const SOURCE_PLACEHOLDER = /\u3010(\d+)\u3011/g;
+
+function placeholderCount(maskedSource) {
+    SOURCE_PLACEHOLDER.lastIndex = 0;
+    let count = 0;
+    while (SOURCE_PLACEHOLDER.exec(String(maskedSource)) !== null) count += 1;
+    return count;
+}
+
+export function missingPlaceholders(maskedTranslation, maskedSource) {
+    const count = placeholderCount(maskedSource);
+    if (count === 0) return [];
+
+    const placeholders = Array.from({ length: count }, (_, i) => `${OPEN}${i}${CLOSE}`);
+    const restored = new Set();
+    for (const segment of unmaskSegments(maskedTranslation, placeholders)) {
+        if (segment.type === "token") restored.add(segment.index);
+    }
+    return placeholders.map((_, i) => i).filter((i) => !restored.has(i));
+}
+
+export function appendPlaceholders(maskedTranslation, indices) {
+    if (indices.length === 0) return maskedTranslation;
+    const tail = indices.map((i) => `${OPEN}${i}${CLOSE}`).join(" ");
+    return `${maskedTranslation.replace(/\s+$/, "")} ${tail}`;
+}
+
 export function unmask(text, tokens) {
     return unmaskSegments(text, tokens)
         .map((segment) => segment.value)
@@ -60,7 +87,7 @@ function split(input, regex, tokens, restored, record) {
         if (token === undefined || (!record && restored.has(index))) continue;
 
         if (match.index > last) out.push({ type: "text", value: input.slice(last, match.index) });
-        out.push({ type: "token", value: token });
+        out.push({ type: "token", value: token, index });
         if (record) restored.add(index);
         last = match.index + match[0].length;
     }

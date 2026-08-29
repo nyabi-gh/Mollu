@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.1.1
+ * @version 1.1.2
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyattic/mollu
  */
@@ -1238,6 +1238,28 @@ function unmaskSegments(text, tokens) {
   }
   return out;
 }
+var SOURCE_PLACEHOLDER = /\u3010(\d+)\u3011/g;
+function placeholderCount(maskedSource) {
+  SOURCE_PLACEHOLDER.lastIndex = 0;
+  let count = 0;
+  while (SOURCE_PLACEHOLDER.exec(String(maskedSource)) !== null) count += 1;
+  return count;
+}
+function missingPlaceholders(maskedTranslation, maskedSource) {
+  const count = placeholderCount(maskedSource);
+  if (count === 0) return [];
+  const placeholders = Array.from({ length: count }, (_, i) => `${OPEN}${i}${CLOSE}`);
+  const restored = /* @__PURE__ */ new Set();
+  for (const segment of unmaskSegments(maskedTranslation, placeholders)) {
+    if (segment.type === "token") restored.add(segment.index);
+  }
+  return placeholders.map((_, i) => i).filter((i) => !restored.has(i));
+}
+function appendPlaceholders(maskedTranslation, indices) {
+  if (indices.length === 0) return maskedTranslation;
+  const tail = indices.map((i) => `${OPEN}${i}${CLOSE}`).join(" ");
+  return `${maskedTranslation.replace(/\s+$/, "")} ${tail}`;
+}
 function split(input, regex, tokens, restored, record) {
   const out = [];
   let last = 0;
@@ -1247,7 +1269,7 @@ function split(input, regex, tokens, restored, record) {
     const token = tokens[index];
     if (token === void 0 || !record && restored.has(index)) continue;
     if (match.index > last) out.push({ type: "text", value: input.slice(last, match.index) });
-    out.push({ type: "token", value: token });
+    out.push({ type: "token", value: token, index });
     if (record) restored.add(index);
     last = match.index + match[0].length;
   }
@@ -1532,13 +1554,22 @@ var Translator = class {
     }
   }
   _resolveSuccess(key, masked, raw) {
-    const maskedTranslation = stripWrappingQuotes(raw, masked).trim();
-    if (!maskedTranslation || normalize2(maskedTranslation) === normalize2(masked)) {
+    const cleaned = stripWrappingQuotes(raw, masked).trim();
+    if (!cleaned || normalize2(cleaned) === normalize2(masked)) {
       this._cache.set(key, null);
       return skip();
     }
+    const maskedTranslation = this._keepPlaceholders(cleaned, masked);
     this._cache.set(key, maskedTranslation);
     return { status: "done", masked: maskedTranslation };
+  }
+  _keepPlaceholders(translation, masked) {
+    const missing = missingPlaceholders(translation, masked);
+    if (missing.length === 0) return translation;
+    logger.warn(
+      `the model dropped ${missing.length} placeholder(s) [${missing.join(", ")}]; appending them so the mentions, links or code they stand for are not lost`
+    );
+    return appendPlaceholders(translation, missing);
   }
   _resolveFailure(maskedKey, err) {
     const message = err && err.message || String(err);
