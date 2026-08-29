@@ -2,6 +2,8 @@ import { logger } from "./lib/logger.js";
 
 export const React = BdApi.React;
 
+const DM_CHANNEL_TYPES = new Set([1, 3]);
+
 export function createStores() {
     const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
     const UserStore = BdApi.Webpack.getStore("UserStore");
@@ -13,6 +15,13 @@ export function createStores() {
                 return ChannelStore?.getChannel?.(channelId)?.guild_id ?? null;
             } catch {
                 return null;
+            }
+        },
+        isDirectMessage(channelId) {
+            try {
+                return DM_CHANNEL_TYPES.has(ChannelStore?.getChannel?.(channelId)?.type);
+            } catch {
+                return false;
             }
         },
         currentUserId() {

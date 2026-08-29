@@ -147,6 +147,13 @@ export class Settings {
                     disableWith: "allGuilds",
                 },
                 {
+                    type: "switch",
+                    id: "translateDms",
+                    name: t("settings.translateDms"),
+                    note: t("settings.translateDms.note"),
+                    value: v.translateDms,
+                },
+                {
                     type: "dropdown",
                     id: "uiLanguage",
                     name: t("settings.uiLanguage"),

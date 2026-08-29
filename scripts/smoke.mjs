@@ -950,7 +950,8 @@ const { MessagePatch } = await import("../src/message-patch.js");
 check("target servers: the list gates by default, the toggle opens every server", () => {
     const inList = "1101573652786446417";
 
-    const guildOf = (overrides, list, msg) => patchWith(overrides, list)._resolve(message(msg)).guildId;
+    const resolve = (overrides, list, msg) => patchWith(overrides, list)._resolve(message(msg));
+    const guildOf = (overrides, list, msg) => resolve(overrides, list, msg).guildId;
 
     assert.equal(guildOf({}, inList), inList);
     assert.equal(guildOf({}, "222222222222222222"), undefined, "outside the list");
@@ -958,9 +959,9 @@ check("target servers: the list gates by default, the toggle opens every server"
 
     assert.equal(guildOf({ allGuilds: true }), inList, "the toggle needs no list");
     assert.equal(
-        guildOf({ allGuilds: true }, "", { channel_id: "dm" }),
+        resolve({ allGuilds: true }, "", { channel_id: "dm" }).ok,
         undefined,
-        "a direct message belongs to no server, with or without the toggle",
+        "the server toggle does not reach direct messages",
     );
     assert.equal(guildOf({ allGuilds: true, apiKey: "" }), undefined, "still needs a key");
     assert.equal(
@@ -973,12 +974,39 @@ check("target servers: the list gates by default, the toggle opens every server"
     assert.equal(guildOf({ allGuilds: true }, "", { type: 7 }), undefined, "a join notice has no body");
 });
 
+check("direct messages: off by default, and the switch opens them on their own", () => {
+    const resolve = (overrides, msg) => patchWith(overrides, "")._resolve(message(msg));
+    const dm = { channel_id: "dm" };
+
+    assert.equal(resolve({}, dm).ok, undefined, "off by default");
+    assert.equal(resolve({ allGuilds: true }, dm).ok, undefined, "the server toggle is not enough");
+
+    assert.equal(resolve({ translateDms: true }, dm).ok, true, "no server list needed");
+    assert.equal(resolve({ translateDms: true }, dm).guildId, null, "a dm belongs to no server");
+    assert.equal(resolve({ translateDms: true }, { channel_id: "group" }).ok, true, "group dms count too");
+
+    assert.equal(
+        resolve({ translateDms: true }, { channel_id: "unknown" }).ok,
+        undefined,
+        "an unresolved channel is still not a dm",
+    );
+    assert.equal(resolve({ translateDms: true, apiKey: "" }, dm).ok, undefined, "still needs a key");
+    assert.equal(
+        resolve({ translateDms: true }, { ...dm, author: { id: "me" } }).ok,
+        undefined,
+        "the switch must not bypass the author filters",
+    );
+
+    assert.equal(resolve({ translateDms: true }, {}).ok, undefined, "it opens dms only, not servers");
+});
+
 check("diagnostics: a skipped message reports why", () => {
     const reasonFor = (overrides, msg) => patchWith(overrides, "")._resolve(message(msg)).reason;
 
     assert.match(reasonFor({}), /no target server/);
     assert.match(reasonFor({ allGuilds: true }, { author: { id: "me" } }), /own message/);
-    assert.match(reasonFor({ allGuilds: true }, { channel_id: "dm" }), /not a server channel/);
+    assert.match(reasonFor({ allGuilds: true }, { channel_id: "dm" }), /direct message translation is off/);
+    assert.match(reasonFor({ allGuilds: true }, { channel_id: "unknown" }), /not a server channel/);
     assert.match(reasonFor({ allGuilds: true, apiKey: "" }), /no api key/);
     assert.match(reasonFor({ allGuilds: true }, { content: "   " }), /no text content/);
 });
@@ -994,7 +1022,17 @@ check("outgoing: the gate opens only for a target server with the toggle on", ()
 
     assert.equal(pick({}), null, "off by default");
     assert.equal(pick({ translateOutgoing: true, apiKey: "" }), null, "no key");
-    assert.equal(pick({ translateOutgoing: true }, "안녕하세요", "dm"), null, "not a server channel");
+    assert.equal(pick({ translateOutgoing: true }, "안녕하세요", "dm"), null, "dms stay closed by default");
+    assert.equal(
+        pick({ translateOutgoing: true, translateDms: true }, "안녕하세요", "dm"),
+        "안녕하세요",
+        "the dm switch opens outgoing translation too",
+    );
+    assert.equal(
+        pick({ translateOutgoing: true, translateDms: true }, "안녕하세요", "unknown"),
+        null,
+        "an unresolved channel is neither a server nor a dm",
+    );
     assert.equal(pick({ translateOutgoing: true }, "   "), null, "nothing to translate");
 
     assert.equal(pick({ translateOutgoing: true }, "/giphy 안녕"), null);
@@ -1089,7 +1127,7 @@ function outgoingWith(overrides, targetGuildId = "", translator = null, onFailur
         settings,
         translator: translator ?? { translate: async () => ({ status: "unknown" }) },
         languageDetector: new LanguageDetector(settings),
-        stores: { guildIdForChannel: (channelId) => (channelId === "dm" ? null : guildId) },
+        stores: channelStub(guildId),
         onFailure: onFailure ?? (() => {}),
     });
 }
@@ -1114,11 +1152,17 @@ function patchWith(overrides, targetGuildId = "") {
             },
             guildIdSet: new Set(targetGuildId ? [targetGuildId] : []),
         },
-        stores: {
-            guildIdForChannel: (channelId) => (channelId === "dm" ? null : guildId),
-            currentUserId: () => "me",
-        },
+        stores: { ...channelStub(guildId), currentUserId: () => "me" },
     });
+}
+
+function channelStub(guildId) {
+    const dms = new Set(["dm", "group"]);
+    const unresolved = new Set(["unknown"]);
+    return {
+        guildIdForChannel: (channelId) => (dms.has(channelId) || unresolved.has(channelId) ? null : guildId),
+        isDirectMessage: (channelId) => dms.has(channelId),
+    };
 }
 
 function message(overrides) {

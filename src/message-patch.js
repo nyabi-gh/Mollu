@@ -40,8 +40,8 @@ export class MessagePatch {
         if (!ret) return ret;
 
         const message = props?.message;
-        const { guildId, reason } = this._resolve(message);
-        if (!guildId) {
+        const { ok, guildId, reason } = this._resolve(message);
+        if (!ok) {
             this._trace(message, reason);
             return ret;
         }
@@ -71,7 +71,7 @@ export class MessagePatch {
 
         const settings = this._settings.current;
         if (!settings.apiKey) return { reason: "no api key configured" };
-        if (!settings.allGuilds && this._settings.guildIdSet.size === 0) {
+        if (!settings.allGuilds && this._settings.guildIdSet.size === 0 && !settings.translateDms) {
             return { reason: "no target server configured" };
         }
 
@@ -82,11 +82,17 @@ export class MessagePatch {
         }
 
         const guildId = this._stores.guildIdForChannel(message.channel_id);
-        if (!guildId) return { reason: "not a server channel" };
+        if (!guildId) {
+            if (!this._stores.isDirectMessage?.(message.channel_id)) {
+                return { reason: "not a server channel" };
+            }
+            if (!settings.translateDms) return { reason: "direct message translation is off" };
+            return { ok: true, guildId: null };
+        }
         if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
             return { reason: `server ${guildId} is not in the target list` };
         }
-        return { guildId };
+        return { ok: true, guildId };
     }
 
     _trace(message, reason) {

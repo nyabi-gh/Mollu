@@ -97,8 +97,9 @@ export default class Mollu {
             if (!this._settings.current.apiKey) {
                 this._toast(t("toast.needApiKey"), "info");
             }
-            const { provider, targetLanguage, autoTranslate, allGuilds } = this._settings.current;
-            if (!allGuilds && this._settings.guildIdSet.size === 0) {
+            const { provider, targetLanguage, autoTranslate, allGuilds, translateDms } =
+                this._settings.current;
+            if (!allGuilds && this._settings.guildIdSet.size === 0 && !translateDms) {
                 this._toast(t("toast.needGuilds"), "info");
             }
 
@@ -106,6 +107,7 @@ export default class Mollu {
                 `started · provider=${provider} target=${targetLanguage} ` +
                     `mode=${autoTranslate ? "auto" : "manual"} ` +
                     `servers=${allGuilds ? "all" : this._settings.guildIdSet.size} ` +
+                    `dms=${translateDms ? "on" : "off"} ` +
                     `outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`,
             );
         } catch (e) {

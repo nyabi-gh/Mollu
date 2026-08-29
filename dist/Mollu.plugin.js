@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.0.0
+ * @version 1.1.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyattic/mollu
  */
@@ -41,6 +41,7 @@ var DEFAULT_SETTINGS = Object.freeze({
   baseUrl: "https://api.deepseek.com",
   allGuilds: false,
   guildIds: "",
+  translateDms: false,
   targetLanguage: "ko",
   uiLanguage: "auto",
   profiles: Object.freeze({}),
@@ -145,9 +146,11 @@ var STRINGS = {
     "settings.baseUrl": "API base URL",
     "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
     "settings.allGuilds": "Translate in every server",
-    "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages are left alone either way.",
+    "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
     "settings.guildIds": "Target server ids",
     "settings.guildIds.note": "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
+    "settings.translateDms": "Translate direct messages",
+    "settings.translateDms.note": "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
     "settings.targetLanguage": "Translate into",
     "settings.targetLanguage.note": "Messages not already in this language are translated into it. Languages written in the Latin alphabet cannot be told apart before sending, so every message is sent once and skipped if it comes back unchanged.",
     "settings.uiLanguage": "Plugin language",
@@ -162,7 +165,7 @@ var STRINGS = {
     "settings.hotkey": "Automatic translation shortcut",
     "settings.hotkey.note": "Toggles automatic translation without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
     "settings.translateOutgoing": "Translate the messages I send",
-    "settings.translateOutgoing.note": "Replaces what you type with its translation before it is sent, in the target servers only. Other people never see the original, so leave this off unless you mean it.",
+    "settings.translateOutgoing.note": "Replaces what you type with its translation before it is sent, in the target servers and DMs only. Other people never see the original, so leave this off unless you mean it.",
     "settings.outgoingLanguage": "Send my messages in",
     "settings.outgoingLanguage.note": "What you type is translated into this language. A message already written in it is sent untouched.",
     "settings.outgoingHotkey": "Outgoing translation shortcut",
@@ -234,9 +237,11 @@ var STRINGS = {
     "settings.baseUrl": "API Base URL",
     "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
     "settings.allGuilds": "모든 서버에서 번역",
-    "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. 어느 쪽이든 DM 은 대상이 아닙니다.",
+    "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
     "settings.guildIds": "대상 서버 ID",
     "settings.guildIds.note": "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+    "settings.translateDms": "DM 도 번역",
+    "settings.translateDms.note": "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
     "settings.targetLanguage": "번역할 언어",
     "settings.targetLanguage.note": "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어끼리는 보내기 전에 구분할 수 없어, 메시지마다 한 번은 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
     "settings.uiLanguage": "플러그인 언어",
@@ -251,7 +256,7 @@ var STRINGS = {
     "settings.hotkey": "자동 번역 단축키",
     "settings.hotkey.note": "설정 창을 열지 않고 자동 번역을 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 단축키를 쓰지 않습니다.",
     "settings.translateOutgoing": "보내는 메시지도 번역",
-    "settings.translateOutgoing.note": "대상 서버에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
+    "settings.translateOutgoing.note": "대상 서버와 DM 에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
     "settings.outgoingLanguage": "보낼 때 번역할 언어",
     "settings.outgoingLanguage.note": "입력한 글을 이 언어로 번역해 보냅니다. 이미 이 언어로 쓴 메시지는 그대로 나갑니다.",
     "settings.outgoingHotkey": "보내는 메시지 번역 단축키",
@@ -745,6 +750,7 @@ var Hotkey = class {
 
 // src/discord.js
 var React = BdApi.React;
+var DM_CHANNEL_TYPES = /* @__PURE__ */ new Set([1, 3]);
 function createStores() {
   const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
   const UserStore = BdApi.Webpack.getStore("UserStore");
@@ -755,6 +761,13 @@ function createStores() {
         return ChannelStore?.getChannel?.(channelId)?.guild_id ?? null;
       } catch {
         return null;
+      }
+    },
+    isDirectMessage(channelId) {
+      try {
+        return DM_CHANNEL_TYPES.has(ChannelStore?.getChannel?.(channelId)?.type);
+      } catch {
+        return false;
       }
     },
     currentUserId() {
@@ -950,6 +963,13 @@ var Settings = class {
           note: t("settings.guildIds.note"),
           value: v.guildIds,
           disableWith: "allGuilds"
+        },
+        {
+          type: "switch",
+          id: "translateDms",
+          name: t("settings.translateDms"),
+          note: t("settings.translateDms.note"),
+          value: v.translateDms
         },
         {
           type: "dropdown",
@@ -1949,8 +1969,8 @@ var MessagePatch = class {
   _onRender(props, ret) {
     if (!ret) return ret;
     const message = props?.message;
-    const { guildId, reason } = this._resolve(message);
-    if (!guildId) {
+    const { ok, guildId, reason } = this._resolve(message);
+    if (!ok) {
       this._trace(message, reason);
       return ret;
     }
@@ -1977,7 +1997,7 @@ var MessagePatch = class {
     }
     const settings = this._settings.current;
     if (!settings.apiKey) return { reason: "no api key configured" };
-    if (!settings.allGuilds && this._settings.guildIdSet.size === 0) {
+    if (!settings.allGuilds && this._settings.guildIdSet.size === 0 && !settings.translateDms) {
       return { reason: "no target server configured" };
     }
     const author = message.author || {};
@@ -1986,11 +2006,17 @@ var MessagePatch = class {
       return { reason: "own message" };
     }
     const guildId = this._stores.guildIdForChannel(message.channel_id);
-    if (!guildId) return { reason: "not a server channel" };
+    if (!guildId) {
+      if (!this._stores.isDirectMessage?.(message.channel_id)) {
+        return { reason: "not a server channel" };
+      }
+      if (!settings.translateDms) return { reason: "direct message translation is off" };
+      return { ok: true, guildId: null };
+    }
     if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
       return { reason: `server ${guildId} is not in the target list` };
     }
-    return { guildId };
+    return { ok: true, guildId };
   }
   _trace(message, reason) {
     if (!this._settings.current.debugLog) return;
@@ -2082,8 +2108,11 @@ var OutgoingPatch = class {
     if (content.startsWith("/")) return null;
     if (content.length > settings.maxChars) return null;
     const guildId = this._stores.guildIdForChannel(channelId);
-    if (!guildId) return null;
-    if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) return null;
+    if (!guildId) {
+      if (!settings.translateDms || !this._stores.isDirectMessage?.(channelId)) return null;
+    } else if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
+      return null;
+    }
     if (!this._detector.needsTranslation(content, settings.outgoingLanguage)) return null;
     return content;
   }
@@ -2343,12 +2372,12 @@ var Mollu = class {
       if (!this._settings.current.apiKey) {
         this._toast(t("toast.needApiKey"), "info");
       }
-      const { provider, targetLanguage, autoTranslate, allGuilds } = this._settings.current;
-      if (!allGuilds && this._settings.guildIdSet.size === 0) {
+      const { provider, targetLanguage, autoTranslate, allGuilds, translateDms } = this._settings.current;
+      if (!allGuilds && this._settings.guildIdSet.size === 0 && !translateDms) {
         this._toast(t("toast.needGuilds"), "info");
       }
       logger.info(
-        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${allGuilds ? "all" : this._settings.guildIdSet.size} outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`
+        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${allGuilds ? "all" : this._settings.guildIdSet.size} dms=${translateDms ? "on" : "off"} outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`
       );
     } catch (e) {
       logger.error("start failed", e);

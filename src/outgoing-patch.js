@@ -77,8 +77,11 @@ export class OutgoingPatch {
         if (content.length > settings.maxChars) return null;
 
         const guildId = this._stores.guildIdForChannel(channelId);
-        if (!guildId) return null;
-        if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) return null;
+        if (!guildId) {
+            if (!settings.translateDms || !this._stores.isDirectMessage?.(channelId)) return null;
+        } else if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
+            return null;
+        }
 
         if (!this._detector.needsTranslation(content, settings.outgoingLanguage)) return null;
         return content;

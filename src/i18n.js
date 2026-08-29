@@ -45,10 +45,13 @@ const STRINGS = {
         "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
         "settings.allGuilds": "Translate in every server",
         "settings.allGuilds.note":
-            "Ignores the list below and translates in every server you are in. Direct messages are left alone either way.",
+            "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
         "settings.guildIds": "Target server ids",
         "settings.guildIds.note":
             "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
+        "settings.translateDms": "Translate direct messages",
+        "settings.translateDms.note":
+            "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
         "settings.targetLanguage": "Translate into",
         "settings.targetLanguage.note":
             "Messages not already in this language are translated into it. Languages written in the Latin alphabet cannot be told apart before sending, so every message is sent once and skipped if it comes back unchanged.",
@@ -68,7 +71,7 @@ const STRINGS = {
             "Toggles automatic translation without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
         "settings.translateOutgoing": "Translate the messages I send",
         "settings.translateOutgoing.note":
-            "Replaces what you type with its translation before it is sent, in the target servers only. Other people never see the original, so leave this off unless you mean it.",
+            "Replaces what you type with its translation before it is sent, in the target servers and DMs only. Other people never see the original, so leave this off unless you mean it.",
         "settings.outgoingLanguage": "Send my messages in",
         "settings.outgoingLanguage.note":
             "What you type is translated into this language. A message already written in it is sent untouched.",
@@ -155,10 +158,13 @@ const STRINGS = {
         "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
         "settings.allGuilds": "모든 서버에서 번역",
         "settings.allGuilds.note":
-            "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. 어느 쪽이든 DM 은 대상이 아닙니다.",
+            "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
         "settings.guildIds": "대상 서버 ID",
         "settings.guildIds.note":
             "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+        "settings.translateDms": "DM 도 번역",
+        "settings.translateDms.note":
+            "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
         "settings.targetLanguage": "번역할 언어",
         "settings.targetLanguage.note":
             "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어끼리는 보내기 전에 구분할 수 없어, 메시지마다 한 번은 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
@@ -177,7 +183,7 @@ const STRINGS = {
             "설정 창을 열지 않고 자동 번역을 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 단축키를 쓰지 않습니다.",
         "settings.translateOutgoing": "보내는 메시지도 번역",
         "settings.translateOutgoing.note":
-            "대상 서버에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
+            "대상 서버와 DM 에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
         "settings.outgoingLanguage": "보낼 때 번역할 언어",
         "settings.outgoingLanguage.note":
             "입력한 글을 이 언어로 번역해 보냅니다. 이미 이 언어로 쓴 메시지는 그대로 나갑니다.",

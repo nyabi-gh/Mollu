@@ -9,6 +9,7 @@ It works in both directions — into your language, or out of it.
 ## What it does
 
 - Translates messages in the servers you pick (or every server) into a language you choose, shown under the original in grey.
+- Direct messages can be translated too, one-to-one and group alike. Off by default; one switch turns them on.
 - Pick from 15 languages. Messages already written in that language are left alone.
 - **Automatic mode** translates what is on screen by itself. **Manual mode** puts a `Translate` button under each message and only sends what you press.
 - Translations are remembered, so repeating the same sentence costs nothing extra.
@@ -50,6 +51,7 @@ Once you have a key, in the plugin settings:
 2. Paste the key into `API key`.
 3. Decide where to translate: turn on `Translate in every server`, or list servers under `Target server ids`.
    - To get a server id, enable **Developer Mode** in Discord's settings under Advanced, then right-click a server icon → **Copy Server ID**.
+   - To translate DMs as well, turn on `Translate direct messages`. It stands on its own, so you can leave every server off and translate only DMs.
 
 > **A warning about Gemini's free tier**: what you send is used to improve Google's products. This plugin sends **other people's messages** from your servers, which means their conversations become training data. The paid tier is not affected.
 
@@ -68,8 +70,9 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 | --- | --- |
 | Translation backend | Which service to use. Switching fills in the rest, and each service's key is remembered separately |
 | API key | Required — nothing happens without it. Once saved only the last 4 characters are shown; type `-` to erase it |
-| Translate in every server | Every server you are in becomes a target. Direct messages are never translated either way |
+| Translate in every server | Every server you are in becomes a target. Direct messages have their own switch |
 | Target server ids | The servers to translate, separated by commas or spaces |
+| Translate direct messages | Translates one-to-one and group DMs, whatever the two settings above say. Off by default |
 | Translate into | The language to translate messages into |
 | Plugin language | The language of the settings panel and the plugin's own messages |
 | Treat as already translated above | Skip a message when this share of it is already in the target language |
@@ -104,6 +107,7 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 ## Privacy
 
 - The **text** of messages that need translating is sent to the service you configured. Messages outside your target servers, and messages already in the target language, are never sent.
+- With `Translate direct messages` on, **private conversations are sent too**, on the same terms as any other message. Leave it off if that is not what you want — especially on Gemini's free tier, where what you send becomes training data.
 - With `Translate the messages I send` on, **what you type is sent too**, just before it goes out.
 - Mentions, emoji, links and code are swapped for placeholders before sending, so user ids and addresses are never exposed to the translation service.
 - Translations and **your API key are stored in plain text** in the file below. Do not share it or put it on screen.
