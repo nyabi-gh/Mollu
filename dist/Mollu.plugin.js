@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.1.2
+ * @version 1.1.3
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyattic/mollu
  */
@@ -751,35 +751,52 @@ var Hotkey = class {
 // src/discord.js
 var React = BdApi.React;
 var DM_CHANNEL_TYPES = /* @__PURE__ */ new Set([1, 3]);
+var MESSAGE_CONTENT_MARKERS = [
+  ["contentRef", "onUpdate", "compact"],
+  ["contentRef", "onUpdate", "message", "content"],
+  ["className", "message", "children", "content", "onUpdate", "contentRef", "compact"],
+  ["messageContent", "onUpdate", "contentRef"]
+];
 function createStores() {
-  const ChannelStore = BdApi.Webpack.getStore("ChannelStore");
-  const UserStore = BdApi.Webpack.getStore("UserStore");
-  const GuildStore = BdApi.Webpack.getStore("GuildStore");
+  const found = /* @__PURE__ */ new Map();
+  const store = (name) => {
+    const cached = found.get(name);
+    if (cached) return cached;
+    let value;
+    try {
+      value = BdApi.Webpack.getStore(name) ?? null;
+    } catch (e) {
+      logger.warn(`${name} lookup threw`, e);
+      return null;
+    }
+    if (value) found.set(name, value);
+    return value;
+  };
   return {
     guildIdForChannel(channelId) {
       try {
-        return ChannelStore?.getChannel?.(channelId)?.guild_id ?? null;
+        return store("ChannelStore")?.getChannel?.(channelId)?.guild_id ?? null;
       } catch {
         return null;
       }
     },
     isDirectMessage(channelId) {
       try {
-        return DM_CHANNEL_TYPES.has(ChannelStore?.getChannel?.(channelId)?.type);
+        return DM_CHANNEL_TYPES.has(store("ChannelStore")?.getChannel?.(channelId)?.type);
       } catch {
         return false;
       }
     },
     currentUserId() {
       try {
-        return UserStore?.getCurrentUser?.()?.id ?? null;
+        return store("UserStore")?.getCurrentUser?.()?.id ?? null;
       } catch {
         return null;
       }
     },
     userName(userId) {
       try {
-        const user = UserStore?.getUser?.(userId);
+        const user = store("UserStore")?.getUser?.(userId);
         return user?.globalName || user?.username || null;
       } catch {
         return null;
@@ -787,14 +804,14 @@ function createStores() {
     },
     channelName(channelId) {
       try {
-        return ChannelStore?.getChannel?.(channelId)?.name ?? null;
+        return store("ChannelStore")?.getChannel?.(channelId)?.name ?? null;
       } catch {
         return null;
       }
     },
     roleName(guildId, roleId) {
       try {
-        return GuildStore?.getGuild?.(guildId)?.roles?.[roleId]?.name ?? null;
+        return store("GuildStore")?.getGuild?.(guildId)?.roles?.[roleId]?.name ?? null;
       } catch {
         return null;
       }
@@ -803,13 +820,7 @@ function createStores() {
 }
 function findMessageContent() {
   const { Filters } = BdApi.Webpack;
-  const markerSets = [
-    ["contentRef", "onUpdate", "compact"],
-    ["contentRef", "onUpdate", "message", "content"],
-    ["className", "message", "children", "content", "onUpdate", "contentRef", "compact"],
-    ["messageContent", "onUpdate", "contentRef"]
-  ];
-  for (const markers of markerSets) {
+  for (const markers of MESSAGE_CONTENT_MARKERS) {
     const target = tryWithKey(Filters.byComponentType(Filters.byStrings(...markers)));
     if (target) {
       logger.info(`MessageContent resolved via [${markers.join(", ")}] -> key "${target.key}"`);
@@ -824,6 +835,62 @@ function findMessageContent() {
     }
   }
   return null;
+}
+function waitForMessageContent(signal) {
+  return waitForLazyModule({
+    label: "MessageContent",
+    signal,
+    searchExports: true,
+    buildFilters: () => {
+      const { Filters } = BdApi.Webpack;
+      const filters = MESSAGE_CONTENT_MARKERS.map(
+        (markers) => Filters.byComponentType(Filters.byStrings(...markers))
+      );
+      if (typeof Filters.byDisplayName === "function") {
+        filters.push(Filters.byDisplayName("MessageContent"));
+      }
+      return filters;
+    },
+    resolve: findMessageContent
+  });
+}
+function waitForLazyModule({ label: label4, signal, buildFilters, resolve, searchExports = false }) {
+  const waitForModule = BdApi.Webpack?.waitForModule;
+  if (typeof waitForModule !== "function") {
+    logger.warn(`BdApi.Webpack.waitForModule is unavailable; cannot wait for ${label4}`);
+    return Promise.resolve(null);
+  }
+  let filters;
+  try {
+    filters = buildFilters();
+  } catch (e) {
+    logger.warn(`could not build the ${label4} filters`, e);
+    return Promise.resolve(null);
+  }
+  const matches = (exports) => {
+    for (const filter of filters) {
+      try {
+        if (filter(exports)) return true;
+      } catch {
+      }
+    }
+    return false;
+  };
+  let pending;
+  try {
+    pending = waitForModule.call(BdApi.Webpack, matches, { signal, searchExports });
+  } catch (e) {
+    logger.warn(`waitForModule threw while waiting for ${label4}`, e);
+    return Promise.resolve(null);
+  }
+  if (!pending || typeof pending.then !== "function") return Promise.resolve(null);
+  return pending.then(
+    () => signal?.aborted ? null : resolve(),
+    (e) => {
+      logger.warn(`waiting for ${label4} failed`, e);
+      return null;
+    }
+  );
 }
 function tryWithKey(filter) {
   let owner;
@@ -2077,6 +2144,14 @@ function findMessageActions() {
     return null;
   }
 }
+function waitForMessageActions(signal) {
+  return waitForLazyModule({
+    label: "MessageActions",
+    signal,
+    buildFilters: () => [BdApi.Webpack.Filters.byKeys("sendMessage", "editMessage")],
+    resolve: findMessageActions
+  });
+}
 var OutgoingPatch = class {
   constructor({ target, settings, translator, languageDetector, stores, onFailure }) {
     this._target = target;
@@ -2353,6 +2428,7 @@ var Mollu = class {
     });
     this._patch = null;
     this._outgoing = null;
+    this._pending = null;
     this._hotkeys = [
       new Hotkey({
         settings: this._settings,
@@ -2386,25 +2462,13 @@ var Mollu = class {
       this._translator.start();
       for (const hotkey of this._hotkeys) hotkey.install();
       this._updater.start();
+      this._pending = new AbortController();
       const stores = createStores();
       this._installOutgoing(stores);
       if (!hasNativeFetch()) {
         this._toast(t("toast.outdatedBd"), "warning");
       }
-      const target = findMessageContent();
-      if (!target) {
-        logger.error("MessageContent not found; Discord's internals may have changed");
-        this._toast(t("toast.noMessageContent"), "error");
-        return;
-      }
-      this._patch = new MessagePatch({
-        target,
-        settings: this._settings,
-        translator: this._translator,
-        languageDetector: this._detector,
-        stores
-      });
-      this._patch.install();
+      this._installMessagePatch(stores);
       if (!this._settings.current.apiKey) {
         this._toast(t("toast.needApiKey"), "info");
       }
@@ -2413,7 +2477,7 @@ var Mollu = class {
         this._toast(t("toast.needGuilds"), "info");
       }
       logger.info(
-        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${allGuilds ? "all" : this._settings.guildIdSet.size} dms=${translateDms ? "on" : "off"} outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`
+        `started · provider=${provider} target=${targetLanguage} mode=${autoTranslate ? "auto" : "manual"} servers=${allGuilds ? "all" : this._settings.guildIdSet.size} dms=${translateDms ? "on" : "off"} outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "pending"}`
       );
     } catch (e) {
       logger.error("start failed", e);
@@ -2431,6 +2495,8 @@ var Mollu = class {
     } catch (e) {
       logger.error("outgoing unpatch failed", e);
     }
+    this._pending?.abort();
+    this._pending = null;
     for (const hotkey of this._hotkeys) hotkey.remove();
     this._updater.stop();
     BdApi.Patcher.unpatchAll(NAME);
@@ -2441,12 +2507,54 @@ var Mollu = class {
     this._outgoing = null;
     logger.info("stopped");
   }
-  _installOutgoing(stores) {
-    const target = findMessageActions();
-    if (!target) {
-      logger.warn("MessageActions not found; outgoing translation is unavailable");
+  _installMessagePatch(stores) {
+    const target = findMessageContent();
+    if (target) {
+      this._attachMessagePatch(target, stores);
       return;
     }
+    logger.info("MessageContent is not loaded yet; waiting for Discord to load the chat modules");
+    const signal = this._pending.signal;
+    waitForMessageContent(signal).then((late) => {
+      if (signal.aborted) return;
+      if (!late) {
+        logger.error("MessageContent not found; Discord's internals may have changed");
+        this._toast(t("toast.noMessageContent"), "error");
+        return;
+      }
+      this._attachMessagePatch(late, stores);
+      logger.info("message patch installed once the chat modules loaded");
+    });
+  }
+  _attachMessagePatch(target, stores) {
+    this._patch = new MessagePatch({
+      target,
+      settings: this._settings,
+      translator: this._translator,
+      languageDetector: this._detector,
+      stores
+    });
+    this._patch.install();
+  }
+  _installOutgoing(stores) {
+    const target = findMessageActions();
+    if (target) {
+      this._attachOutgoing(target, stores);
+      return;
+    }
+    logger.info("MessageActions is not loaded yet; waiting for Discord to load it");
+    const signal = this._pending.signal;
+    waitForMessageActions(signal).then((late) => {
+      if (signal.aborted) return;
+      if (!late) {
+        logger.warn("MessageActions not found; outgoing translation is unavailable");
+        return;
+      }
+      this._attachOutgoing(late, stores);
+      logger.info("outgoing patch installed once MessageActions loaded");
+    });
+  }
+  _attachOutgoing(target, stores) {
     this._outgoing = new OutgoingPatch({
       target,
       settings: this._settings,

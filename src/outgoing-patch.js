@@ -1,4 +1,5 @@
 import { NAME } from "./constants.js";
+import { waitForLazyModule } from "./discord.js";
 import { logger } from "./lib/logger.js";
 
 export function findMessageActions() {
@@ -8,6 +9,15 @@ export function findMessageActions() {
         logger.warn("MessageActions lookup threw", e);
         return null;
     }
+}
+
+export function waitForMessageActions(signal) {
+    return waitForLazyModule({
+        label: "MessageActions",
+        signal,
+        buildFilters: () => [BdApi.Webpack.Filters.byKeys("sendMessage", "editMessage")],
+        resolve: findMessageActions,
+    });
 }
 
 export class OutgoingPatch {

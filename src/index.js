@@ -9,9 +9,9 @@ import { Translator } from "./translation/translator.js";
 import { LanguageDetector } from "./translation/language-detector.js";
 import { MessagePatch } from "./message-patch.js";
 import { Hotkey } from "./hotkey.js";
-import { OutgoingPatch, findMessageActions } from "./outgoing-patch.js";
+import { OutgoingPatch, findMessageActions, waitForMessageActions } from "./outgoing-patch.js";
 import { Updater } from "./updater.js";
-import { findMessageContent, createStores } from "./discord.js";
+import { findMessageContent, waitForMessageContent, createStores } from "./discord.js";
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
 import { disconnectVisibility } from "./ui/visibility.js";
@@ -33,6 +33,7 @@ export default class Mollu {
         });
         this._patch = null;
         this._outgoing = null;
+        this._pending = null;
         this._hotkeys = [
             new Hotkey({
                 settings: this._settings,
@@ -71,6 +72,7 @@ export default class Mollu {
             for (const hotkey of this._hotkeys) hotkey.install();
             this._updater.start();
 
+            this._pending = new AbortController();
             const stores = createStores();
             this._installOutgoing(stores);
 
@@ -78,21 +80,7 @@ export default class Mollu {
                 this._toast(t("toast.outdatedBd"), "warning");
             }
 
-            const target = findMessageContent();
-            if (!target) {
-                logger.error("MessageContent not found; Discord's internals may have changed");
-                this._toast(t("toast.noMessageContent"), "error");
-                return;
-            }
-
-            this._patch = new MessagePatch({
-                target,
-                settings: this._settings,
-                translator: this._translator,
-                languageDetector: this._detector,
-                stores,
-            });
-            this._patch.install();
+            this._installMessagePatch(stores);
 
             if (!this._settings.current.apiKey) {
                 this._toast(t("toast.needApiKey"), "info");
@@ -108,7 +96,7 @@ export default class Mollu {
                     `mode=${autoTranslate ? "auto" : "manual"} ` +
                     `servers=${allGuilds ? "all" : this._settings.guildIdSet.size} ` +
                     `dms=${translateDms ? "on" : "off"} ` +
-                    `outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "unavailable"}`,
+                    `outgoing=${this._outgoing ? this._settings.current.outgoingLanguage : "pending"}`,
             );
         } catch (e) {
             logger.error("start failed", e);
@@ -128,6 +116,9 @@ export default class Mollu {
             logger.error("outgoing unpatch failed", e);
         }
 
+        this._pending?.abort();
+        this._pending = null;
+
         for (const hotkey of this._hotkeys) hotkey.remove();
         this._updater.stop();
 
@@ -140,12 +131,59 @@ export default class Mollu {
         logger.info("stopped");
     }
 
-    _installOutgoing(stores) {
-        const target = findMessageActions();
-        if (!target) {
-            logger.warn("MessageActions not found; outgoing translation is unavailable");
+    _installMessagePatch(stores) {
+        const target = findMessageContent();
+        if (target) {
+            this._attachMessagePatch(target, stores);
             return;
         }
+
+        logger.info("MessageContent is not loaded yet; waiting for Discord to load the chat modules");
+        const signal = this._pending.signal;
+        waitForMessageContent(signal).then((late) => {
+            if (signal.aborted) return;
+            if (!late) {
+                logger.error("MessageContent not found; Discord's internals may have changed");
+                this._toast(t("toast.noMessageContent"), "error");
+                return;
+            }
+            this._attachMessagePatch(late, stores);
+            logger.info("message patch installed once the chat modules loaded");
+        });
+    }
+
+    _attachMessagePatch(target, stores) {
+        this._patch = new MessagePatch({
+            target,
+            settings: this._settings,
+            translator: this._translator,
+            languageDetector: this._detector,
+            stores,
+        });
+        this._patch.install();
+    }
+
+    _installOutgoing(stores) {
+        const target = findMessageActions();
+        if (target) {
+            this._attachOutgoing(target, stores);
+            return;
+        }
+
+        logger.info("MessageActions is not loaded yet; waiting for Discord to load it");
+        const signal = this._pending.signal;
+        waitForMessageActions(signal).then((late) => {
+            if (signal.aborted) return;
+            if (!late) {
+                logger.warn("MessageActions not found; outgoing translation is unavailable");
+                return;
+            }
+            this._attachOutgoing(late, stores);
+            logger.info("outgoing patch installed once MessageActions loaded");
+        });
+    }
+
+    _attachOutgoing(target, stores) {
         this._outgoing = new OutgoingPatch({
             target,
             settings: this._settings,

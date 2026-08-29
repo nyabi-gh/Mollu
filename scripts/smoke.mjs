@@ -156,6 +156,85 @@ check("start() and stop() do not throw (webpack lookup fails gracefully)", () =>
     instance.stop();
 });
 
+await checkAsync("start(): the message patch lands once Discord loads the chat modules", async () => {
+    const webpack = BdApi.Webpack;
+    const previousAfter = BdApi.Patcher.after;
+    const patched = [];
+    const owner = { MessageContent: function MessageContent() {} };
+    let loaded = false;
+    let release;
+    const chatModules = new Promise((resolve) => {
+        release = resolve;
+    });
+
+    BdApi.Webpack = {
+        ...webpack,
+        getWithKey: () => (loaded ? [owner, "MessageContent"] : [null, null]),
+        getByKeys: () => null,
+        waitForModule: () => chatModules,
+        Filters: { ...webpack.Filters, byKeys: () => () => false },
+    };
+    BdApi.Patcher.after = (_name, _module, key) => {
+        patched.push(key);
+        return () => {};
+    };
+
+    const instance = new Plugin({ name: meta.name });
+    try {
+        instance.start();
+        assert.deepEqual(patched, [], "nothing is patched while the chat chunk is missing");
+
+        loaded = true;
+        release();
+        await flush();
+
+        assert.deepEqual(patched, ["MessageContent"], "the patch is installed without a restart");
+    } finally {
+        instance.stop();
+        BdApi.Webpack = webpack;
+        BdApi.Patcher.after = previousAfter;
+    }
+});
+
+await checkAsync("stop() drops a pending wait so a late module never patches", async () => {
+    const webpack = BdApi.Webpack;
+    const previousAfter = BdApi.Patcher.after;
+    const patched = [];
+    const owner = { MessageContent: function MessageContent() {} };
+    let loaded = false;
+    let release;
+    const chatModules = new Promise((resolve) => {
+        release = resolve;
+    });
+
+    BdApi.Webpack = {
+        ...webpack,
+        getWithKey: () => (loaded ? [owner, "MessageContent"] : [null, null]),
+        getByKeys: () => null,
+        waitForModule: () => chatModules,
+        Filters: { ...webpack.Filters, byKeys: () => () => false },
+    };
+    BdApi.Patcher.after = (_name, _module, key) => {
+        patched.push(key);
+        return () => {};
+    };
+
+    try {
+        const instance = new Plugin({ name: meta.name });
+        instance.start();
+        instance.stop();
+
+        loaded = true;
+        release();
+        await flush();
+
+        assert.deepEqual(patched, [], "a stopped plugin does not patch anything");
+    } finally {
+        BdApi.Webpack = webpack;
+        BdApi.Patcher.after = previousAfter;
+    }
+});
+
 await checkAsync("queue: work whose caller lost interest is dropped, not run", async () => {
     const queue = new TaskQueue(() => 1);
     let ran = 0;
@@ -1280,6 +1359,10 @@ function stubSettings() {
             maxConcurrent: 2,
         },
     };
+}
+
+function flush() {
+    return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function captureSave(fn) {
