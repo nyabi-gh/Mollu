@@ -20,7 +20,7 @@ const STRINGS = {
         "toast.cacheCleared": "Cleared {count} cached translations",
         "toast.updated": "Updated to v{version}",
         "toast.upToDate": "Already up to date (v{version})",
-        "toast.updateUnavailable": "No update source is configured for this build",
+        "toast.updateUnavailable": "No release to update from. Check the plugin's source repository.",
         "toast.updateFailed": "Could not check for updates · {message}",
 
         "error.noApiKey": "No API key configured",
@@ -133,7 +133,7 @@ const STRINGS = {
         "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
         "toast.updated": "v{version} 로 업데이트했습니다",
         "toast.upToDate": "이미 최신 버전입니다 (v{version})",
-        "toast.updateUnavailable": "이 빌드에는 업데이트 주소가 설정되어 있지 않습니다",
+        "toast.updateUnavailable": "업데이트를 받을 릴리즈가 없습니다. 플러그인의 소스 저장소를 확인하세요.",
         "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
 
         "error.noApiKey": "API 키가 설정되지 않았습니다",

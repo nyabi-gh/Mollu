@@ -870,23 +870,41 @@ check("hotkey: only the exact combo fires, and never mid-composition", () => {
     assert.ok(!matchesHotkey(null, event()));
 });
 
-const { rawUrlFor, readVersion, isNewer } = await import("../src/updater.js");
+const { downloadUrlFor, readVersion, isNewer, Updater } = await import("../src/updater.js");
 
-check("updater: the download url comes from meta.source and nowhere else", () => {
+check("updater: the download url is the latest release asset, from meta.source and nowhere else", () => {
     assert.equal(
-        rawUrlFor("https://github.com/nyattic/mollu"),
-        "https://raw.githubusercontent.com/nyattic/mollu/main/dist/Mollu.plugin.js",
+        downloadUrlFor("https://github.com/nyattic/mollu"),
+        "https://github.com/nyattic/mollu/releases/latest/download/Mollu.plugin.js",
     );
     assert.equal(
-        rawUrlFor("https://github.com/nyattic/mollu.git"),
-        rawUrlFor("https://github.com/nyattic/mollu"),
+        downloadUrlFor("https://github.com/nyattic/mollu.git"),
+        downloadUrlFor("https://github.com/nyattic/mollu"),
     );
 
-    assert.equal(rawUrlFor("http://github.com/nyattic/mollu"), null);
-    assert.equal(rawUrlFor("https://evil.example/nyattic/mollu"), null);
-    assert.equal(rawUrlFor("https://github.com/nyattic/mollu/../../other"), null);
-    assert.equal(rawUrlFor(""), null);
-    assert.equal(rawUrlFor(undefined), null);
+    assert.equal(downloadUrlFor("http://github.com/nyattic/mollu"), null);
+    assert.equal(downloadUrlFor("https://evil.example/nyattic/mollu"), null);
+    assert.equal(downloadUrlFor("https://github.com/nyattic/mollu/../../other"), null);
+    assert.equal(downloadUrlFor(""), null);
+    assert.equal(downloadUrlFor(undefined), null);
+});
+
+await checkAsync("updater: a repository with no release reports unavailable, not a failure", async () => {
+    const results = [];
+    const updater = new Updater({
+        meta: { source: "https://github.com/nyattic/mollu", version: "1.0.0" },
+        settings: { current: { autoUpdate: true } },
+        onResult: (result) => results.push(result),
+    });
+
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () => new Response("Not Found", { status: 404 });
+    try {
+        assert.equal(await updater.check({ announce: true }), null);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+    assert.deepEqual(results, [{ status: "unavailable" }]);
 });
 
 check("updater: a downloaded file is only written when it is a newer Mollu build", () => {

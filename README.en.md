@@ -21,7 +21,7 @@ It works in both directions — into your language, or out of it.
 
 The plugin is a single file. There is nothing else to install.
 
-1. Download `dist/Mollu.plugin.js`.
+1. [**Download Mollu.plugin.js**](https://github.com/nyattic/Mollu/releases/latest/download/Mollu.plugin.js) — always the newest release.
 2. In BetterDiscord, go to Settings → Plugins → **Open Plugins Folder** and drop the file in.
 3. Enable **Mollu** in the plugin list.
 

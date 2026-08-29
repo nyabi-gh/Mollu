@@ -21,7 +21,7 @@
 
 플러그인은 파일 하나입니다. 따로 설치할 프로그램은 없습니다.
 
-1. `dist/Mollu.plugin.js` 파일을 다운로드합니다.
+1. [**Mollu.plugin.js 다운로드**](https://github.com/nyattic/Mollu/releases/latest/download/Mollu.plugin.js) — 항상 최신 릴리즈를 받습니다.
 2. BetterDiscord 설정 → Plugins → **Open Plugins Folder** 를 눌러 열리는 폴더에 넣습니다.
 3. 플러그인 목록에서 **Mollu** 를 켭니다.
 

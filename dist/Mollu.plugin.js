@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.1.0
+ * @version 1.1.1
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyattic/mollu
  */
@@ -126,7 +126,7 @@ var STRINGS = {
     "toast.cacheCleared": "Cleared {count} cached translations",
     "toast.updated": "Updated to v{version}",
     "toast.upToDate": "Already up to date (v{version})",
-    "toast.updateUnavailable": "No update source is configured for this build",
+    "toast.updateUnavailable": "No release to update from. Check the plugin's source repository.",
     "toast.updateFailed": "Could not check for updates · {message}",
     "error.noApiKey": "No API key configured",
     "error.emptyResponse": "Empty response",
@@ -217,7 +217,7 @@ var STRINGS = {
     "toast.cacheCleared": "번역 캐시 {count}개를 비웠습니다",
     "toast.updated": "v{version} 로 업데이트했습니다",
     "toast.upToDate": "이미 최신 버전입니다 (v{version})",
-    "toast.updateUnavailable": "이 빌드에는 업데이트 주소가 설정되어 있지 않습니다",
+    "toast.updateUnavailable": "업데이트를 받을 릴리즈가 없습니다. 플러그인의 소스 저장소를 확인하세요.",
     "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
     "error.noApiKey": "API 키가 설정되지 않았습니다",
     "error.emptyResponse": "빈 응답",
@@ -2119,11 +2119,12 @@ var OutgoingPatch = class {
 };
 
 // src/updater.js
-var RAW_HOST = "https://raw.githubusercontent.com";
+var GITHUB_HOST = "https://github.com";
 var MAX_BYTES = 5 * 1024 * 1024;
-function rawUrlFor(source, branch = "main") {
+function downloadUrlFor(source) {
   const match = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(String(source || ""));
-  return match ? `${RAW_HOST}/${match[1]}/${match[2]}/${branch}/dist/${NAME}.plugin.js` : null;
+  if (!match) return null;
+  return `${GITHUB_HOST}/${match[1]}/${match[2]}/releases/latest/download/${NAME}.plugin.js`;
 }
 function readVersion(text) {
   if (typeof text !== "string" || !new RegExp(`@name\\s+${NAME}\\s`).test(text)) return null;
@@ -2162,7 +2163,7 @@ var Updater = class {
     this._timers = [];
   }
   async check({ announce = false } = {}) {
-    const url = rawUrlFor(this._meta?.source);
+    const url = downloadUrlFor(this._meta?.source);
     if (!url) {
       logger.warn(`no update url; meta.source is not a github repository: ${this._meta?.source}`);
       if (announce) this._onResult({ status: "unavailable" });
@@ -2173,6 +2174,10 @@ var Updater = class {
       text = await getText(url);
     } catch (e) {
       logger.warn("update check failed:", e && e.message || e);
+      if (e && e.status === 404) {
+        if (announce) this._onResult({ status: "unavailable" });
+        return null;
+      }
       if (announce) this._onResult({ status: "failed", message: e && e.message || "unknown" });
       return null;
     }

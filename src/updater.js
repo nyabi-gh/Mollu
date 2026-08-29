@@ -2,12 +2,13 @@ import { NAME } from "./constants.js";
 import { getText } from "./lib/net.js";
 import { logger } from "./lib/logger.js";
 
-const RAW_HOST = "https://raw.githubusercontent.com";
+const GITHUB_HOST = "https://github.com";
 const MAX_BYTES = 5 * 1024 * 1024;
 
-export function rawUrlFor(source, branch = "main") {
+export function downloadUrlFor(source) {
     const match = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?\/?$/.exec(String(source || ""));
-    return match ? `${RAW_HOST}/${match[1]}/${match[2]}/${branch}/dist/${NAME}.plugin.js` : null;
+    if (!match) return null;
+    return `${GITHUB_HOST}/${match[1]}/${match[2]}/releases/latest/download/${NAME}.plugin.js`;
 }
 
 export function readVersion(text) {
@@ -54,7 +55,7 @@ export class Updater {
     }
 
     async check({ announce = false } = {}) {
-        const url = rawUrlFor(this._meta?.source);
+        const url = downloadUrlFor(this._meta?.source);
         if (!url) {
             logger.warn(`no update url; meta.source is not a github repository: ${this._meta?.source}`);
             if (announce) this._onResult({ status: "unavailable" });
@@ -66,6 +67,11 @@ export class Updater {
             text = await getText(url);
         } catch (e) {
             logger.warn("update check failed:", (e && e.message) || e);
+
+            if (e && e.status === 404) {
+                if (announce) this._onResult({ status: "unavailable" });
+                return null;
+            }
             if (announce) this._onResult({ status: "failed", message: (e && e.message) || "unknown" });
             return null;
         }
