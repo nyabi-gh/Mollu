@@ -6,6 +6,8 @@ const ARABIC = /[؀-ۿݐ-ݿ]/;
 const THAI = /[฀-๿]/;
 const DEVANAGARI = /[ऀ-ॿ]/;
 
+// tokensPerChar: what a character of this language costs a model, for the scripts that
+// tokenize badly enough that a character-sized output budget cuts them off.
 export const LANGUAGES = [
     { code: "ko", label: "한국어 (Korean)", name: "Korean", script: HANGUL },
     { code: "en", label: "English", name: "English", script: null },
@@ -30,10 +32,10 @@ export const LANGUAGES = [
     },
     { code: "ru", label: "Русский (Russian)", name: "Russian", script: CYRILLIC },
     { code: "vi", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese", script: null },
-    { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI },
+    { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI, tokensPerChar: 2.5 },
     { code: "id", label: "Bahasa Indonesia", name: "Indonesian", script: null },
-    { code: "ar", label: "العربية (Arabic)", name: "Arabic", script: ARABIC },
-    { code: "hi", label: "हिन्दी (Hindi)", name: "Hindi", script: DEVANAGARI },
+    { code: "ar", label: "العربية (Arabic)", name: "Arabic", script: ARABIC, tokensPerChar: 2 },
+    { code: "hi", label: "हिन्दी (Hindi)", name: "Hindi", script: DEVANAGARI, tokensPerChar: 2.5 },
 ];
 
 export const DEFAULT_LANGUAGE = "ko";

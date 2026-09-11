@@ -97,6 +97,7 @@ export async function postJson(url, { headers = {}, body, signal, timeout = REQU
         if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
         const err = new Error(`HTTP ${res.status}`);
         err.status = res.status;
+        err.body = text;
         err.retryAfterMs = retryAfterMs(res, text);
         throw err;
     }

@@ -72,8 +72,18 @@ export class Translator {
         return { status: "unknown" };
     }
 
+    // A translation belongs to the model that produced it.
     _cacheKey(masked, language) {
-        return `${language}\u0001${masked}`;
+        const { provider, model } = this._settings.current;
+        const engine = model || getProvider(provider).defaults.model;
+        return `${provider}\u0001${engine}\u0001${language}\u0001${masked}`;
+    }
+
+    remember(text, translation, language) {
+        // A placeholder's number indexes the source's own token list, so a pair whose two
+        // sides mask differently cannot be stored as one.
+        if (mask(text).tokens.length || mask(translation).tokens.length) return;
+        this._cache.set(this._cacheKey(text, language), translation);
     }
 
     translate(text, hooks = {}) {

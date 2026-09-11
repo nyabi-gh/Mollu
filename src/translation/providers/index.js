@@ -19,8 +19,14 @@ export const PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
     value: provider.id,
 }));
 
-export function modelOptions(providerId, current) {
-    const { models = [] } = getProvider(providerId);
-    const values = models.includes(current) || !current ? models : [...models, current];
-    return values.length < 2 ? [] : values.map((model) => ({ label: model, value: model }));
+// Never stored as a model name; picking it only opens the text field beside the dropdown.
+export const CUSTOM_MODEL = "__custom__";
+
+export function knownModels(providerId) {
+    return getProvider(providerId).models ?? [];
+}
+
+export function isCustomModel(providerId, model) {
+    const models = knownModels(providerId);
+    return models.length > 0 && !models.includes(String(model ?? "").trim());
 }

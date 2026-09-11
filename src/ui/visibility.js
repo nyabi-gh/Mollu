@@ -1,4 +1,7 @@
-const ROOT_MARGIN = "200px 0px";
+// Looks ahead below the fold only, far enough that a message is usually translated before it
+// is scrolled to: a request takes about a second, and the block then lands off screen
+// instead of in front of the reader. Nothing above the viewport is worth a request.
+const ROOT_MARGIN = "0px 0px 600px";
 
 let observer = null;
 const callbacks = new Map();

@@ -1,6 +1,6 @@
 {
     "name": "mollu",
-    "version": "1.1.3",
+    "version": "1.2.0",
     "description": "BetterDiscord plugin that auto-translates non-Korean messages in selected servers to Korean via an AI API",
     "private": true,
     "type": "module",

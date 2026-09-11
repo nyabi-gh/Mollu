@@ -1,5 +1,11 @@
 import { NAME, LEGACY_NAMES, DEFAULT_SETTINGS } from "./constants.js";
-import { getProvider, modelOptions, PROVIDER_OPTIONS } from "./translation/providers/index.js";
+import {
+    getProvider,
+    knownModels,
+    isCustomModel,
+    CUSTOM_MODEL,
+    PROVIDER_OPTIONS,
+} from "./translation/providers/index.js";
 import { LANGUAGE_OPTIONS } from "./languages.js";
 import { setLocale, t, UI_LANGUAGES } from "./i18n.js";
 import { keysFromString } from "./hotkey.js";
@@ -32,9 +38,12 @@ export class Settings {
     }
 
     set(id, value) {
+        if (id === CUSTOM_MODEL_FIELD) return this.set("model", value);
+        if (id === "model" && value === CUSTOM_MODEL) return this._openCustomModel();
+
         const next = coerce(id, value, this._values[id]);
 
-        if (next === KEEP || next === this._values[id]) return;
+        if (next === KEEP || same(next, this._values[id])) return;
 
         if (id === "provider") {
             this._stashProfile();
@@ -52,6 +61,15 @@ export class Settings {
                 listener(id, next);
             } catch {}
         }
+    }
+
+    // Empty the model so the text field starts blank, but keep a name already typed in.
+    _openCustomModel() {
+        if (!this.usesCustomModel) this.set("model", "");
+    }
+
+    get usesCustomModel() {
+        return isCustomModel(this._values.provider, this._values.model);
     }
 
     _stashProfile() {
@@ -79,13 +97,18 @@ export class Settings {
         const settings = this;
         function MolluSettings() {
             const [revision, bump] = React.useState(0);
-            React.useEffect(
-                () =>
-                    settings.onChange((id) => {
-                        if (PANEL_REBUILD.has(id)) bump((n) => n + 1);
-                    }),
-                [],
-            );
+            React.useEffect(() => {
+                let custom = settings.usesCustomModel;
+                return settings.onChange((id) => {
+                    const nowCustom = settings.usesCustomModel;
+                    const flipped = nowCustom !== custom;
+                    custom = nowCustom;
+
+                    // Rebuilding remounts every field, so typing a model name must not
+                    // trigger one; swapping the list for that field has to.
+                    if (PANEL_REBUILD.has(id) || (id === "model" && flipped)) bump((n) => n + 1);
+                });
+            }, []);
             const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
             return React.cloneElement(panel, { key: `panel-${revision}` });
         }
@@ -94,7 +117,6 @@ export class Settings {
 
     _panelSpec() {
         const v = this._values;
-        const modelChoices = modelOptions(v.provider, v.model);
         return {
             onChange: (_categoryId, settingId, value) => this.set(settingId, value),
 
@@ -264,18 +286,7 @@ export class Settings {
                     collapsible: true,
                     shown: true,
                     settings: withChangeHandlers(this, [
-                        ...(modelChoices.length === 0
-                            ? []
-                            : [
-                                  {
-                                      type: "dropdown",
-                                      id: "model",
-                                      name: t("settings.model"),
-                                      note: t(`modelHint.${v.provider}`),
-                                      value: v.model,
-                                      options: modelChoices,
-                                  },
-                              ]),
+                        ...modelFields(v, this.usesCustomModel),
                         {
                             type: "text",
                             id: "baseUrl",
@@ -321,6 +332,38 @@ export class Settings {
     }
 }
 
+const CUSTOM_MODEL_FIELD = "customModel";
+
+function modelFields(v, custom) {
+    const models = knownModels(v.provider);
+    if (models.length === 0) return [];
+
+    const dropdown = {
+        type: "dropdown",
+        id: "model",
+        name: t("settings.model"),
+        note: t(`modelHint.${v.provider}`),
+        value: custom ? CUSTOM_MODEL : v.model,
+        options: [
+            ...models.map((model) => ({ label: model, value: model })),
+            { label: t("settings.model.custom"), value: CUSTOM_MODEL },
+        ],
+    };
+    if (!custom) return [dropdown];
+
+    return [
+        dropdown,
+        {
+            type: "text",
+            id: CUSTOM_MODEL_FIELD,
+            name: t("settings.customModel"),
+            note: t("settings.customModel.note", { fallback: getProvider(v.provider).defaults.model }),
+            placeholder: models[0],
+            value: v.model,
+        },
+    ];
+}
+
 const PANEL_REBUILD = new Set(["provider", "uiLanguage"]);
 
 const DRAWERS = new Map();
@@ -340,6 +383,14 @@ const CREDENTIAL_FIELDS = new Set(["apiKey", "model", "baseUrl"]);
 const CLEAR_TOKEN = "-";
 
 const KEEP = Symbol("keep");
+
+// The panel reports an edit twice, from the field and from the panel, so a set() that
+// changes nothing has to stay a no-op. Keybinds are arrays and never match by reference.
+function same(a, b) {
+    if (a === b) return true;
+    if (!Array.isArray(a) || !Array.isArray(b)) return false;
+    return a.length === b.length && a.every((value, index) => value === b[index]);
+}
 
 function migrate(stored) {
     if (!stored || typeof stored !== "object") return stored;

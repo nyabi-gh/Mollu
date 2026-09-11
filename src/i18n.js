@@ -41,6 +41,10 @@ const STRINGS = {
             "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
         "settings.apiKey.saved": "saved · {fingerprint}",
         "settings.model": "Model",
+        "settings.model.custom": "Type a name in…",
+        "settings.customModel": "Model name",
+        "settings.customModel.note":
+            "The model id exactly as the backend writes it, so a model released after this plugin was built can still be used. Blank falls back to {fallback}.",
         "settings.baseUrl": "API base URL",
         "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
         "settings.allGuilds": "Translate in every server",
@@ -91,7 +95,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "Check",
         "settings.clearCache": "Translation cache",
         "settings.clearCache.note":
-            "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
+            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh; clear this when a translation is wrong or you changed the base URL.",
         "settings.clearCache.action": "Clear",
         "clearCache.title": "Clear the translation cache?",
         "clearCache.body":
@@ -106,8 +110,10 @@ const STRINGS = {
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
         "keySource.deepl":
             "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
-        "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better.",
-        "modelHint.gemini": "flash-lite answers in about a second and is the only model worth using here.",
+        "modelHint.deepseek":
+            "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
+        "modelHint.gemini":
+            "flash-lite answers in about a second. Any other Gemini or Gemma model can be typed in.",
         "modelHint.deepl": "DeepL has no model to pick.",
         "language.auto": "Match Discord",
     },
@@ -154,6 +160,10 @@ const STRINGS = {
             "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
         "settings.apiKey.saved": "저장됨 · {fingerprint}",
         "settings.model": "모델 이름",
+        "settings.model.custom": "직접 입력…",
+        "settings.customModel": "직접 입력한 모델 이름",
+        "settings.customModel.note":
+            "백엔드가 쓰는 모델 ID 를 그대로 입력하세요. 플러그인이 모르는 새 모델도 이렇게 쓸 수 있습니다. 비워 두면 {fallback} 을 씁니다.",
         "settings.baseUrl": "API Base URL",
         "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
         "settings.allGuilds": "모든 서버에서 번역",
@@ -203,7 +213,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "확인",
         "settings.clearCache": "번역 캐시",
         "settings.clearCache.note":
-            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
+            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역이 이상하거나 Base URL 을 바꿨을 때 비우세요.",
         "settings.clearCache.action": "비우기",
         "clearCache.title": "번역 캐시를 비울까요?",
         "clearCache.body":
@@ -218,14 +228,22 @@ const STRINGS = {
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
         "keySource.deepl":
             "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
-        "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다.",
-        "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠르고, 여기서는 사실상 이것만 쓸 만합니다.",
+        "modelHint.deepseek":
+            "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
+        "modelHint.gemini":
+            "flash-lite 가 약 1초로 가장 빠릅니다. 다른 Gemini·Gemma 모델도 직접 입력하면 됩니다.",
         "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
         "language.auto": "Discord 설정에 맞춤",
     },
 };
 
 export const UI_LANGUAGES = ["en", "ko"];
+
+// A missing key is not a runtime error -- t() quietly serves the English one -- so only a
+// check with the tables in hand can catch the drift.
+export function stringKeys(locale) {
+    return Object.keys(STRINGS[locale] ?? {});
+}
 
 let active = "en";
 

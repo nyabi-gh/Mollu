@@ -65,6 +65,7 @@ export class OutgoingPatch {
             });
             if (result.status === "done" && result.text) {
                 args[1] = { ...args[1], content: result.text };
+                this._remember(text, result.text);
             } else if (result.status === "error" || result.status === "retry") {
                 this._onFailure(result.message);
             }
@@ -73,6 +74,14 @@ export class OutgoingPatch {
             this._onFailure((e && e.message) || "unknown");
         }
         return original.apply(self, args);
+    }
+
+    // The message goes out already translated, so the block under it would pay for a round
+    // trip back to what was typed. Hand over the pair instead.
+    _remember(original, sent) {
+        const { targetLanguage } = this._settings.current;
+        if (this._detector.needsTranslation(original, targetLanguage)) return;
+        this._translator.remember?.(sent, original, targetLanguage);
     }
 
     _pick(args) {

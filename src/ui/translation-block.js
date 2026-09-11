@@ -1,6 +1,7 @@
 import { React } from "../discord.js";
 import { renderSegments } from "./rich-text.js";
 import { observeVisibility } from "./visibility.js";
+import { blockHeight, keepPlace, whenSteady } from "./scroll.js";
 import { MAX_RATE_LIMIT_RETRIES } from "../constants.js";
 import { badgeFor } from "../languages.js";
 import { t } from "../i18n.js";
@@ -14,6 +15,8 @@ function initialResult(translator, text) {
 
 export function TranslationBlock({ text, translator, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
+    const bodyRef = React.useRef(null);
+    const heightRef = React.useRef(null);
     const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
     const triggerRef = React.useRef(null);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
@@ -24,6 +27,14 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         let dwell = null;
         let running = false;
         let rateLimitRetries = 0;
+        let release = null;
+
+        const present = (next) => {
+            release?.();
+            release = whenSteady(anchorRef.current, () => {
+                if (alive) setResult(next);
+            });
+        };
 
         const known = translator.peek(text);
         if (known.status === "done" || known.status === "skip") {
@@ -48,7 +59,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                     ignoreBackoff: force === true,
 
                     onStart: () => {
-                        if (alive) setResult({ status: "pending" });
+                        if (alive) present({ status: "pending" });
                     },
                     shouldRun: () => alive && visible,
                 })
@@ -57,17 +68,17 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                     running = false;
 
                     if (res.status === "retry") {
-                        setResult({ status: "idle" });
+                        present({ status: "idle" });
                         if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
                             rateLimitRetries += 1;
                             schedule(res.after + jitter());
                         } else {
-                            setResult({ status: "error", message: t("error.rateLimited") });
+                            present({ status: "error", message: t("error.rateLimited") });
                         }
                         return;
                     }
 
-                    setResult(res.status === "unknown" ? { status: "idle" } : res);
+                    present(res.status === "unknown" ? { status: "idle" } : res);
                 });
         };
 
@@ -77,6 +88,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             visible = true;
             return () => {
                 alive = false;
+                release?.();
             };
         }
 
@@ -95,17 +107,29 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             run();
             return () => {
                 alive = false;
+                release?.();
             };
         }
 
         return () => {
             alive = false;
+            release?.();
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
     }, [text, autoTranslate, targetLanguage, maxChars]);
 
     const status = result && result.status;
+
+    React.useLayoutEffect(() => {
+        const height = blockHeight(bodyRef.current);
+        const previous = heightRef.current;
+        heightRef.current = height;
+
+        // The first pass only records what the message was born with. A block that was already
+        // in its first layout pushed nothing, and Discord accounts for it like any other height.
+        if (previous !== null) keepPlace(anchorRef.current, height - previous);
+    }, [status]);
 
     return React.createElement(
         React.Fragment,
@@ -116,6 +140,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             "aria-hidden": "true",
         }),
         renderBody(status, result, {
+            ref: bodyRef,
             showPending,
             showErrors,
             stores,
@@ -132,11 +157,11 @@ function jitter() {
 }
 
 function renderBody(status, result, ctx) {
-    const { showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
+    const { ref, showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
     if (status === "idle" && !autoTranslate) {
         return React.createElement(
             "button",
-            { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
+            { ref, type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
             t("block.trigger"),
         );
     }
@@ -146,7 +171,7 @@ function renderBody(status, result, ctx) {
         return showPending
             ? React.createElement(
                   "div",
-                  { className: "mollu-translation mollu-translation--pending" },
+                  { ref, className: "mollu-translation mollu-translation--pending" },
                   t("block.pending"),
               )
             : null;
@@ -156,6 +181,7 @@ function renderBody(status, result, ctx) {
             ? React.createElement(
                   "button",
                   {
+                      ref,
                       type: "button",
                       className: "mollu-translation mollu-translation--error",
                       title: t("block.errorTitle", { message: result?.message || "" }),
@@ -167,7 +193,7 @@ function renderBody(status, result, ctx) {
     }
     return React.createElement(
         "div",
-        { className: "mollu-translation" },
+        { ref, className: "mollu-translation" },
         React.createElement("span", { className: "mollu-translation__badge" }, badge),
         React.createElement(
             "span",

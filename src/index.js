@@ -15,6 +15,7 @@ import { findMessageContent, waitForMessageContent, createStores } from "./disco
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
 import { disconnectVisibility } from "./ui/visibility.js";
+import { disconnectScroll } from "./ui/scroll.js";
 import { t } from "./i18n.js";
 import { getLanguage } from "./languages.js";
 import { logger } from "./lib/logger.js";
@@ -125,6 +126,7 @@ export default class Mollu {
         BdApi.Patcher.unpatchAll(NAME);
         BdApi.DOM.removeStyle(NAME);
         disconnectVisibility();
+        disconnectScroll();
         this._translator.stop();
         this._patch = null;
         this._outgoing = null;

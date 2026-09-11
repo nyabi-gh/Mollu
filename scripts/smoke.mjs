@@ -124,7 +124,7 @@ check("language detector: too short is skipped", () => {
 
 installBdApiStub();
 
-const { setLocale, t } = await import("../src/i18n.js");
+const { setLocale, t, UI_LANGUAGES, stringKeys } = await import("../src/i18n.js");
 setLocale("en");
 
 const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
@@ -258,7 +258,15 @@ await checkAsync("queue: work whose caller lost interest is dropped, not run", a
 
 const { TranslationCache } = await import("../src/translation/cache.js");
 const { Translator } = await import("../src/translation/translator.js");
-const { CACHE_LIMIT, CACHE_KEY, NAME, LEGACY_NAMES, TRANSIENT_RETRIES } = await import("../src/constants.js");
+const {
+    CACHE_LIMIT,
+    CACHE_KEY,
+    LEGACY_CACHE_KEYS,
+    NAME,
+    LEGACY_NAMES,
+    TRANSIENT_RETRIES,
+    MAX_OUTPUT_TOKENS,
+} = await import("../src/constants.js");
 
 check("cache: save() keeps the newest entries, not the oldest", () => {
     const saved = captureSave(() => {
@@ -563,7 +571,91 @@ check("net: a plain-http base url is refused before the key is sent", () => {
 });
 
 const { renderSegments } = await import("../src/ui/rich-text.js");
+const { blockHeight, keepPlace, whenSteady, disconnectScroll } = await import("../src/ui/scroll.js");
+
+check("scroll: a translation arriving above the viewport does not move what is being read", () => {
+    const previous = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = (node) => node.style ?? {};
+    try {
+        const above = scrollScene({ anchorTop: 40 });
+        keepPlace(above.anchor, 22);
+        assert.equal(above.scroller.scrollTop, 522, "the scroller gives back exactly what was added");
+
+        const inView = scrollScene({ anchorTop: 300 });
+        keepPlace(inView.anchor, 22);
+        assert.equal(inView.scroller.scrollTop, 500, "growing in view pushes what is below, as it should");
+
+        const shrank = scrollScene({ anchorTop: 40 });
+        keepPlace(shrank.anchor, -22);
+        assert.equal(shrank.scroller.scrollTop, 478, "a block that gives space back moves the page too");
+
+        const loose = { parentElement: null, getBoundingClientRect: () => ({ top: 0 }) };
+        keepPlace(loose, 22);
+
+        assert.equal(blockHeight(null), 0);
+        assert.equal(
+            blockHeight({
+                style: { marginTop: "2px", marginBottom: "0px" },
+                getBoundingClientRect: () => ({ height: 20 }),
+            }),
+            22,
+            "the block's margin is part of what it pushed",
+        );
+    } finally {
+        globalThis.getComputedStyle = previous;
+    }
+});
+
+await checkAsync("scroll: a block never lands on screen while the reader is scrolling", async () => {
+    const previous = { style: globalThis.getComputedStyle, document: globalThis.document };
+    globalThis.getComputedStyle = (node) => node.style ?? {};
+
+    let onScroll = null;
+    globalThis.document = {
+        addEventListener: (type, handler) => {
+            if (type === "scroll") onScroll = handler;
+        },
+        removeEventListener: () => {
+            onScroll = null;
+        },
+    };
+    try {
+        const scene = scrollScene({ anchorTop: 300 });
+        const landed = [];
+
+        whenSteady(scene.anchor, () => landed.push("still"));
+        assert.deepEqual(landed, ["still"], "a reader sitting still is shown it at once");
+
+        onScroll();
+        whenSteady(scene.anchor, () => landed.push("scrolling"));
+        assert.deepEqual(landed, ["still"], "mid-scroll it waits instead of pushing the page");
+
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        assert.deepEqual(landed, ["still", "scrolling"], "and lands once the scrolling stops");
+
+        const passed = scrollScene({ anchorTop: 40 });
+        onScroll();
+        whenSteady(passed.anchor, () => landed.push("above"));
+        assert.deepEqual(
+            landed,
+            ["still", "scrolling", "above"],
+            "off screen it lands immediately; keepPlace hides the growth",
+        );
+
+        onScroll();
+        const cancel = whenSteady(scene.anchor, () => landed.push("dropped"));
+        cancel();
+        onScroll();
+        assert.equal(landed.length, 3, "a block whose message went away never lands");
+    } finally {
+        disconnectScroll();
+        globalThis.getComputedStyle = previous.style;
+        globalThis.document = previous.document;
+    }
+});
+
 const { Settings } = await import("../src/settings.js");
+const { CUSTOM_MODEL } = await import("../src/translation/providers/index.js");
 
 check("rich text: discord tokens render as elements, not raw markup", () => {
     const stores = {
@@ -614,6 +706,137 @@ await checkAsync("translator: only a real wrapping quote is stripped", async () 
     } finally {
         BdApi.Net.fetch = previous;
     }
+});
+
+await checkAsync("cache: a translation belongs to the model that made it", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ choices: [{ message: { content: `안녕 ${calls}` } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        const translator = new Translator({ settings });
+        assert.equal((await translator.translate("hello there")).text, "안녕 1");
+        assert.equal(translator.peek("hello there").status, "done", "the same model reuses it");
+
+        settings.current.model = "deepseek-v4-pro";
+        assert.equal(translator.peek("hello there").status, "unknown", "another model has not answered");
+        assert.equal((await translator.translate("hello there")).text, "안녕 2");
+
+        settings.current.model = "deepseek-v4-flash";
+        assert.equal(translator.peek("hello there").text, "안녕 1", "each model keeps its own answer");
+
+        settings.current.model = "";
+        assert.equal(
+            translator.peek("hello there").text,
+            "안녕 1",
+            "a blank model means the backend default, which is what answered first",
+        );
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("cache: the key shape changed, so what an older build saved is thrown away", () => {
+    assert.equal(CACHE_KEY, "cache-v4");
+    assert.ok(LEGACY_CACHE_KEYS.includes("cache-v3"), "entries with no model in the key must go");
+
+    const deleted = [];
+    const previous = BdApi.Data;
+    BdApi.Data = {
+        load: (_name, key) => (key === "cache-v3" ? [["kohello", "안녕"]] : null),
+        save: () => {},
+        delete: (_name, key) => deleted.push(key),
+    };
+    try {
+        new TranslationCache().load();
+    } finally {
+        BdApi.Data = previous;
+    }
+    assert.ok(deleted.includes("cache-v3"));
+});
+
+await checkAsync("a script that spends more tokens per character gets more room", async () => {
+    const previous = BdApi.Net.fetch;
+    const budgets = [];
+    BdApi.Net.fetch = async (_url, options) => {
+        budgets.push(JSON.parse(options.body).max_tokens);
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+    };
+    try {
+        const settings = stubSettings();
+        const text = "the quick brown fox jumps over the lazy dog. ".repeat(20);
+
+        settings.current.targetLanguage = "ko";
+        await new Translator({ settings }).translate(text);
+
+        settings.current.targetLanguage = "th";
+        await new Translator({ settings }).translate(text);
+
+        assert.equal(budgets[0], text.length + 256);
+        assert.ok(budgets[1] > budgets[0] * 2, "Thai was being cut off at the Latin-sized budget");
+        assert.ok(budgets[1] <= MAX_OUTPUT_TOKENS, "and the ceiling still holds");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("reasoning is stripped even when the model loses a tag", async () => {
+    const previous = BdApi.Net.fetch;
+    const answers = [
+        "<think>the tone is casual</think>안녕하세요",
+        "let me think about the tone\n</think>\n안녕하세요",
+        "<think>the tone is casual\n\nstill thinking",
+    ];
+    try {
+        const results = [];
+        for (const content of answers) {
+            BdApi.Net.fetch = async () =>
+                new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status: 200 });
+            results.push(await new Translator({ settings: stubSettings() }).translate("hello there"));
+        }
+
+        assert.equal(results[0].text, "안녕하세요");
+        assert.equal(results[1].text, "안녕하세요", "an orphan closer was showing the reasoning instead");
+        assert.equal(results[2].status, "error", "leaked reasoning is never shown as the translation");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("settings: an edit reported twice is stored once, keybinds included", () => {
+    const settings = new Settings();
+    const seen = [];
+    settings.onChange((id, value) => seen.push([id, value]));
+
+    const panel = settings._panelSpec();
+    const field = panelFields(settings).find((entry) => entry.id === "hotkey");
+
+    field.onChange(["Control", "Alt", "K"]);
+    panel.onChange("general", "hotkey", ["Control", "Alt", "K"]);
+    assert.deepEqual(settings.current.hotkey, ["Control", "Alt", "K"]);
+    assert.equal(seen.length, 1, "the panel reports one edit from two places");
+
+    panel.onChange("general", "hotkey", ["Control", "Alt", "K"]);
+    assert.equal(seen.length, 1, "re-recording the same combo changes nothing");
+});
+
+check("translator: a pair it was handed is used instead of asking again", () => {
+    const translator = new Translator({ settings: stubSettings() });
+
+    translator.remember("hello there", "안녕하세요", "ko");
+    assert.equal(translator.peek("hello there").text, "안녕하세요");
+
+    translator.remember("call <@1> now", "지금 <@1> 호출", "ko");
+    assert.equal(
+        translator.peek("call <@1> now").status,
+        "unknown",
+        "a pair carrying tokens cannot be numbered from one side",
+    );
 });
 
 check("translator: an over-long message is re-checked after maxChars is raised", () => {
@@ -689,16 +912,20 @@ check("i18n: strings switch language and interpolate", () => {
     assert.equal(t("block.pending"), "Translating…", "an unknown locale falls back to English");
 });
 
-check("i18n: every key exists in both tables", () => {
+check("i18n: every key exists in every table", () => {
     setLocale("en");
     for (const { value } of LANGUAGE_OPTIONS) assert.ok(value, "language option needs a value");
-    const keys = ["block.pending", "block.error", "block.trigger", "toast.failed", "settings.provider"];
-    for (const key of keys) {
-        setLocale("ko");
-        const ko = t(key);
-        setLocale("en");
-        assert.notEqual(t(key), key, `${key} missing from en`);
-        assert.notEqual(ko, key, `${key} missing from ko`);
+
+    const [reference, ...rest] = UI_LANGUAGES;
+    const expected = stringKeys(reference).sort();
+    assert.ok(expected.length > 50, "the reference table should hold every string the plugin shows");
+
+    for (const locale of rest) {
+        assert.deepEqual(
+            stringKeys(locale).sort(),
+            expected,
+            `${locale} drifted; the missing keys would quietly come out in ${reference}`,
+        );
     }
 });
 
@@ -788,26 +1015,131 @@ check("settings: a target saved before the split becomes Brazilian", () => {
     }
 });
 
-check("settings: the model field appears only when there is a choice to make", () => {
+check("settings: the model field lists what is known and offers a way past the list", () => {
     const settings = new Settings();
-    const modelField = () => panelFields(settings).find((entry) => entry.id === "model");
+    const field = (id) => panelFields(settings).find((entry) => entry.id === id);
 
     settings.set("provider", "deepseek");
-    assert.equal(modelField().type, "dropdown", "two DeepSeek models are worth choosing between");
+    assert.equal(field("model").type, "dropdown");
     assert.deepEqual(
-        modelField().options.map((option) => option.value),
-        ["deepseek-v4-flash", "deepseek-v4-pro"],
+        field("model").options.map((option) => option.value),
+        ["deepseek-v4-flash", "deepseek-v4-pro", CUSTOM_MODEL],
+    );
+
+    settings.set("provider", "gemini");
+    assert.deepEqual(
+        field("model").options.map((option) => option.value),
+        ["gemini-3.1-flash-lite", CUSTOM_MODEL],
+        "a single known model is still a choice once a name can be typed in",
     );
 
     settings.set("provider", "deepl");
-    assert.equal(modelField(), undefined, "DeepL has no model at all");
+    assert.equal(field("model"), undefined, "DeepL has no model at all");
+    assert.equal(field("customModel"), undefined, "so there is nothing to type in either");
+});
+
+check("settings: a model too new for this build can be typed in", () => {
+    const settings = new Settings();
+    const field = (id) => panelFields(settings).find((entry) => entry.id === id);
 
     settings.set("provider", "gemini");
-    assert.equal(modelField(), undefined, "one usable model is not a choice");
+    assert.equal(field("customModel"), undefined, "the text field stays away until it is asked for");
 
-    settings.set("model", "some-other-compatible-model");
-    const options = modelField().options.map((option) => option.value);
-    assert.deepEqual(options, ["gemini-3.1-flash-lite", "some-other-compatible-model"]);
+    settings.set("model", CUSTOM_MODEL);
+    assert.equal(settings.current.model, "", "the dropdown entry is never stored as a model name");
+    assert.equal(field("model").value, CUSTOM_MODEL, "the dropdown keeps showing where the name comes from");
+    assert.equal(field("customModel").type, "text");
+
+    field("customModel").onChange("  gemini-4-pro-preview  ");
+    assert.equal(settings.current.model, "gemini-4-pro-preview", "a pasted name is trimmed and kept");
+    assert.equal(field("model").value, CUSTOM_MODEL);
+    assert.equal(field("customModel").value, "gemini-4-pro-preview");
+
+    settings.set("model", CUSTOM_MODEL);
+    assert.equal(settings.current.model, "gemini-4-pro-preview", "re-picking it does not wipe the name");
+
+    settings.set("model", "gemini-3.1-flash-lite");
+    assert.equal(field("customModel"), undefined, "back on the list, the text field goes away");
+});
+
+check("settings: a typed-in model survives switching backends and back", () => {
+    const settings = new Settings();
+    settings.set("provider", "deepseek");
+    settings.set("model", "deepseek-v5-turbo");
+
+    settings.set("provider", "gemini");
+    assert.equal(settings.current.model, "gemini-3.1-flash-lite", "the other backend keeps its own model");
+
+    settings.set("provider", "deepseek");
+    assert.equal(settings.current.model, "deepseek-v5-turbo", "the typed-in name was remembered");
+});
+
+await checkAsync("a typed-in model is the one the request asks for", async () => {
+    const previous = BdApi.Net.fetch;
+    let body = null;
+    BdApi.Net.fetch = async (_url, options) => {
+        body = JSON.parse(options.body);
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        settings.current.model = "deepseek-v5-turbo";
+        await new Translator({ settings }).translate("hello there");
+        assert.equal(body.model, "deepseek-v5-turbo");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("a field the model refuses is dropped, not the whole translation", async () => {
+    const previous = BdApi.Net.fetch;
+    const sent = [];
+    BdApi.Net.fetch = async (_url, options) => {
+        const body = JSON.parse(options.body);
+        sent.push(body);
+
+        // What OpenAI's reasoning models answer to the request shape every other model takes.
+        if ("temperature" in body) return unsupported("value", "temperature");
+        if ("max_tokens" in body) return unsupported("parameter", "max_tokens");
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
+            status: 200,
+        });
+    };
+    try {
+        const settings = stubSettings();
+        settings.current.model = "some-reasoning-model";
+        const result = await new Translator({ settings }).translate("hello there");
+
+        assert.equal(result.text, "안녕", "the translation still arrives");
+        assert.equal(sent.length, 3, "one retry per refused field, and no more");
+        const last = sent[2];
+        assert.ok(!("temperature" in last) && !("max_tokens" in last));
+        assert.equal(last.max_completion_tokens, MAX_OUTPUT_TOKENS, "the renamed budget covers reasoning");
+        assert.equal(last.model, "some-reasoning-model", "nothing else about the request moved");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("a refused model name is a configuration error, not something to retry", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return unsupported("parameter", "model");
+    };
+    try {
+        const settings = stubSettings();
+        settings.current.model = "no-such-model";
+        const result = await new Translator({ settings }).translate("hello there");
+
+        assert.equal(result.status, "error");
+        assert.equal(calls, 1, "a request without a model would be nonsense");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
 });
 
 check("settings: switching provider swaps defaults and keeps both keys", () => {
@@ -1108,6 +1440,43 @@ check("settings: the panel is a live component, not a one-shot spec", () => {
     assert.match(String(rendered.props.key), /^panel-/);
 });
 
+check("settings: the panel rebuilds when its shape changes, and never mid-typing", () => {
+    const settings = new Settings();
+    const { useState, useEffect } = BdApi.React;
+    let bumps = 0;
+    let unmount = null;
+
+    BdApi.React.useState = (init) => [
+        typeof init === "function" ? init() : init,
+        () => {
+            bumps += 1;
+        },
+    ];
+    BdApi.React.useEffect = (fn) => {
+        unmount = fn();
+    };
+    try {
+        settings.buildPanel().type();
+        assert.equal(typeof unmount, "function", "the panel has to unsubscribe when it goes away");
+
+        settings.set("provider", "gemini");
+        assert.equal(bumps, 1, "another backend brings different fields");
+
+        settings.set("model", CUSTOM_MODEL);
+        assert.equal(bumps, 2, "the text field has to appear");
+
+        settings.set("model", "gemini-4-pro-preview");
+        assert.equal(bumps, 2, "remounting the field being typed into would eat the cursor");
+
+        settings.set("model", "gemini-3.1-flash-lite");
+        assert.equal(bumps, 3, "picking from the list again takes the text field away");
+    } finally {
+        unmount?.();
+        BdApi.React.useState = useState;
+        BdApi.React.useEffect = useEffect;
+    }
+});
+
 check("settings: listeners fire and unsubscribe, and pasted values are trimmed", () => {
     const settings = new Settings();
     const seen = [];
@@ -1265,6 +1634,31 @@ await checkAsync(
     },
 );
 
+await checkAsync("outgoing: what you typed is handed back, so your own message costs nothing", async () => {
+    const remembered = [];
+    const inGuild = "1101573652786446417";
+    const translator = (text) => ({
+        translate: async () => ({ status: "done", text }),
+        remember: (...args) => remembered.push(args),
+    });
+
+    const typedInTarget = outgoingWith(
+        { translateOutgoing: true, outgoingLanguage: "en", targetLanguage: "ko" },
+        inGuild,
+        translator("hello everyone"),
+    );
+    await typedInTarget._onSend(null, ["c", { content: "안녕하세요 여러분" }], () => "sent");
+    assert.deepEqual(remembered, [["hello everyone", "안녕하세요 여러분", "ko"]]);
+
+    const typedInAnother = outgoingWith(
+        { translateOutgoing: true, outgoingLanguage: "ja", targetLanguage: "ko" },
+        inGuild,
+        translator("こんにちは"),
+    );
+    await typedInAnother._onSend(null, ["c", { content: "hello everyone" }], () => "sent");
+    assert.equal(remembered.length, 1, "what you typed was not the language the block asks for");
+});
+
 check("outgoing: the gate is skipped without a promise when it does not apply", () => {
     const patch = outgoingWith({}, "1101573652786446417");
     const result = patch._onSend(null, ["c", { content: "안녕하세요" }], () => "sent");
@@ -1361,6 +1755,32 @@ function stubSettings() {
     };
 }
 
+function unsupported(kind, param) {
+    const message =
+        kind === "value"
+            ? `Unsupported value: '${param}' does not support 0.2 with this model.`
+            : `Unsupported parameter: '${param}' is not supported with this model.`;
+    return new Response(JSON.stringify({ error: { message, param, type: "invalid_request_error" } }), {
+        status: 400,
+    });
+}
+
+function scrollScene({ anchorTop }) {
+    const scroller = {
+        scrollTop: 500,
+        scrollHeight: 4000,
+        clientHeight: 600,
+        style: { overflowY: "scroll" },
+        parentElement: null,
+        getBoundingClientRect: () => ({ top: 100, bottom: 700 }),
+    };
+    const anchor = {
+        parentElement: scroller,
+        getBoundingClientRect: () => ({ top: anchorTop }),
+    };
+    return { scroller, anchor };
+}
+
 function flush() {
     return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -1388,6 +1808,7 @@ function installBdApiStub() {
             cloneElement: (el, props, ...children) => ({ ...el, props: { ...el.props, ...props, children } }),
             useState: (init) => [typeof init === "function" ? init() : init, noop],
             useEffect: noop,
+            useLayoutEffect: noop,
             useRef: (v = null) => ({ current: v }),
             Fragment: "Fragment",
         },

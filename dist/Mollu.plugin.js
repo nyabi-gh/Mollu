@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.1.3
+ * @version 1.2.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyabi-gh/Mollu
  */
@@ -62,8 +62,8 @@ var DEFAULT_SETTINGS = Object.freeze({
 });
 var CACHE_LIMIT = 3e3;
 var CACHE_SAVE_DEBOUNCE_MS = 1e4;
-var CACHE_KEY = "cache-v3";
-var LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
+var CACHE_KEY = "cache-v4";
+var LEGACY_CACHE_KEYS = ["cache", "cache-v2", "cache-v3"];
 var ERROR_TOAST_COOLDOWN_MS = 15e3;
 var UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1e3;
 var UPDATE_CHECK_DELAY_MS = 15e3;
@@ -78,6 +78,7 @@ var FAILURE_BACKOFF_MS = 6e4;
 var FAILURE_RECORD_LIMIT = 500;
 var MAX_OUTPUT_TOKENS = 4096;
 var OUTPUT_TOKEN_HEADROOM = 256;
+var MAX_BODY_RETUNES = 3;
 
 // src/translation/providers/deepseek.js
 var deepseek_exports = {};
@@ -143,6 +144,9 @@ var STRINGS = {
     "settings.apiKey.note": "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
     "settings.apiKey.saved": "saved · {fingerprint}",
     "settings.model": "Model",
+    "settings.model.custom": "Type a name in…",
+    "settings.customModel": "Model name",
+    "settings.customModel.note": "The model id exactly as the backend writes it, so a model released after this plugin was built can still be used. Blank falls back to {fallback}.",
     "settings.baseUrl": "API base URL",
     "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
     "settings.allGuilds": "Translate in every server",
@@ -181,7 +185,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
     "settings.checkUpdate.action": "Check",
     "settings.clearCache": "Translation cache",
-    "settings.clearCache.note": "Translations are reused instead of being requested again. Clearing makes every message pay for a fresh request, so do it when a translation is wrong or you changed backends.",
+    "settings.clearCache.note": "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh; clear this when a translation is wrong or you changed the base URL.",
     "settings.clearCache.action": "Clear",
     "clearCache.title": "Clear the translation cache?",
     "clearCache.body": "{count} saved translations will be deleted. Messages already on screen will be sent to the API again, at the usual cost.",
@@ -192,8 +196,8 @@ var STRINGS = {
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
-    "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better.",
-    "modelHint.gemini": "flash-lite answers in about a second and is the only model worth using here.",
+    "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
+    "modelHint.gemini": "flash-lite answers in about a second. Any other Gemini or Gemma model can be typed in.",
     "modelHint.deepl": "DeepL has no model to pick.",
     "language.auto": "Match Discord"
   },
@@ -234,6 +238,9 @@ var STRINGS = {
     "settings.apiKey.note": "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
     "settings.apiKey.saved": "저장됨 · {fingerprint}",
     "settings.model": "모델 이름",
+    "settings.model.custom": "직접 입력…",
+    "settings.customModel": "직접 입력한 모델 이름",
+    "settings.customModel.note": "백엔드가 쓰는 모델 ID 를 그대로 입력하세요. 플러그인이 모르는 새 모델도 이렇게 쓸 수 있습니다. 비워 두면 {fallback} 을 씁니다.",
     "settings.baseUrl": "API Base URL",
     "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
     "settings.allGuilds": "모든 서버에서 번역",
@@ -272,7 +279,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
     "settings.checkUpdate.action": "확인",
     "settings.clearCache": "번역 캐시",
-    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 비우면 모든 메시지가 다시 요청되므로, 번역이 이상하거나 백엔드를 바꿨을 때 사용하세요.",
+    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역이 이상하거나 Base URL 을 바꿨을 때 비우세요.",
     "settings.clearCache.action": "비우기",
     "clearCache.title": "번역 캐시를 비울까요?",
     "clearCache.body": "저장된 번역 {count}개가 삭제됩니다. 화면에 있는 메시지는 다시 API 로 전송되고 그만큼 비용이 듭니다.",
@@ -283,8 +290,8 @@ var STRINGS = {
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
-    "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다.",
-    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠르고, 여기서는 사실상 이것만 쓸 만합니다.",
+    "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
+    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 다른 Gemini·Gemma 모델도 직접 입력하면 됩니다.",
     "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
@@ -393,6 +400,7 @@ async function postJson(url, { headers = {}, body, signal, timeout = REQUEST_TIM
     if (text) logger.warn(`HTTP ${res.status} body:`, text.slice(0, 500));
     const err = new Error(`HTTP ${res.status}`);
     err.status = res.status;
+    err.body = text;
     err.retryAfterMs = retryAfterMs(res, text);
     throw err;
   }
@@ -451,10 +459,10 @@ var LANGUAGES = [
   },
   { code: "ru", label: "Русский (Russian)", name: "Russian", script: CYRILLIC },
   { code: "vi", label: "Tiếng Việt (Vietnamese)", name: "Vietnamese", script: null },
-  { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI },
+  { code: "th", label: "ไทย (Thai)", name: "Thai", script: THAI, tokensPerChar: 2.5 },
   { code: "id", label: "Bahasa Indonesia", name: "Indonesian", script: null },
-  { code: "ar", label: "العربية (Arabic)", name: "Arabic", script: ARABIC },
-  { code: "hi", label: "हिन्दी (Hindi)", name: "Hindi", script: DEVANAGARI }
+  { code: "ar", label: "العربية (Arabic)", name: "Arabic", script: ARABIC, tokensPerChar: 2 },
+  { code: "hi", label: "हिन्दी (Hindi)", name: "Hindi", script: DEVANAGARI, tokensPerChar: 2.5 }
 ];
 var DEFAULT_LANGUAGE = "ko";
 var BY_CODE = new Map(LANGUAGES.map((language) => [language.code, language]));
@@ -479,22 +487,19 @@ async function chatCompletion({ text, settings, signal, defaults: defaults4, ext
   if (!apiKey) throw configError(t("error.noApiKey"));
   const base = normalizeBaseUrl(settings.baseUrl, defaults4.baseUrl);
   const model = String(settings.model || defaults4.model).trim();
+  const target = getLanguage(settings.targetLanguage);
   const body = {
     model,
     messages: [
-      { role: "system", content: systemPrompt(getLanguage(settings.targetLanguage).name) },
+      { role: "system", content: systemPrompt(target.name) },
       { role: "user", content: text }
     ],
     temperature: 0.2,
     stream: false,
-    max_tokens: outputBudget(text)
+    max_tokens: outputBudget(text, target)
   };
   if (extend3) extend3(body, { base, model });
-  const json = await postJson(`${base}/chat/completions`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-    body
-  });
+  const json = await send(`${base}/chat/completions`, { apiKey, signal, body });
   const choice = json?.choices?.[0];
   const output = stripReasoning(choice?.message?.content);
   if (!output) {
@@ -504,15 +509,69 @@ async function chatCompletion({ text, settings, signal, defaults: defaults4, ext
   }
   return output;
 }
+async function send(url, { apiKey, signal, body }) {
+  let payload = body;
+  for (let retunes = 0; ; retunes += 1) {
+    try {
+      return await postJson(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal,
+        body: payload
+      });
+    } catch (err) {
+      const retuned = retunes < MAX_BODY_RETUNES ? withoutRejectedField(payload, err) : null;
+      if (!retuned) throw err;
+      logger.warn(`${payload.model} rejected "${retuned.field}"; asking again without it`);
+      payload = retuned.body;
+    }
+  }
+}
+var TUNABLE = /* @__PURE__ */ new Set(["temperature", "top_p", "max_tokens", "stream", "reasoning_effort", "thinking"]);
+var RENAMED = /* @__PURE__ */ new Map([["max_tokens", "max_completion_tokens"]]);
+function withoutRejectedField(body, err) {
+  if (!err || err.status !== 400) return null;
+  const field = rejectedField(err.body);
+  if (!TUNABLE.has(field) || !Object.hasOwn(body, field)) return null;
+  const next = { ...body };
+  delete next[field];
+  const renamed = RENAMED.get(field);
+  if (renamed && !Object.hasOwn(body, renamed)) next[renamed] = MAX_OUTPUT_TOKENS;
+  return { body: next, field };
+}
+var UNSUPPORTED = /Unsupported (?:parameter|value): '([a-z_]+)'/i;
+function rejectedField(body) {
+  if (typeof body !== "string" || !body) return "";
+  try {
+    const param = JSON.parse(body)?.error?.param;
+    if (typeof param === "string") return param;
+  } catch {
+  }
+  const match = UNSUPPORTED.exec(body);
+  return match ? match[1] : "";
+}
+var REASONING_PAIR = /<(thought|think)>[\s\S]*?<\/\1>/gi;
+var REASONING_OPEN = /<(?:thought|think)>/i;
+var REASONING_CLOSE = /<\/(?:thought|think)>/gi;
 function stripReasoning(value) {
   if (typeof value !== "string") return "";
-  let text = value.replace(/<(thought|think)>[\s\S]*?<\/\1>/gi, "");
-  const unclosed = text.search(/<(?:thought|think)>/i);
+  let text = value.replace(REASONING_PAIR, "");
+  const reasoningEnds = lastCloseEnd(text);
+  if (reasoningEnds !== -1) text = text.slice(reasoningEnds);
+  const unclosed = text.search(REASONING_OPEN);
   if (unclosed !== -1) text = text.slice(0, unclosed);
   return text.trim();
 }
-function outputBudget(text) {
-  return Math.min(MAX_OUTPUT_TOKENS, text.length + OUTPUT_TOKEN_HEADROOM);
+function lastCloseEnd(text) {
+  REASONING_CLOSE.lastIndex = 0;
+  let end = -1;
+  for (let match = REASONING_CLOSE.exec(text); match; match = REASONING_CLOSE.exec(text)) {
+    end = match.index + match[0].length;
+  }
+  return end;
+}
+function outputBudget(text, language) {
+  const estimate = text.length * (language.tokensPerChar ?? 1) + OUTPUT_TOKEN_HEADROOM;
+  return Math.min(MAX_OUTPUT_TOKENS, Math.ceil(estimate));
 }
 
 // src/translation/providers/deepseek.js
@@ -655,10 +714,13 @@ var PROVIDER_OPTIONS = Object.values(PROVIDERS).map((provider) => ({
   label: provider.label,
   value: provider.id
 }));
-function modelOptions(providerId, current) {
-  const { models: models4 = [] } = getProvider(providerId);
-  const values = models4.includes(current) || !current ? models4 : [...models4, current];
-  return values.length < 2 ? [] : values.map((model) => ({ label: model, value: model }));
+var CUSTOM_MODEL = "__custom__";
+function knownModels(providerId) {
+  return getProvider(providerId).models ?? [];
+}
+function isCustomModel(providerId, model) {
+  const models4 = knownModels(providerId);
+  return models4.length > 0 && !models4.includes(String(model ?? "").trim());
 }
 
 // src/hotkey.js
@@ -931,8 +993,10 @@ var Settings = class {
     return () => this._listeners.delete(listener);
   }
   set(id4, value) {
+    if (id4 === CUSTOM_MODEL_FIELD) return this.set("model", value);
+    if (id4 === "model" && value === CUSTOM_MODEL) return this._openCustomModel();
     const next = coerce(id4, value, this._values[id4]);
-    if (next === KEEP || next === this._values[id4]) return;
+    if (next === KEEP || same(next, this._values[id4])) return;
     if (id4 === "provider") {
       this._stashProfile();
       this._values.provider = next;
@@ -950,6 +1014,13 @@ var Settings = class {
       } catch {
       }
     }
+  }
+  // Empty the model so the text field starts blank, but keep a name already typed in.
+  _openCustomModel() {
+    if (!this.usesCustomModel) this.set("model", "");
+  }
+  get usesCustomModel() {
+    return isCustomModel(this._values.provider, this._values.model);
   }
   _stashProfile() {
     const { provider, apiKey, model, baseUrl } = this._values;
@@ -973,12 +1044,15 @@ var Settings = class {
     const settings = this;
     function MolluSettings() {
       const [revision, bump] = React.useState(0);
-      React.useEffect(
-        () => settings.onChange((id4) => {
-          if (PANEL_REBUILD.has(id4)) bump((n) => n + 1);
-        }),
-        []
-      );
+      React.useEffect(() => {
+        let custom = settings.usesCustomModel;
+        return settings.onChange((id4) => {
+          const nowCustom = settings.usesCustomModel;
+          const flipped = nowCustom !== custom;
+          custom = nowCustom;
+          if (PANEL_REBUILD.has(id4) || id4 === "model" && flipped) bump((n) => n + 1);
+        });
+      }, []);
       const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
       return React.cloneElement(panel, { key: `panel-${revision}` });
     }
@@ -986,7 +1060,6 @@ var Settings = class {
   }
   _panelSpec() {
     const v = this._values;
-    const modelChoices = modelOptions(v.provider, v.model);
     return {
       onChange: (_categoryId, settingId, value) => this.set(settingId, value),
       onDrawerToggle: (id4, shown) => DRAWERS.set(id4, shown),
@@ -1149,16 +1222,7 @@ var Settings = class {
           collapsible: true,
           shown: true,
           settings: withChangeHandlers(this, [
-            ...modelChoices.length === 0 ? [] : [
-              {
-                type: "dropdown",
-                id: "model",
-                name: t("settings.model"),
-                note: t(`modelHint.${v.provider}`),
-                value: v.model,
-                options: modelChoices
-              }
-            ],
+            ...modelFields(v, this.usesCustomModel),
             {
               type: "text",
               id: "baseUrl",
@@ -1203,6 +1267,34 @@ var Settings = class {
     };
   }
 };
+var CUSTOM_MODEL_FIELD = "customModel";
+function modelFields(v, custom) {
+  const models4 = knownModels(v.provider);
+  if (models4.length === 0) return [];
+  const dropdown = {
+    type: "dropdown",
+    id: "model",
+    name: t("settings.model"),
+    note: t(`modelHint.${v.provider}`),
+    value: custom ? CUSTOM_MODEL : v.model,
+    options: [
+      ...models4.map((model) => ({ label: model, value: model })),
+      { label: t("settings.model.custom"), value: CUSTOM_MODEL }
+    ]
+  };
+  if (!custom) return [dropdown];
+  return [
+    dropdown,
+    {
+      type: "text",
+      id: CUSTOM_MODEL_FIELD,
+      name: t("settings.customModel"),
+      note: t("settings.customModel.note", { fallback: getProvider(v.provider).defaults.model }),
+      placeholder: models4[0],
+      value: v.model
+    }
+  ];
+}
 var PANEL_REBUILD = /* @__PURE__ */ new Set(["provider", "uiLanguage"]);
 var DRAWERS = /* @__PURE__ */ new Map();
 function withChangeHandlers(settings, items) {
@@ -1214,6 +1306,11 @@ var TRIMMED_FIELDS = /* @__PURE__ */ new Set(["apiKey", "baseUrl", "model"]);
 var CREDENTIAL_FIELDS = /* @__PURE__ */ new Set(["apiKey", "model", "baseUrl"]);
 var CLEAR_TOKEN = "-";
 var KEEP = /* @__PURE__ */ Symbol("keep");
+function same(a, b) {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b)) return false;
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
 function migrate(stored) {
   if (!stored || typeof stored !== "object") return stored;
   if (stored.skipThreshold === void 0 && typeof stored.koreanThreshold === "number") {
@@ -1525,8 +1622,15 @@ var Translator = class {
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
   }
+  // A translation belongs to the model that produced it.
   _cacheKey(masked, language) {
-    return `${language}${masked}`;
+    const { provider, model } = this._settings.current;
+    const engine = model || getProvider(provider).defaults.model;
+    return `${provider}${engine}${language}${masked}`;
+  }
+  remember(text, translation, language) {
+    if (mask(text).tokens.length || mask(translation).tokens.length) return;
+    this._cache.set(this._cacheKey(text, language), translation);
   }
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
@@ -1561,16 +1665,16 @@ var Translator = class {
     );
   }
   _onStart(key, listener) {
-    const waiting = this._starts.get(key);
-    if (waiting === true) return listener();
-    if (waiting) waiting.add(listener);
+    const waiting2 = this._starts.get(key);
+    if (waiting2 === true) return listener();
+    if (waiting2) waiting2.add(listener);
     else this._starts.set(key, /* @__PURE__ */ new Set([listener]));
   }
   _announceStart(key) {
-    const waiting = this._starts.get(key);
+    const waiting2 = this._starts.get(key);
     this._starts.set(key, true);
-    if (waiting === true || !waiting) return;
-    for (const listener of waiting) {
+    if (waiting2 === true || !waiting2) return;
+    for (const listener of waiting2) {
       try {
         listener();
       } catch {
@@ -1836,7 +1940,7 @@ function relativeTime(date) {
 }
 
 // src/ui/visibility.js
-var ROOT_MARGIN = "200px 0px";
+var ROOT_MARGIN = "0px 0px 600px";
 var observer = null;
 var callbacks = /* @__PURE__ */ new Map();
 function ensure() {
@@ -1868,6 +1972,89 @@ function disconnectVisibility() {
   callbacks.clear();
 }
 
+// src/ui/scroll.js
+var SETTLE_MS = 180;
+var SCROLLABLE = /auto|scroll|overlay/;
+var waiting = /* @__PURE__ */ new Set();
+var lastScrollAt = 0;
+var listening = false;
+var settle = null;
+function scrollParent(node) {
+  for (let el = node?.parentElement; el; el = el.parentElement) {
+    if (el.scrollHeight > el.clientHeight && SCROLLABLE.test(styleOf(el).overflowY)) return el;
+  }
+  return null;
+}
+function blockHeight(node) {
+  if (!node) return 0;
+  const style = styleOf(node);
+  const margins = (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0);
+  return node.getBoundingClientRect().height + margins;
+}
+function keepPlace(node, delta) {
+  if (!node || !delta) return;
+  const scroller = scrollParent(node);
+  if (!scroller) return;
+  if (node.getBoundingClientRect().top >= scroller.getBoundingClientRect().top) return;
+  scroller.scrollTop += delta;
+}
+function whenSteady(node, run) {
+  const scroller = node ? scrollParent(node) : null;
+  if (!scroller) {
+    run();
+    return () => {
+    };
+  }
+  listen();
+  const waiter = () => {
+    if (!waiting.has(waiter)) return;
+    if (Date.now() - lastScrollAt < SETTLE_MS && onScreen(node, scroller)) return;
+    waiting.delete(waiter);
+    run();
+  };
+  waiting.add(waiter);
+  waiter();
+  return () => waiting.delete(waiter);
+}
+function disconnectScroll() {
+  if (listening && typeof document !== "undefined") {
+    document.removeEventListener("scroll", onScroll, LISTEN_OPTIONS);
+  }
+  clearTimeout(settle);
+  settle = null;
+  listening = false;
+  lastScrollAt = 0;
+  waiting.clear();
+}
+var LISTEN_OPTIONS = { capture: true, passive: true };
+function listen() {
+  if (listening || typeof document === "undefined") return;
+  document.addEventListener("scroll", onScroll, LISTEN_OPTIONS);
+  listening = true;
+}
+function onScroll() {
+  lastScrollAt = Date.now();
+  sweep();
+  clearTimeout(settle);
+  settle = setTimeout(sweep, SETTLE_MS);
+  settle?.unref?.();
+}
+function sweep() {
+  for (const waiter of [...waiting]) waiter();
+}
+function onScreen(node, scroller) {
+  const top = node.getBoundingClientRect().top;
+  const view = scroller.getBoundingClientRect();
+  return top >= view.top && top <= view.bottom;
+}
+function styleOf(node) {
+  try {
+    return getComputedStyle(node) || {};
+  } catch {
+    return {};
+  }
+}
+
 // src/ui/translation-block.js
 var DWELL_MS = 350;
 function initialResult(translator, text) {
@@ -1876,6 +2063,8 @@ function initialResult(translator, text) {
 }
 function TranslationBlock({ text, translator, settings, stores, guildId }) {
   const anchorRef = React.useRef(null);
+  const bodyRef = React.useRef(null);
+  const heightRef = React.useRef(null);
   const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
   const triggerRef = React.useRef(null);
   const [result, setResult] = React.useState(() => initialResult(translator, text));
@@ -1885,6 +2074,13 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     let dwell = null;
     let running = false;
     let rateLimitRetries = 0;
+    let release = null;
+    const present = (next) => {
+      release?.();
+      release = whenSteady(anchorRef.current, () => {
+        if (alive) setResult(next);
+      });
+    };
     const known = translator.peek(text);
     if (known.status === "done" || known.status === "skip") {
       setResult(known);
@@ -1904,23 +2100,23 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       translator.translate(text, {
         ignoreBackoff: force === true,
         onStart: () => {
-          if (alive) setResult({ status: "pending" });
+          if (alive) present({ status: "pending" });
         },
         shouldRun: () => alive && visible
       }).then((res) => {
         if (!alive) return;
         running = false;
         if (res.status === "retry") {
-          setResult({ status: "idle" });
+          present({ status: "idle" });
           if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
             rateLimitRetries += 1;
             schedule(res.after + jitter());
           } else {
-            setResult({ status: "error", message: t("error.rateLimited") });
+            present({ status: "error", message: t("error.rateLimited") });
           }
           return;
         }
-        setResult(res.status === "unknown" ? { status: "idle" } : res);
+        present(res.status === "unknown" ? { status: "idle" } : res);
       });
     };
     triggerRef.current = run;
@@ -1928,6 +2124,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       visible = true;
       return () => {
         alive = false;
+        release?.();
       };
     }
     const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
@@ -1944,15 +2141,23 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       run();
       return () => {
         alive = false;
+        release?.();
       };
     }
     return () => {
       alive = false;
+      release?.();
       stopObserving();
       if (dwell != null) clearTimeout(dwell);
     };
   }, [text, autoTranslate, targetLanguage, maxChars]);
   const status = result && result.status;
+  React.useLayoutEffect(() => {
+    const height = blockHeight(bodyRef.current);
+    const previous = heightRef.current;
+    heightRef.current = height;
+    if (previous !== null) keepPlace(anchorRef.current, height - previous);
+  }, [status]);
   return React.createElement(
     React.Fragment,
     null,
@@ -1962,6 +2167,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       "aria-hidden": "true"
     }),
     renderBody(status, result, {
+      ref: bodyRef,
       showPending,
       showErrors,
       stores,
@@ -1976,11 +2182,11 @@ function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
 function renderBody(status, result, ctx) {
-  const { showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
+  const { ref, showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
   if (status === "idle" && !autoTranslate) {
     return React.createElement(
       "button",
-      { type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
+      { ref, type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
       t("block.trigger")
     );
   }
@@ -1989,7 +2195,7 @@ function renderBody(status, result, ctx) {
   if (status === "pending") {
     return showPending ? React.createElement(
       "div",
-      { className: "mollu-translation mollu-translation--pending" },
+      { ref, className: "mollu-translation mollu-translation--pending" },
       t("block.pending")
     ) : null;
   }
@@ -1997,6 +2203,7 @@ function renderBody(status, result, ctx) {
     return showErrors ? React.createElement(
       "button",
       {
+        ref,
         type: "button",
         className: "mollu-translation mollu-translation--error",
         title: t("block.errorTitle", { message: result?.message || "" }),
@@ -2007,7 +2214,7 @@ function renderBody(status, result, ctx) {
   }
   return React.createElement(
     "div",
-    { className: "mollu-translation" },
+    { ref, className: "mollu-translation" },
     React.createElement("span", { className: "mollu-translation__badge" }, badge),
     React.createElement(
       "span",
@@ -2196,6 +2403,7 @@ var OutgoingPatch = class {
       });
       if (result.status === "done" && result.text) {
         args[1] = { ...args[1], content: result.text };
+        this._remember(text, result.text);
       } else if (result.status === "error" || result.status === "retry") {
         this._onFailure(result.message);
       }
@@ -2204,6 +2412,13 @@ var OutgoingPatch = class {
       this._onFailure(e && e.message || "unknown");
     }
     return original.apply(self, args);
+  }
+  // The message goes out already translated, so the block under it would pay for a round
+  // trip back to what was typed. Hand over the pair instead.
+  _remember(original, sent) {
+    const { targetLanguage } = this._settings.current;
+    if (this._detector.needsTranslation(original, targetLanguage)) return;
+    this._translator.remember?.(sent, original, targetLanguage);
   }
   _pick(args) {
     const settings = this._settings.current;
@@ -2502,6 +2717,7 @@ var Mollu = class {
     BdApi.Patcher.unpatchAll(NAME);
     BdApi.DOM.removeStyle(NAME);
     disconnectVisibility();
+    disconnectScroll();
     this._translator.stop();
     this._patch = null;
     this._outgoing = null;

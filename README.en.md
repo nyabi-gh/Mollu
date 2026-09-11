@@ -88,7 +88,8 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 
 | Setting | What it means |
 | --- | --- |
-| Model | Which model translates. Only appears when there is more than one worth choosing — DeepSeek has two, and DeepL has none |
+| Model | Which model translates. Pick `Type a name in…` for one the list does not carry. DeepL has no model to choose |
+| Model name | Appears once `Type a name in…` is picked. Write the model id exactly as the service documents it, and a model released after this plugin was built works right away |
 | API base URL | Filled in when you pick a service. You will rarely touch it |
 | Update automatically | Installs a new version when one appears. Checks every few hours |
 | Updates | `Check` looks right now |

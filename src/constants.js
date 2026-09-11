@@ -33,8 +33,8 @@ export const CACHE_LIMIT = 3000;
 
 export const CACHE_SAVE_DEBOUNCE_MS = 10000;
 
-export const CACHE_KEY = "cache-v3";
-export const LEGACY_CACHE_KEYS = ["cache", "cache-v2"];
+export const CACHE_KEY = "cache-v4";
+export const LEGACY_CACHE_KEYS = ["cache", "cache-v2", "cache-v3"];
 
 export const ERROR_TOAST_COOLDOWN_MS = 15000;
 
@@ -57,3 +57,5 @@ export const FAILURE_RECORD_LIMIT = 500;
 
 export const MAX_OUTPUT_TOKENS = 4096;
 export const OUTPUT_TOKEN_HEADROOM = 256;
+
+export const MAX_BODY_RETUNES = 3;
