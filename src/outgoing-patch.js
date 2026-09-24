@@ -2,6 +2,7 @@ import { NAME, DISCORD_MESSAGE_LIMIT } from "./constants.js";
 import { waitForLazyModule } from "./discord.js";
 import { logger } from "./lib/logger.js";
 import { t } from "./i18n.js";
+import { isExcludedChannel } from "./scope.js";
 
 const SLOW_NOTICE_MS = 1500;
 
@@ -128,6 +129,8 @@ export class OutgoingPatch {
         if (!guildId) {
             if (!settings.translateDms || !this._stores.isDirectMessage?.(channelId)) return null;
         } else if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
+            return null;
+        } else if (isExcludedChannel(this._settings, this._stores, channelId)) {
             return null;
         }
 

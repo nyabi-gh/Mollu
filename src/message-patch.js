@@ -2,6 +2,7 @@ import { NAME, TRACE_LIMIT } from "./constants.js";
 import { React } from "./discord.js";
 import { TranslationBlock } from "./ui/translation-block.js";
 import { logger } from "./lib/logger.js";
+import { isExcludedChannel } from "./scope.js";
 
 const TRANSLATABLE_TYPES = new Set([0, 19, 20]);
 
@@ -91,6 +92,9 @@ export class MessagePatch {
         }
         if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
             return { reason: `server ${guildId} is not in the target list` };
+        }
+        if (isExcludedChannel(this._settings, this._stores, message.channel_id)) {
+            return { reason: "channel is excluded" };
         }
         return { ok: true, guildId };
     }

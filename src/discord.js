@@ -61,6 +61,20 @@ export function createStores() {
                 return null;
             }
         },
+        parentChannelId(channelId) {
+            try {
+                return store("ChannelStore")?.getChannel?.(channelId)?.parent_id ?? null;
+            } catch {
+                return null;
+            }
+        },
+        guildName(guildId) {
+            try {
+                return store("GuildStore")?.getGuild?.(guildId)?.name ?? null;
+            } catch {
+                return null;
+            }
+        },
         channelName(channelId) {
             try {
                 return store("ChannelStore")?.getChannel?.(channelId)?.name ?? null;

@@ -1473,6 +1473,7 @@ check("settings: listeners fire and unsubscribe, and pasted values are trimmed",
 });
 
 const { MessagePatch } = await import("../src/message-patch.js");
+const { ContextMenus } = await import("../src/context-menu.js");
 
 check("target servers: the list gates by default, the toggle opens every server", () => {
     const inList = "1101573652786446417";
@@ -2084,6 +2085,82 @@ check("rich text: Markdown renders as elements, and a spoiler stays hidden until
 
     assert.deepEqual(renderSegments(text("snake_case_name 그대로"), {}, null), ["snake_case_name 그대로"]);
     assert.deepEqual(renderSegments(text("1 * 2 * 3"), {}, null), ["1 * 2 * 3"]);
+});
+
+check("context menu: a server and a channel are switched from their right-click menus", () => {
+    const previousData = BdApi.Data;
+    const previousMenu = BdApi.ContextMenu;
+    const store = new Map();
+    BdApi.Data = {
+        load: (name, key) => store.get(`${name}::${key}`),
+        save: (name, key, value) => store.set(`${name}::${key}`, value),
+        delete: (name, key) => store.delete(`${name}::${key}`),
+    };
+    const patches = new Map();
+    BdApi.ContextMenu = {
+        patch: (navId, callback) => {
+            patches.set(navId, callback);
+            return () => patches.delete(navId);
+        },
+        buildItem: (item) => item,
+    };
+    try {
+        const settings = new Settings();
+        const menus = new ContextMenus({ settings });
+        menus.install();
+        assert.deepEqual([...patches.keys()].sort(), ["channel-context", "guild-context", "thread-context"]);
+
+        const open = (navId, props) => {
+            const tree = { props: { children: [] } };
+            patches.get(navId)(tree, props);
+            return tree.props.children.find((item) => item.type === "toggle");
+        };
+        const guild = { id: "111111111111111111" };
+        let item = open("guild-context", { guild });
+        assert.equal(item.checked, false);
+        item.action();
+        assert.ok(settings.guildIdSet.has(guild.id));
+        assert.equal(open("guild-context", { guild }).checked, true);
+
+        const channel = { id: "222222222222222222", guild_id: guild.id };
+        assert.equal(
+            open("channel-context", { channel: { id: "3", guild_id: "999" } }),
+            undefined,
+            "no switch outside a target server",
+        );
+        item = open("channel-context", { channel });
+        assert.equal(item.checked, true);
+        item.action();
+        assert.ok(settings.excludedChannelSet.has(channel.id));
+
+        const patch = new MessagePatch({
+            target: {},
+            translator: {},
+            languageDetector: {},
+            settings,
+            stores: {
+                guildIdForChannel: () => guild.id,
+                isDirectMessage: () => false,
+                currentUserId: () => "me",
+                parentChannelId: (id) => (id === "thread" ? channel.id : null),
+            },
+        });
+        settings.set("apiKey", "test-key");
+        assert.equal(patch._resolve(message({ channel_id: channel.id })).reason, "channel is excluded");
+        assert.equal(patch._resolve(message({ channel_id: "thread" })).reason, "channel is excluded");
+        assert.equal(patch._resolve(message({ channel_id: "other" })).ok, true);
+
+        settings.set("allGuilds", true);
+        item = open("guild-context", { guild: { id: "333333333333333333" } });
+        assert.equal(item.checked, true);
+        assert.equal(item.disabled, true);
+
+        menus.remove();
+        assert.equal(patches.size, 0);
+    } finally {
+        BdApi.Data = previousData;
+        BdApi.ContextMenu = previousMenu;
+    }
 });
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);

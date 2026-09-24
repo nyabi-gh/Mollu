@@ -11,6 +11,7 @@ import { MessagePatch } from "./message-patch.js";
 import { Hotkey } from "./hotkey.js";
 import { OutgoingPatch, findMessageActions, waitForMessageActions } from "./outgoing-patch.js";
 import { Updater } from "./updater.js";
+import { ContextMenus } from "./context-menu.js";
 import { findMessageContent, waitForMessageContent, createStores } from "./discord.js";
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
@@ -23,7 +24,10 @@ import { logger } from "./lib/logger.js";
 export default class Mollu {
     constructor(meta) {
         this._meta = meta;
+        this._stores = createStores();
         this._settings = new Settings({
+            guildName: (id) => this._stores.guildName(id),
+            channelName: (id) => this._stores.channelName(id),
             clearCache: () => this._confirmClearCache(),
             checkUpdate: () => this._updater.check({ announce: true }),
             testConnection: () => this._testConnection(),
@@ -55,6 +59,7 @@ export default class Mollu {
             delay: UPDATE_CHECK_DELAY_MS,
             onResult: (result) => this._reportUpdate(result),
         });
+        this._menus = new ContextMenus({ settings: this._settings });
         this._lastErrorToast = 0;
     }
 
@@ -75,7 +80,8 @@ export default class Mollu {
             this._updater.start();
 
             this._pending = new AbortController();
-            const stores = createStores();
+            const stores = this._stores;
+            this._menus.install();
             this._installOutgoing(stores);
 
             if (!hasNativeFetch()) {
@@ -121,6 +127,7 @@ export default class Mollu {
         this._pending?.abort();
         this._pending = null;
 
+        this._menus.remove();
         for (const hotkey of this._hotkeys) hotkey.remove();
         this._updater.stop();
 

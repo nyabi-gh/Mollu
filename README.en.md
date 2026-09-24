@@ -51,8 +51,8 @@ Once you have a key, in the plugin settings:
 
 1. Choose your service under `Translation backend`.
 2. Paste the key into `API key`.
-3. Decide where to translate: turn on `Translate in every server`, or list servers under `Target server ids`.
-   - To get a server id, enable **Developer Mode** in Discord's settings under Advanced, then right-click a server icon → **Copy Server ID**.
+3. Decide where to translate: turn on `Translate in every server`, or right-click a server icon → **Translate with Mollu**.
+   - To leave one channel out, right-click it → **Translate with Mollu** and switch it off. Threads follow their channel.
    - To translate DMs as well, turn on `Translate direct messages`. It stands on its own, so you can leave every server off and translate only DMs.
 
 > **A warning about Gemini's free tier**: what you send is used to improve Google's products. This plugin sends **other people's messages** from your servers, which means their conversations become training data. The paid tier is not affected.
@@ -73,7 +73,8 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 | Translation backend | Which service to use. Switching fills in the rest, and each service's key is remembered separately |
 | API key | Required — nothing happens without it. Once saved only the last 4 characters are shown; type `-` to erase it |
 | Translate in every server | Every server you are in becomes a target. Direct messages have their own switch |
-| Target server ids | The servers to translate, separated by commas or spaces |
+| Target server ids | The servers to translate. The right-click switch fills this in; ids can also be typed, separated by commas or spaces |
+| Channels left untranslated | Channels skipped inside the target servers, switched from a channel's right-click menu |
 | Translate direct messages | Translates one-to-one and group DMs, whatever the two settings above say. Off by default |
 | Translate into | The language to translate messages into |
 | Plugin language | The language of the settings panel and the plugin's own messages |

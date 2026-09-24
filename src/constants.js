@@ -9,6 +9,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     baseUrl: "https://api.deepseek.com",
     allGuilds: false,
     guildIds: "",
+    excludedChannelIds: "",
     translateDms: false,
     targetLanguage: "ko",
     uiLanguage: "auto",

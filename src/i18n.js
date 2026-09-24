@@ -64,7 +64,14 @@ const STRINGS = {
             "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
         "settings.guildIds": "Target server ids",
         "settings.guildIds.note":
-            "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
+            "Easiest from a server icon's right-click menu → Translate with Mollu. Here, ids are separated by commas or spaces.",
+        "settings.excludedChannelIds": "Channels left untranslated",
+        "settings.excludedChannelIds.note":
+            "Right-click a channel → Translate with Mollu to switch one off. Threads follow their channel.",
+        "settings.current": "Now: {names}",
+        "menu.translateGuild": "Translate with Mollu",
+        "menu.everyGuild": "Translate with Mollu (every server is on)",
+        "menu.translateChannel": "Translate with Mollu",
         "settings.translateDms": "Translate direct messages",
         "settings.translateDms.note":
             "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
@@ -205,7 +212,14 @@ const STRINGS = {
             "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
         "settings.guildIds": "대상 서버 ID",
         "settings.guildIds.note":
-            "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+            "서버 아이콘 우클릭 → Mollu로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
+        "settings.excludedChannelIds": "번역하지 않을 채널",
+        "settings.excludedChannelIds.note":
+            "채널 우클릭 → Mollu로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
+        "settings.current": "현재: {names}",
+        "menu.translateGuild": "Mollu로 번역",
+        "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
+        "menu.translateChannel": "Mollu로 번역",
         "settings.translateDms": "DM 도 번역",
         "settings.translateDms.note":
             "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",

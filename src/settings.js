@@ -18,6 +18,7 @@ export class Settings {
         const stored = migrate(safeLoad());
         this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
         this._guildIdSet = parseGuildIds(this._values.guildIds);
+        this._excludedChannelSet = parseGuildIds(this._values.excludedChannelIds);
         this._listeners = new Set();
         setLocale(this._values.uiLanguage);
 
@@ -30,6 +31,18 @@ export class Settings {
 
     get guildIdSet() {
         return this._guildIdSet;
+    }
+
+    get excludedChannelSet() {
+        return this._excludedChannelSet;
+    }
+
+    toggleGuild(guildId) {
+        this.set("guildIds", toggled(this._guildIdSet, guildId));
+    }
+
+    toggleExcludedChannel(channelId) {
+        this.set("excludedChannelIds", toggled(this._excludedChannelSet, channelId));
     }
 
     onChange(listener) {
@@ -54,6 +67,7 @@ export class Settings {
             if (CREDENTIAL_FIELDS.has(id)) this._stashProfile();
         }
         if (id === "guildIds") this._guildIdSet = parseGuildIds(next);
+        if (id === "excludedChannelIds") this._excludedChannelSet = parseGuildIds(next);
         if (id === "uiLanguage") setLocale(next);
         this._persist();
         for (const listener of this._listeners) {
@@ -171,10 +185,23 @@ export class Settings {
                     type: "text",
                     id: "guildIds",
                     name: t("settings.guildIds"),
-                    note: t("settings.guildIds.note"),
+                    note: withCurrent(
+                        t("settings.guildIds.note"),
+                        namesOf(this._guildIdSet, this._actions.guildName),
+                    ),
                     value: v.guildIds,
 
                     disableWith: "allGuilds",
+                },
+                {
+                    type: "text",
+                    id: "excludedChannelIds",
+                    name: t("settings.excludedChannelIds"),
+                    note: withCurrent(
+                        t("settings.excludedChannelIds.note"),
+                        namesOf(this._excludedChannelSet, this._actions.channelName),
+                    ),
+                    value: v.excludedChannelIds,
                 },
                 {
                     type: "switch",
@@ -461,6 +488,25 @@ function loadLegacy() {
         }
     }
     return null;
+}
+
+function withCurrent(note, names) {
+    return names ? `${note} ${t("settings.current", { names })}` : note;
+}
+
+function toggled(set, id) {
+    const next = new Set(set);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return [...next].join(", ");
+}
+
+function namesOf(ids, lookup) {
+    if (typeof lookup !== "function") return "";
+    return [...ids]
+        .map((id) => lookup(id) ?? id)
+        .slice(0, 12)
+        .join(", ");
 }
 
 function parseGuildIds(raw) {

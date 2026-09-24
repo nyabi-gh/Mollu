@@ -41,6 +41,7 @@ var DEFAULT_SETTINGS = Object.freeze({
   baseUrl: "https://api.deepseek.com",
   allGuilds: false,
   guildIds: "",
+  excludedChannelIds: "",
   translateDms: false,
   targetLanguage: "ko",
   uiLanguage: "auto",
@@ -167,7 +168,13 @@ var STRINGS = {
     "settings.allGuilds": "Translate in every server",
     "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
     "settings.guildIds": "Target server ids",
-    "settings.guildIds.note": "Separated by commas or spaces. Turn on Developer Mode, then right-click a server icon → Copy Server ID.",
+    "settings.guildIds.note": "Easiest from a server icon's right-click menu → Translate with Mollu. Here, ids are separated by commas or spaces.",
+    "settings.excludedChannelIds": "Channels left untranslated",
+    "settings.excludedChannelIds.note": "Right-click a channel → Translate with Mollu to switch one off. Threads follow their channel.",
+    "settings.current": "Now: {names}",
+    "menu.translateGuild": "Translate with Mollu",
+    "menu.everyGuild": "Translate with Mollu (every server is on)",
+    "menu.translateChannel": "Translate with Mollu",
     "settings.translateDms": "Translate direct messages",
     "settings.translateDms.note": "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
     "settings.targetLanguage": "Translate into",
@@ -281,7 +288,13 @@ var STRINGS = {
     "settings.allGuilds": "모든 서버에서 번역",
     "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
     "settings.guildIds": "대상 서버 ID",
-    "settings.guildIds.note": "쉼표 또는 공백으로 구분. 개발자 모드를 켠 뒤 서버 아이콘 우클릭 → 서버 ID 복사.",
+    "settings.guildIds.note": "서버 아이콘 우클릭 → Mollu로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
+    "settings.excludedChannelIds": "번역하지 않을 채널",
+    "settings.excludedChannelIds.note": "채널 우클릭 → Mollu로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
+    "settings.current": "현재: {names}",
+    "menu.translateGuild": "Mollu로 번역",
+    "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
+    "menu.translateChannel": "Mollu로 번역",
     "settings.translateDms": "DM 도 번역",
     "settings.translateDms.note": "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
     "settings.targetLanguage": "번역할 언어",
@@ -1038,6 +1051,20 @@ function createStores() {
         return null;
       }
     },
+    parentChannelId(channelId) {
+      try {
+        return store("ChannelStore")?.getChannel?.(channelId)?.parent_id ?? null;
+      } catch {
+        return null;
+      }
+    },
+    guildName(guildId) {
+      try {
+        return store("GuildStore")?.getGuild?.(guildId)?.name ?? null;
+      } catch {
+        return null;
+      }
+    },
     channelName(channelId) {
       try {
         return store("ChannelStore")?.getChannel?.(channelId)?.name ?? null;
@@ -1152,6 +1179,7 @@ var Settings = class {
     const stored = migrate(safeLoad());
     this._values = normalize({ ...DEFAULT_SETTINGS, ...stored });
     this._guildIdSet = parseGuildIds(this._values.guildIds);
+    this._excludedChannelSet = parseGuildIds(this._values.excludedChannelIds);
     this._listeners = /* @__PURE__ */ new Set();
     setLocale(this._values.uiLanguage);
     if (!BdApi.Data.load(NAME, "settings")) this._persist();
@@ -1161,6 +1189,15 @@ var Settings = class {
   }
   get guildIdSet() {
     return this._guildIdSet;
+  }
+  get excludedChannelSet() {
+    return this._excludedChannelSet;
+  }
+  toggleGuild(guildId) {
+    this.set("guildIds", toggled(this._guildIdSet, guildId));
+  }
+  toggleExcludedChannel(channelId) {
+    this.set("excludedChannelIds", toggled(this._excludedChannelSet, channelId));
   }
   onChange(listener) {
     this._listeners.add(listener);
@@ -1180,6 +1217,7 @@ var Settings = class {
       if (CREDENTIAL_FIELDS.has(id6)) this._stashProfile();
     }
     if (id6 === "guildIds") this._guildIdSet = parseGuildIds(next);
+    if (id6 === "excludedChannelIds") this._excludedChannelSet = parseGuildIds(next);
     if (id6 === "uiLanguage") setLocale(next);
     this._persist();
     for (const listener of this._listeners) {
@@ -1282,9 +1320,22 @@ var Settings = class {
           type: "text",
           id: "guildIds",
           name: t("settings.guildIds"),
-          note: t("settings.guildIds.note"),
+          note: withCurrent(
+            t("settings.guildIds.note"),
+            namesOf(this._guildIdSet, this._actions.guildName)
+          ),
           value: v.guildIds,
           disableWith: "allGuilds"
+        },
+        {
+          type: "text",
+          id: "excludedChannelIds",
+          name: t("settings.excludedChannelIds"),
+          note: withCurrent(
+            t("settings.excludedChannelIds.note"),
+            namesOf(this._excludedChannelSet, this._actions.channelName)
+          ),
+          value: v.excludedChannelIds
         },
         {
           type: "switch",
@@ -1544,6 +1595,19 @@ function loadLegacy() {
     }
   }
   return null;
+}
+function withCurrent(note, names) {
+  return names ? `${note} ${t("settings.current", { names })}` : note;
+}
+function toggled(set, id6) {
+  const next = new Set(set);
+  if (next.has(id6)) next.delete(id6);
+  else next.add(id6);
+  return [...next].join(", ");
+}
+function namesOf(ids, lookup) {
+  if (typeof lookup !== "function") return "";
+  return [...ids].map((id6) => lookup(id6) ?? id6).slice(0, 12).join(", ");
 }
 function parseGuildIds(raw) {
   return new Set(
@@ -2721,6 +2785,13 @@ function pickDisplay(settings) {
   return { showPending, autoTranslate, targetLanguage, maxChars, provider, model };
 }
 
+// src/scope.js
+function isExcludedChannel(settings, stores, channelId) {
+  const excluded = settings.excludedChannelSet;
+  if (!excluded?.size || !channelId) return false;
+  return excluded.has(channelId) || excluded.has(stores.parentChannelId?.(channelId));
+}
+
 // src/message-patch.js
 var TRANSLATABLE_TYPES = /* @__PURE__ */ new Set([0, 19, 20]);
 var MessagePatch = class {
@@ -2800,6 +2871,9 @@ var MessagePatch = class {
     }
     if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
       return { reason: `server ${guildId} is not in the target list` };
+    }
+    if (isExcludedChannel(this._settings, this._stores, message.channel_id)) {
+      return { reason: "channel is excluded" };
     }
     return { ok: true, guildId };
   }
@@ -2940,6 +3014,8 @@ var OutgoingPatch = class {
       if (!settings.translateDms || !this._stores.isDirectMessage?.(channelId)) return null;
     } else if (!settings.allGuilds && !this._settings.guildIdSet.has(guildId)) {
       return null;
+    } else if (isExcludedChannel(this._settings, this._stores, channelId)) {
+      return null;
     }
     if (!this._detector.needsTranslation(content, settings.outgoingLanguage)) return null;
     return content;
@@ -3043,6 +3119,82 @@ function writePlugin(text) {
   const fs = require("fs");
   const path = require("path");
   fs.writeFileSync(path.join(BdApi.Plugins.folder, `${NAME}.plugin.js`), text);
+}
+
+// src/context-menu.js
+var CHANNEL_MENUS = ["channel-context", "thread-context"];
+var ContextMenus = class {
+  constructor({ settings }) {
+    this._settings = settings;
+    this._unpatches = [];
+  }
+  install() {
+    const api = typeof BdApi !== "undefined" ? BdApi.ContextMenu : null;
+    if (typeof api?.patch !== "function" || typeof api.buildItem !== "function") {
+      logger.warn("BdApi.ContextMenu is unavailable; the right-click switches are off");
+      return;
+    }
+    this._patch(api, "guild-context", (tree, props) => this._guild(api, tree, props));
+    for (const navId of CHANNEL_MENUS) {
+      this._patch(api, navId, (tree, props) => this._channel(api, tree, props));
+    }
+  }
+  remove() {
+    for (const unpatch of this._unpatches) {
+      try {
+        unpatch();
+      } catch {
+      }
+    }
+    this._unpatches = [];
+  }
+  _patch(api, navId, callback) {
+    try {
+      const unpatch = api.patch(navId, (tree, props) => {
+        try {
+          callback(tree, props);
+        } catch (e) {
+          logger.error(`${navId} patch failed`, e);
+        }
+      });
+      if (typeof unpatch === "function") this._unpatches.push(unpatch);
+    } catch (e) {
+      logger.warn(`could not patch ${navId}`, e);
+    }
+  }
+  _guild(api, tree, props) {
+    const guildId = props?.guild?.id;
+    if (!guildId) return;
+    const { allGuilds } = this._settings.current;
+    append(api, tree, {
+      type: "toggle",
+      id: "mollu-translate-guild",
+      label: t(allGuilds ? "menu.everyGuild" : "menu.translateGuild"),
+      checked: allGuilds || this._settings.guildIdSet.has(guildId),
+      disabled: allGuilds,
+      action: () => this._settings.toggleGuild(guildId)
+    });
+  }
+  _channel(api, tree, props) {
+    const channel = props?.channel;
+    const guildId = channel?.guild_id;
+    if (!channel?.id || !guildId) return;
+    const { allGuilds } = this._settings.current;
+    if (!allGuilds && !this._settings.guildIdSet.has(guildId)) return;
+    append(api, tree, {
+      type: "toggle",
+      id: "mollu-translate-channel",
+      label: t("menu.translateChannel"),
+      checked: !this._settings.excludedChannelSet.has(channel.id),
+      action: () => this._settings.toggleExcludedChannel(channel.id)
+    });
+  }
+};
+function append(api, tree, item) {
+  const built = [api.buildItem({ type: "separator" }), api.buildItem(item)];
+  const children = tree?.props?.children;
+  if (Array.isArray(children)) children.push(...built);
+  else if (tree?.props) tree.props.children = [children, ...built].filter((child) => child != null);
 }
 
 // src/ui/styles.js
@@ -3197,7 +3349,10 @@ var STYLES = `
 var Mollu = class {
   constructor(meta) {
     this._meta = meta;
+    this._stores = createStores();
     this._settings = new Settings({
+      guildName: (id6) => this._stores.guildName(id6),
+      channelName: (id6) => this._stores.channelName(id6),
       clearCache: () => this._confirmClearCache(),
       checkUpdate: () => this._updater.check({ announce: true }),
       testConnection: () => this._testConnection()
@@ -3229,6 +3384,7 @@ var Mollu = class {
       delay: UPDATE_CHECK_DELAY_MS,
       onResult: (result) => this._reportUpdate(result)
     });
+    this._menus = new ContextMenus({ settings: this._settings });
     this._lastErrorToast = 0;
   }
   getName() {
@@ -3244,7 +3400,8 @@ var Mollu = class {
       for (const hotkey of this._hotkeys) hotkey.install();
       this._updater.start();
       this._pending = new AbortController();
-      const stores = createStores();
+      const stores = this._stores;
+      this._menus.install();
       this._installOutgoing(stores);
       if (!hasNativeFetch()) {
         this._toast(t("toast.outdatedBd"), "warning");
@@ -3278,6 +3435,7 @@ var Mollu = class {
     }
     this._pending?.abort();
     this._pending = null;
+    this._menus.remove();
     for (const hotkey of this._hotkeys) hotkey.remove();
     this._updater.stop();
     BdApi.Patcher.unpatchAll(NAME);
