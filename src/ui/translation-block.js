@@ -17,7 +17,8 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
     const anchorRef = React.useRef(null);
     const bodyRef = React.useRef(null);
     const heightRef = React.useRef(null);
-    const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
+    const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } =
+        useDisplaySettings(settings);
     const triggerRef = React.useRef(null);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
 
@@ -68,7 +69,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
                     running = false;
 
                     if (res.status === "retry") {
-                        present({ status: "idle" });
+                        present({ status: "pending", waiting: true });
                         if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
                             rateLimitRetries += 1;
                             schedule(res.after + jitter());
@@ -117,7 +118,7 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
-    }, [text, autoTranslate, targetLanguage, maxChars]);
+    }, [text, autoTranslate, targetLanguage, maxChars, provider, model]);
 
     const status = result && result.status;
 
@@ -142,11 +143,11 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         renderBody(status, result, {
             ref: bodyRef,
             showPending,
-            showErrors,
             stores,
             guildId,
             autoTranslate,
             badge: badgeFor(targetLanguage),
+            language: targetLanguage,
             onTrigger: () => triggerRef.current?.(true),
         }),
     );
@@ -157,7 +158,7 @@ function jitter() {
 }
 
 function renderBody(status, result, ctx) {
-    const { ref, showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
+    const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
     if (status === "idle" && !autoTranslate) {
         return React.createElement(
             "button",
@@ -172,28 +173,27 @@ function renderBody(status, result, ctx) {
             ? React.createElement(
                   "div",
                   { ref, className: "mollu-translation mollu-translation--pending" },
-                  t("block.pending"),
+                  t(result?.waiting ? "block.waiting" : "block.pending"),
               )
             : null;
     }
+    // Always shown: a block that vanishes after "Translating…" reads as the plugin hanging.
     if (status === "error") {
-        return showErrors
-            ? React.createElement(
-                  "button",
-                  {
-                      ref,
-                      type: "button",
-                      className: "mollu-translation mollu-translation--error",
-                      title: t("block.errorTitle", { message: result?.message || "" }),
-                      onClick: onTrigger,
-                  },
-                  t("block.error"),
-              )
-            : null;
+        return React.createElement(
+            "button",
+            {
+                ref,
+                type: "button",
+                className: "mollu-translation mollu-translation--error",
+                title: t("block.errorTitle"),
+                onClick: onTrigger,
+            },
+            t("block.error", { message: result?.message || "unknown" }),
+        );
     }
     return React.createElement(
         "div",
-        { ref, className: "mollu-translation" },
+        { ref, className: "mollu-translation", lang: language },
         React.createElement("span", { className: "mollu-translation__badge" }, badge),
         React.createElement(
             "span",
@@ -218,9 +218,9 @@ function useDisplaySettings(settings) {
     return display;
 }
 
-const MIRRORED = new Set(["showPending", "showErrors", "autoTranslate", "targetLanguage", "maxChars"]);
+const MIRRORED = new Set(["showPending", "autoTranslate", "targetLanguage", "maxChars", "provider", "model"]);
 
 function pickDisplay(settings) {
-    const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = settings.current;
-    return { showPending, showErrors, autoTranslate, targetLanguage, maxChars };
+    const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } = settings.current;
+    return { showPending, autoTranslate, targetLanguage, maxChars, provider, model };
 }

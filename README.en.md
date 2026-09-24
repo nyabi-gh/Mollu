@@ -82,7 +82,8 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 | Translate the messages I send | **Replaces what you type with its translation** before sending. Other people never see the original |
 | Send my messages in | The language your own messages are translated into |
 | Translate bot messages / Translate my own messages | What to include |
-| Show while translating / Show translation failures | What to show on screen |
+| Show while translating | Shows `Translating…` under a message while it is being translated |
+| Pop up a notice when a translation fails | A toast for every failure. The failure line under the message is always shown; a refused key or empty balance is always announced |
 
 **Advanced**:
 

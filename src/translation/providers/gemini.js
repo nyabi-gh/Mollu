@@ -13,6 +13,8 @@ export function translate(params) {
     return chatCompletion({ ...params, defaults, extend });
 }
 
+// Gemini 3 cannot stop reasoning; "minimal" is the least it accepts. Older Gemini can.
 function extend(body, { model }) {
-    if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
+    if (/^gemini-3/i.test(model)) body.reasoning_effort = "minimal";
+    else if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
 }

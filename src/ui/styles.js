@@ -77,12 +77,15 @@ export const STYLES = `
     border: none;
     background: none;
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     text-align: left;
     color: var(--text-danger, #f23f43);
+    opacity: 0.8;
     cursor: pointer;
 }
-.mollu-translation--error:hover {
+.mollu-translation--error:hover,
+.mollu-translation--error:focus-visible {
+    opacity: 1;
     text-decoration: underline;
 }
 `;

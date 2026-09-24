@@ -112,8 +112,9 @@ var logger = {
 var STRINGS = {
   en: {
     "block.pending": "Translating…",
-    "block.error": "Translation failed",
-    "block.errorTitle": "{message} — click to try again",
+    "block.error": "Translation failed · {message}",
+    "block.errorTitle": "Click to try again",
+    "block.waiting": "Waiting for the backend's rate limit…",
     "error.retryLater": "Waiting before trying again",
     "block.trigger": "Translate",
     "toast.outdatedBd": "BetterDiscord is out of date; API requests may be blocked. Please update.",
@@ -193,7 +194,7 @@ var STRINGS = {
     "settings.translateBots": "Translate bot messages",
     "settings.translateOwnMessages": "Translate my own messages",
     "settings.showPending": "Show while translating",
-    "settings.showErrors": "Show translation failures",
+    "settings.showErrors": "Pop up a notice when a translation fails",
     "settings.advanced": "Advanced",
     "settings.autoUpdate": "Update automatically",
     "settings.autoUpdate.note": "Checks the repository in the plugin's metadata every few hours and installs a newer build. BetterDiscord reloads the plugin on its own once the file is replaced.",
@@ -219,8 +220,9 @@ var STRINGS = {
   },
   ko: {
     "block.pending": "번역 중…",
-    "block.error": "번역 실패",
-    "block.errorTitle": "{message} — 클릭하면 다시 시도합니다",
+    "block.error": "번역 실패 · {message}",
+    "block.errorTitle": "클릭하면 다시 시도합니다",
+    "block.waiting": "요청 제한이 풀리길 기다리는 중…",
     "error.retryLater": "재시도를 기다리는 중",
     "block.trigger": "번역",
     "toast.outdatedBd": "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
@@ -300,7 +302,7 @@ var STRINGS = {
     "settings.translateBots": "봇 메시지도 번역",
     "settings.translateOwnMessages": "내 메시지도 번역",
     "settings.showPending": "번역 중 표시",
-    "settings.showErrors": "번역 실패 시 표시",
+    "settings.showErrors": "번역 실패 시 알림 띄우기",
     "settings.advanced": "고급",
     "settings.autoUpdate": "자동 업데이트",
     "settings.autoUpdate.note": "플러그인 정보에 적힌 저장소를 몇 시간마다 확인해 더 새로운 빌드를 설치합니다. 파일이 바뀌면 BetterDiscord 가 알아서 다시 불러옵니다.",
@@ -528,10 +530,24 @@ async function chatCompletion({ text, settings, signal, defaults: defaults4, ext
     max_tokens: outputBudget(text, target)
   };
   if (extend3) extend3(body, { base, model });
-  const json = await send(`${base}/chat/completions`, { apiKey, signal, body });
+  const url = `${base}/chat/completions`;
+  const first = await send(url, { apiKey, signal, body });
+  let json = first.json;
+  if (json?.choices?.[0]?.finish_reason === "length") {
+    const roomier = withFullBudget(first.payload);
+    if (roomier) {
+      logger.warn(
+        `${model} ran out of output room (usage ${JSON.stringify(json?.usage ?? null)}); asking again with ${MAX_OUTPUT_TOKENS} tokens`
+      );
+      ({ json } = await send(url, { apiKey, signal, body: roomier }));
+    }
+  }
   const choice = json?.choices?.[0];
   const output = stripReasoning(choice?.message?.content);
   if (!output) {
+    logger.warn(
+      `${model} gave no answer (finish_reason ${choice?.finish_reason ?? "none"}, usage ${JSON.stringify(json?.usage ?? null)})`
+    );
     throw new Error(
       t(choice?.finish_reason === "length" ? "error.reasoningOnly" : "error.emptyResponse")
     );
@@ -542,11 +558,12 @@ async function send(url, { apiKey, signal, body }) {
   let payload = body;
   for (let retunes = 0; ; retunes += 1) {
     try {
-      return await postJson(url, {
+      const json = await postJson(url, {
         headers: { Authorization: `Bearer ${apiKey}` },
         signal,
         body: payload
       });
+      return { json, payload };
     } catch (err) {
       const retuned = retunes < MAX_BODY_RETUNES ? withoutRejectedField(payload, err) : null;
       if (!retuned) throw err;
@@ -566,6 +583,11 @@ function withoutRejectedField(body, err) {
   const renamed = RENAMED.get(field);
   if (renamed && !Object.hasOwn(body, renamed)) next[renamed] = MAX_OUTPUT_TOKENS;
   return { body: next, field };
+}
+function withFullBudget(body) {
+  const field = Object.hasOwn(body, "max_completion_tokens") ? "max_completion_tokens" : "max_tokens";
+  if (!(body[field] < MAX_OUTPUT_TOKENS)) return null;
+  return { ...body, [field]: MAX_OUTPUT_TOKENS };
 }
 var UNSUPPORTED = /Unsupported (?:parameter|value): '([a-z_]+)'/i;
 function rejectedField(body) {
@@ -648,7 +670,8 @@ function translate2(params) {
   return chatCompletion({ ...params, defaults: defaults2, extend: extend2 });
 }
 function extend2(body, { model }) {
-  if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
+  if (/^gemini-3/i.test(model)) body.reasoning_effort = "minimal";
+  else if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
 }
 
 // src/translation/providers/deepl.js
@@ -2203,7 +2226,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
   const anchorRef = React.useRef(null);
   const bodyRef = React.useRef(null);
   const heightRef = React.useRef(null);
-  const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = useDisplaySettings(settings);
+  const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } = useDisplaySettings(settings);
   const triggerRef = React.useRef(null);
   const [result, setResult] = React.useState(() => initialResult(translator, text));
   React.useEffect(() => {
@@ -2245,7 +2268,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
         if (!alive) return;
         running = false;
         if (res.status === "retry") {
-          present({ status: "idle" });
+          present({ status: "pending", waiting: true });
           if (visible && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
             rateLimitRetries += 1;
             schedule(res.after + jitter());
@@ -2288,7 +2311,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stopObserving();
       if (dwell != null) clearTimeout(dwell);
     };
-  }, [text, autoTranslate, targetLanguage, maxChars]);
+  }, [text, autoTranslate, targetLanguage, maxChars, provider, model]);
   const status = result && result.status;
   React.useLayoutEffect(() => {
     const height = blockHeight(bodyRef.current);
@@ -2307,11 +2330,11 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     renderBody(status, result, {
       ref: bodyRef,
       showPending,
-      showErrors,
       stores,
       guildId,
       autoTranslate,
       badge: badgeFor(targetLanguage),
+      language: targetLanguage,
       onTrigger: () => triggerRef.current?.(true)
     })
   );
@@ -2320,7 +2343,7 @@ function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
 function renderBody(status, result, ctx) {
-  const { ref, showPending, showErrors, stores, guildId, autoTranslate, onTrigger, badge } = ctx;
+  const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
   if (status === "idle" && !autoTranslate) {
     return React.createElement(
       "button",
@@ -2334,25 +2357,25 @@ function renderBody(status, result, ctx) {
     return showPending ? React.createElement(
       "div",
       { ref, className: "mollu-translation mollu-translation--pending" },
-      t("block.pending")
+      t(result?.waiting ? "block.waiting" : "block.pending")
     ) : null;
   }
   if (status === "error") {
-    return showErrors ? React.createElement(
+    return React.createElement(
       "button",
       {
         ref,
         type: "button",
         className: "mollu-translation mollu-translation--error",
-        title: t("block.errorTitle", { message: result?.message || "" }),
+        title: t("block.errorTitle"),
         onClick: onTrigger
       },
-      t("block.error")
-    ) : null;
+      t("block.error", { message: result?.message || "unknown" })
+    );
   }
   return React.createElement(
     "div",
-    { ref, className: "mollu-translation" },
+    { ref, className: "mollu-translation", lang: language },
     React.createElement("span", { className: "mollu-translation__badge" }, badge),
     React.createElement(
       "span",
@@ -2373,10 +2396,10 @@ function useDisplaySettings(settings) {
   }, [settings]);
   return display;
 }
-var MIRRORED = /* @__PURE__ */ new Set(["showPending", "showErrors", "autoTranslate", "targetLanguage", "maxChars"]);
+var MIRRORED = /* @__PURE__ */ new Set(["showPending", "autoTranslate", "targetLanguage", "maxChars", "provider", "model"]);
 function pickDisplay(settings) {
-  const { showPending, showErrors, autoTranslate, targetLanguage, maxChars } = settings.current;
-  return { showPending, showErrors, autoTranslate, targetLanguage, maxChars };
+  const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } = settings.current;
+  return { showPending, autoTranslate, targetLanguage, maxChars, provider, model };
 }
 
 // src/message-patch.js
@@ -2783,12 +2806,15 @@ var STYLES = `
     border: none;
     background: none;
     font-family: inherit;
-    font-size: 0.95rem;
+    font-size: 0.8rem;
     text-align: left;
     color: var(--text-danger, #f23f43);
+    opacity: 0.8;
     cursor: pointer;
 }
-.mollu-translation--error:hover {
+.mollu-translation--error:hover,
+.mollu-translation--error:focus-visible {
+    opacity: 1;
     text-decoration: underline;
 }
 `;

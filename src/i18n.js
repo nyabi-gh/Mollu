@@ -1,8 +1,9 @@
 const STRINGS = {
     en: {
         "block.pending": "Translating…",
-        "block.error": "Translation failed",
-        "block.errorTitle": "{message} — click to try again",
+        "block.error": "Translation failed · {message}",
+        "block.errorTitle": "Click to try again",
+        "block.waiting": "Waiting for the backend's rate limit…",
         "error.retryLater": "Waiting before trying again",
         "block.trigger": "Translate",
 
@@ -99,7 +100,7 @@ const STRINGS = {
         "settings.translateBots": "Translate bot messages",
         "settings.translateOwnMessages": "Translate my own messages",
         "settings.showPending": "Show while translating",
-        "settings.showErrors": "Show translation failures",
+        "settings.showErrors": "Pop up a notice when a translation fails",
         "settings.advanced": "Advanced",
         "settings.autoUpdate": "Update automatically",
         "settings.autoUpdate.note":
@@ -133,8 +134,9 @@ const STRINGS = {
     },
     ko: {
         "block.pending": "번역 중…",
-        "block.error": "번역 실패",
-        "block.errorTitle": "{message} — 클릭하면 다시 시도합니다",
+        "block.error": "번역 실패 · {message}",
+        "block.errorTitle": "클릭하면 다시 시도합니다",
+        "block.waiting": "요청 제한이 풀리길 기다리는 중…",
         "error.retryLater": "재시도를 기다리는 중",
         "block.trigger": "번역",
 
@@ -231,7 +233,7 @@ const STRINGS = {
         "settings.translateBots": "봇 메시지도 번역",
         "settings.translateOwnMessages": "내 메시지도 번역",
         "settings.showPending": "번역 중 표시",
-        "settings.showErrors": "번역 실패 시 표시",
+        "settings.showErrors": "번역 실패 시 알림 띄우기",
         "settings.advanced": "고급",
         "settings.autoUpdate": "자동 업데이트",
         "settings.autoUpdate.note":

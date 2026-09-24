@@ -25,11 +25,30 @@ export async function chatCompletion({ text, settings, signal, defaults, extend 
     };
     if (extend) extend(body, { base, model });
 
-    const json = await send(`${base}/chat/completions`, { apiKey, signal, body });
+    const url = `${base}/chat/completions`;
+    const first = await send(url, { apiKey, signal, body });
+    let json = first.json;
+
+    // A reasoning model spends the output budget on thinking first, and a long message can
+    // leave nothing for the answer. Ask once more with the whole allowance before giving up.
+    if (json?.choices?.[0]?.finish_reason === "length") {
+        const roomier = withFullBudget(first.payload);
+        if (roomier) {
+            logger.warn(
+                `${model} ran out of output room (usage ${JSON.stringify(json?.usage ?? null)}); ` +
+                    `asking again with ${MAX_OUTPUT_TOKENS} tokens`,
+            );
+            ({ json } = await send(url, { apiKey, signal, body: roomier }));
+        }
+    }
 
     const choice = json?.choices?.[0];
     const output = stripReasoning(choice?.message?.content);
     if (!output) {
+        logger.warn(
+            `${model} gave no answer (finish_reason ${choice?.finish_reason ?? "none"}, ` +
+                `usage ${JSON.stringify(json?.usage ?? null)})`,
+        );
         throw new Error(
             t(choice?.finish_reason === "length" ? "error.reasoningOnly" : "error.emptyResponse"),
         );
@@ -44,11 +63,12 @@ async function send(url, { apiKey, signal, body }) {
     let payload = body;
     for (let retunes = 0; ; retunes += 1) {
         try {
-            return await postJson(url, {
+            const json = await postJson(url, {
                 headers: { Authorization: `Bearer ${apiKey}` },
                 signal,
                 body: payload,
             });
+            return { json, payload };
         } catch (err) {
             const retuned = retunes < MAX_BODY_RETUNES ? withoutRejectedField(payload, err) : null;
             if (!retuned) throw err;
@@ -77,6 +97,12 @@ function withoutRejectedField(body, err) {
     // The renamed budget counts reasoning against itself, so it gets the whole allowance.
     if (renamed && !Object.hasOwn(body, renamed)) next[renamed] = MAX_OUTPUT_TOKENS;
     return { body: next, field };
+}
+
+function withFullBudget(body) {
+    const field = Object.hasOwn(body, "max_completion_tokens") ? "max_completion_tokens" : "max_tokens";
+    if (!(body[field] < MAX_OUTPUT_TOKENS)) return null;
+    return { ...body, [field]: MAX_OUTPUT_TOKENS };
 }
 
 const UNSUPPORTED = /Unsupported (?:parameter|value): '([a-z_]+)'/i;

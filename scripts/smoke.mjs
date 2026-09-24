@@ -1184,7 +1184,11 @@ await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint",
         assert.equal(body.model, "gemini-3.1-flash-lite");
         assert.equal(body.messages[0].role, "system");
         assert.ok(!("thinking" in body), "the DeepSeek-only field must not leak to Google");
-        assert.equal(body.reasoning_effort, "none", "gemini-* reasons by default; a translation must not");
+        assert.equal(body.reasoning_effort, "minimal", "Gemini 3 cannot stop reasoning, only keep it short");
+
+        settings.current.model = "gemini-2.5-flash";
+        await new Translator({ settings }).translate("hello there");
+        assert.equal(JSON.parse(seen.options.body).reasoning_effort, "none");
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -1835,6 +1839,41 @@ await checkAsync("translator: the connection test reports the answer or the reas
         BdApi.Net.fetch = previous;
     }
 });
+
+await checkAsync(
+    "a long answer the reasoning crowded out is asked for again with room to spare",
+    async () => {
+        const previous = BdApi.Net.fetch;
+        const budgets = [];
+        BdApi.Net.fetch = async (_url, options) => {
+            const body = JSON.parse(options.body);
+            budgets.push(body.max_tokens);
+            const cut = budgets.length === 1;
+            return new Response(
+                JSON.stringify({
+                    choices: [
+                        {
+                            finish_reason: cut ? "length" : "stop",
+                            message: { content: cut ? null : "긴 번역" },
+                        },
+                    ],
+                }),
+                { status: 200 },
+            );
+        };
+        try {
+            const result = await new Translator({ settings: stubSettings() }).translate(
+                "a long message ".repeat(40),
+            );
+            assert.equal(result.text, "긴 번역");
+            assert.equal(budgets.length, 2);
+            assert.ok(budgets[0] < MAX_OUTPUT_TOKENS);
+            assert.equal(budgets[1], MAX_OUTPUT_TOKENS);
+        } finally {
+            BdApi.Net.fetch = previous;
+        }
+    },
+);
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
