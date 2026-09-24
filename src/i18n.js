@@ -32,6 +32,15 @@ const STRINGS = {
         "error.rateLimited": "Rate limited; retry delayed",
         "error.unsupportedLanguage": "{provider} cannot translate into {language}",
         "error.quotaExceeded": "The API key's translation quota is used up",
+        "error.badKey": "The API key was refused. Check it in the settings.",
+        "error.noBalance": "The API account has no balance left",
+        "error.timedOut": "The backend did not answer in time",
+        "error.busy": "The backend is limiting requests right now",
+        "error.tooLongToSend": "The translation is longer than Discord's {limit} characters",
+        "toast.blocked": "Translation paused until the settings change · {message}",
+        "toast.outgoingPending": "Translating your message…",
+        "toast.testOk": "Connection works · {text}",
+        "toast.testFailed": "Connection failed · {message}",
 
         "settings.provider": "Translation backend",
         "settings.provider.note":
@@ -67,6 +76,11 @@ const STRINGS = {
         "settings.maxChars": "Maximum characters to translate",
         "settings.maxChars.note": "Longer messages are skipped.",
         "settings.maxConcurrent": "Concurrent requests",
+        "settings.maxConcurrent.note":
+            "How many translations run at once. Lower it to 1–2 if a free tier keeps limiting you.",
+        "settings.testConnection": "Connection",
+        "settings.testConnection.note": "Translates a short sample with the key and model set here.",
+        "settings.testConnection.action": "Test",
         "settings.autoTranslate": "Automatic translation",
         "settings.autoTranslate.note":
             "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
@@ -151,6 +165,15 @@ const STRINGS = {
         "error.rateLimited": "한도 초과로 재시도를 미루는 중",
         "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
         "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
+        "error.badKey": "API 키가 거부되었습니다. 설정에서 확인하세요.",
+        "error.noBalance": "API 계정의 잔액이 없습니다",
+        "error.timedOut": "번역 서비스가 제때 응답하지 않았습니다",
+        "error.busy": "번역 서비스가 지금 요청을 제한하고 있습니다",
+        "error.tooLongToSend": "번역문이 Discord 제한인 {limit}자를 넘습니다",
+        "toast.blocked": "설정을 바꿀 때까지 번역을 멈춥니다 · {message}",
+        "toast.outgoingPending": "보낼 메시지를 번역하는 중…",
+        "toast.testOk": "연결 정상 · {text}",
+        "toast.testFailed": "연결 실패 · {message}",
 
         "settings.provider": "번역 백엔드",
         "settings.provider.note":
@@ -185,6 +208,11 @@ const STRINGS = {
         "settings.maxChars": "번역할 최대 글자 수",
         "settings.maxChars.note": "이보다 긴 메시지는 건너뜁니다.",
         "settings.maxConcurrent": "동시 번역 요청 수",
+        "settings.maxConcurrent.note":
+            "한 번에 진행하는 번역 수입니다. 무료 등급에서 요청 제한에 자주 걸리면 1–2로 낮추세요.",
+        "settings.testConnection": "연결 확인",
+        "settings.testConnection.note": "여기 설정된 키와 모델로 짧은 문장을 번역해 봅니다.",
+        "settings.testConnection.action": "테스트",
         "settings.autoTranslate": "자동 번역",
         "settings.autoTranslate.note":
             "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",

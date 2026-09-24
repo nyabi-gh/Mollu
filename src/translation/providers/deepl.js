@@ -4,6 +4,7 @@ import { t } from "../../i18n.js";
 
 export const id = "deepl";
 export const label = "DeepL";
+export const keyHint = "...:fx";
 export const models = Object.freeze([]);
 
 const FREE_BASE = "https://api-free.deepl.com";

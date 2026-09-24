@@ -141,8 +141,16 @@ export class Settings {
                         : t(`keySource.${v.provider}`),
                     placeholder: v.apiKey
                         ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) })
-                        : "sk-...",
+                        : getProvider(v.provider).keyHint,
                     value: "",
+                },
+                {
+                    type: "button",
+                    id: "testConnection",
+                    name: t("settings.testConnection"),
+                    note: t("settings.testConnection.note"),
+                    children: t("settings.testConnection.action"),
+                    onClick: () => this._actions.testConnection?.(),
                 },
                 {
                     type: "dropdown",
@@ -212,6 +220,7 @@ export class Settings {
                     type: "number",
                     id: "maxConcurrent",
                     name: t("settings.maxConcurrent"),
+                    note: t("settings.maxConcurrent.note"),
                     value: v.maxConcurrent,
                     min: 1,
                     max: 10,

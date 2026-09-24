@@ -1666,6 +1666,176 @@ check("outgoing: the gate is skipped without a promise when it does not apply", 
     assert.equal(result, "sent");
 });
 
+await checkAsync("outgoing: a message that needs no translation waits for the one before it", async () => {
+    const sent = [];
+    const original = (_channelId, message) => {
+        sent.push(message.content);
+        return "sent";
+    };
+    const patch = outgoingWith({ translateOutgoing: true }, "1101573652786446417", {
+        translate: async (text) => {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            return { status: "done", text: `EN:${text}` };
+        },
+    });
+
+    const first = patch._onSend(null, ["c", { content: "안녕하세요 반가워요" }], original);
+    const second = patch._onSend(null, ["c", { content: "👍 https://example.com" }], original);
+    assert.equal(typeof second?.then, "function", "the second send is held, not sent on the spot");
+    const elsewhere = patch._onSend(null, ["other", { content: "👍" }], original);
+    assert.equal(elsewhere, "sent", "another channel is not held up");
+
+    assert.deepEqual(await Promise.all([first, second]), ["sent", "sent"]);
+    assert.deepEqual(sent, ["👍", "EN:안녕하세요 반가워요", "👍 https://example.com"]);
+    assert.equal(patch._tails.size, 0, "nothing is left waiting once the channel is quiet");
+});
+
+await checkAsync("outgoing: a translation Discord would refuse is sent as typed", async () => {
+    const sent = [];
+    const failures = [];
+    const patch = outgoingWith(
+        { translateOutgoing: true },
+        "1101573652786446417",
+        { translate: async () => ({ status: "done", text: "a".repeat(2001) }) },
+        (message) => failures.push(message),
+    );
+    await patch._onSend(null, ["c", { content: "안녕하세요" }], (_c, m) => sent.push(m.content));
+    assert.deepEqual(sent, ["안녕하세요"]);
+    assert.equal(failures.length, 1);
+    assert.ok(failures[0].includes("2000"));
+});
+
+await checkAsync("outgoing: a rate limit is reported in words", async () => {
+    const failures = [];
+    const patch = outgoingWith(
+        { translateOutgoing: true },
+        "1101573652786446417",
+        { translate: async () => ({ status: "retry", after: 20000 }) },
+        (message) => failures.push(message),
+    );
+    await patch._onSend(null, ["c", { content: "안녕하세요" }], () => "sent");
+    assert.deepEqual(failures, [t("error.busy")]);
+});
+
+await checkAsync("queue: an urgent task does not wait for a free slot", async () => {
+    const queue = new TaskQueue(() => 1);
+    let release;
+    const busy = queue.run(() => new Promise((resolve) => (release = resolve)));
+    const urgent = await queue.run(() => "now", undefined, { urgent: true });
+    assert.equal(urgent, "now");
+    release("done");
+    assert.equal(await busy, "done");
+});
+
+await checkAsync("translator: a request still runs while any block waiting on it is on screen", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    };
+    try {
+        const settings = stubSettings();
+        settings.current.maxConcurrent = 1;
+        const translator = new Translator({ settings });
+
+        let release;
+        translator._queue.run(() => new Promise((resolve) => (release = resolve)));
+
+        let firstAlive = true;
+        const first = translator.translate("hello there", { shouldRun: () => firstAlive });
+        const second = translator.translate("hello there", { shouldRun: () => true });
+        firstAlive = false;
+        await flush();
+        release();
+
+        assert.equal((await second).status, "done", "the block still on screen gets its translation");
+        assert.equal((await first).status, "done");
+        assert.equal(calls, 1);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: a refused key stops every request and says so once", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ error: { message: "invalid key" } }), { status: 401 });
+    };
+    try {
+        const listeners = new Set();
+        const settings = {
+            ...stubSettings(),
+            onChange: (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+        };
+        const reported = [];
+        const translator = new Translator({
+            settings,
+            onError: (message, { fatal }) => reported.push([message, fatal]),
+        });
+        translator.start();
+
+        const first = await translator.translate("hello there");
+        assert.equal(first.status, "error");
+        assert.equal(first.message, t("error.badKey"));
+        assert.equal((await translator.translate("another message entirely")).status, "error");
+        assert.equal(calls, 1, "nothing more is sent with a key that was refused");
+        assert.deepEqual(reported, [[t("error.badKey"), true]]);
+
+        for (const listener of listeners) listener("showPending", false);
+        await translator.translate("yet another message");
+        assert.equal(calls, 1, "an unrelated setting does not lift the stop");
+
+        for (const listener of listeners) listener("apiKey", "new-key");
+        await translator.translate("yet another message");
+        assert.equal(calls, 2, "a new key is tried");
+        translator.stop();
+        assert.equal(listeners.size, 0);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: an urgent request is not retried", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response("{}", { status: 503 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        assert.equal((await translator.translate("hello there", { urgent: true })).status, "error");
+        assert.equal(calls, 1);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("translator: the connection test reports the answer or the reason", async () => {
+    const previous = BdApi.Net.fetch;
+    try {
+        BdApi.Net.fetch = async () =>
+            new Response(JSON.stringify({ choices: [{ message: { content: "안녕하세요" } }] }), {
+                status: 200,
+            });
+        assert.deepEqual(await new Translator({ settings: stubSettings() }).probe(), {
+            ok: true,
+            text: "안녕하세요",
+        });
+
+        BdApi.Net.fetch = async () => new Response("{}", { status: 402 });
+        assert.deepEqual(await new Translator({ settings: stubSettings() }).probe(), {
+            ok: false,
+            message: t("error.noBalance"),
+        });
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 

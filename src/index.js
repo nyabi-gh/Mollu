@@ -26,11 +26,12 @@ export default class Mollu {
         this._settings = new Settings({
             clearCache: () => this._confirmClearCache(),
             checkUpdate: () => this._updater.check({ announce: true }),
+            testConnection: () => this._testConnection(),
         });
         this._detector = new LanguageDetector(this._settings);
         this._translator = new Translator({
             settings: this._settings,
-            onError: (err) => this._notifyError(err),
+            onError: (message, { fatal }) => this._notifyError(message, fatal),
         });
         this._patch = null;
         this._outgoing = null;
@@ -193,6 +194,7 @@ export default class Mollu {
             languageDetector: this._detector,
             stores,
             onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error"),
+            onSlow: () => this._toast(t("toast.outgoingPending"), "info"),
         });
         this._outgoing.install();
     }
@@ -230,12 +232,24 @@ export default class Mollu {
         this._toast(t(next ? onKey : offKey, { language }), "info");
     }
 
-    _notifyError(err) {
+    // A refused key or an empty balance stops every translation, so it is reported even
+    // with failures hidden; the translator raises it once, not per message.
+    _notifyError(message, fatal) {
+        if (fatal) {
+            this._toast(t("toast.blocked", { message }), "error");
+            return;
+        }
         if (!this._settings.current.showErrors) return;
         const now = Date.now();
         if (now - this._lastErrorToast < ERROR_TOAST_COOLDOWN_MS) return;
         this._lastErrorToast = now;
-        this._toast(t("toast.failed", { message: (err && err.message) || "unknown" }), "error");
+        this._toast(t("toast.failed", { message: message || "unknown" }), "error");
+    }
+
+    async _testConnection() {
+        const result = await this._translator.probe();
+        if (result.ok) this._toast(t("toast.testOk", { text: result.text }), "success");
+        else this._toast(t("toast.testFailed", { message: result.message }), "error");
     }
 
     _toast(message, type) {

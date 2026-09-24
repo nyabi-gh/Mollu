@@ -44,6 +44,9 @@ export const UPDATE_CHECK_DELAY_MS = 15000;
 export const TRACE_LIMIT = 500;
 
 export const REQUEST_TIMEOUT_MS = 30000;
+export const URGENT_TIMEOUT_MS = 10000;
+
+export const DISCORD_MESSAGE_LIMIT = 2000;
 
 export const RATE_LIMIT_PAUSE_MS = 20000;
 export const MAX_RATE_LIMIT_PAUSE_MS = 120000;

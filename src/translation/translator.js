@@ -9,6 +9,7 @@ import {
     MAX_RATE_LIMIT_PAUSE_MS,
     TRANSIENT_RETRIES,
     TRANSIENT_RETRY_DELAY_MS,
+    URGENT_TIMEOUT_MS,
 } from "../constants.js";
 import { t } from "../i18n.js";
 import { logger } from "../lib/logger.js";
@@ -16,6 +17,15 @@ import { logger } from "../lib/logger.js";
 const skip = () => ({ status: "skip" });
 const done = (text, segments) => ({ status: "done", text, segments });
 const error = (message) => ({ status: "error", message });
+const ALWAYS = () => true;
+
+// Changing any of these can turn a request that was refused into one that works.
+const UNBLOCKING = new Set(["provider", "apiKey", "model", "baseUrl", "targetLanguage", "outgoingLanguage"]);
+
+const PROBE_TEXT = {
+    en: "Hello, nice to meet you. See you tomorrow!",
+    ko: "안녕하세요, 만나서 반가워요. 내일 봐요!",
+};
 
 export class Translator {
     constructor({ settings, onError }) {
@@ -29,17 +39,27 @@ export class Translator {
         this._failures = new Map();
         this._aborters = new Set();
         this._pausedUntil = 0;
+        this._blocked = null;
+        this._unsubscribe = null;
         this._stopped = false;
     }
 
     start() {
         this._stopped = false;
         this._pausedUntil = 0;
+        this._blocked = null;
         this._cache.load();
+        this._unsubscribe =
+            this._settings.onChange?.((id) => {
+                if (UNBLOCKING.has(id)) this._blocked = null;
+            }) ?? null;
     }
 
     stop() {
         this._stopped = true;
+        this._unsubscribe?.();
+        this._unsubscribe = null;
+        this._blocked = null;
         this._queue.clear();
         for (const controller of this._aborters) {
             try {
@@ -97,35 +117,67 @@ export class Translator {
 
         if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
 
-        if (hooks.ignoreBackoff) this._failures.delete(key);
-        else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
+        if (hooks.ignoreBackoff) {
+            this._failures.delete(key);
+        } else {
+            if (this._blocked) return Promise.resolve(error(this._blocked));
+            if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
+        }
 
         if (hooks.onStart) this._onStart(key, hooks.onStart);
 
+        const shouldRun = hooks.shouldRun ?? ALWAYS;
         let job = this._inflight.get(key);
-        if (!job) {
-            job = this._queue
-                .run(async () => {
-                    await this._awaitResume();
-                    if (this._stopped) throw aborted();
-                    if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
-                    this._announceStart(key);
-                    return this._callWithRetries(masked, language);
-                }, hooks.shouldRun)
-                .then(
-                    (raw) => this._resolveSuccess(key, masked, raw),
-                    (err) => this._resolveFailure(key, err),
-                )
-                .finally(() => {
-                    this._inflight.delete(key);
-                    this._starts.delete(key);
-                });
+        if (job) {
+            job.waiters.add(shouldRun);
+        } else {
+            job = this._enqueue(key, masked, language, shouldRun, hooks.urgent === true);
             this._inflight.set(key, job);
         }
 
-        return job.then((outcome) =>
+        return job.promise.then((outcome) =>
             outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome,
         );
+    }
+
+    // Several blocks can wait on one request, so it is only pointless once none of them wants it.
+    _enqueue(key, masked, language, shouldRun, urgent) {
+        const waiters = new Set([shouldRun]);
+        const wanted = () => [...waiters].some((waiter) => waiter());
+        const promise = this._queue
+            .run(
+                async () => {
+                    if (!urgent) await this._awaitResume();
+                    if (this._stopped) throw aborted();
+                    if (!wanted()) throw skipped();
+                    this._announceStart(key);
+                    return this._callWithRetries(masked, language, urgent);
+                },
+                wanted,
+                { urgent },
+            )
+            .then(
+                (raw) => this._resolveSuccess(key, masked, raw),
+                (err) => this._resolveFailure(key, err),
+            )
+            .finally(() => {
+                this._inflight.delete(key);
+                this._starts.delete(key);
+            });
+        return { waiters, promise };
+    }
+
+    async probe() {
+        const { targetLanguage } = this._settings.current;
+        const sample = targetLanguage === "en" ? PROBE_TEXT.ko : PROBE_TEXT.en;
+        try {
+            const raw = await this._callProvider(sample, targetLanguage, URGENT_TIMEOUT_MS);
+            this._blocked = null;
+            return { ok: true, text: stripWrappingQuotes(raw, sample).trim() };
+        } catch (err) {
+            logger.warn("connection test failed:", (err && err.message) || err);
+            return { ok: false, message: describe(err) };
+        }
     }
 
     _onStart(key, listener) {
@@ -156,13 +208,17 @@ export class Translator {
         return text ? done(text, trimEdges(segments)) : skip();
     }
 
-    async _callWithRetries(maskedText, language) {
+    // Someone waiting on a message they sent is better served by it going out untranslated
+    // than by a minute of retries.
+    async _callWithRetries(maskedText, language, urgent = false) {
+        const retries = urgent ? 0 : TRANSIENT_RETRIES;
+        const timeout = urgent ? URGENT_TIMEOUT_MS : 0;
         for (let attempt = 0; ; attempt += 1) {
             try {
-                return await this._callProvider(maskedText, language);
+                return await this._callProvider(maskedText, language, timeout);
             } catch (err) {
-                if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
-                logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
+                if (attempt >= retries || this._stopped || !isTransient(err)) throw err;
+                logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${retries}`);
                 await sleep(TRANSIENT_RETRY_DELAY_MS * (attempt + 1));
             }
         }
@@ -181,9 +237,17 @@ export class Translator {
         return false;
     }
 
-    async _callProvider(maskedText, language) {
+    async _callProvider(maskedText, language, timeout = 0) {
         const controller = new AbortController();
         this._aborters.add(controller);
+        let timedOut = false;
+        const timer =
+            timeout > 0
+                ? setTimeout(() => {
+                      timedOut = true;
+                      controller.abort();
+                  }, timeout)
+                : null;
         try {
             const settings = this._settings.current;
             const provider = getProvider(settings.provider);
@@ -196,7 +260,10 @@ export class Translator {
                         : { ...settings, targetLanguage: language },
                 signal: controller.signal,
             });
+        } catch (err) {
+            throw timedOut ? timeoutError() : err;
         } finally {
+            clearTimeout(timer);
             this._aborters.delete(controller);
         }
     }
@@ -237,9 +304,20 @@ export class Translator {
             return { status: "retry", after };
         }
 
+        if (isFatal(err)) {
+            const reason = describe(err);
+            const first = this._blocked == null;
+            this._blocked = reason;
+            if (first) {
+                logger.warn(`translation stopped until the settings change: ${message}`);
+                this._onError(reason, { fatal: true });
+            }
+            return error(reason);
+        }
+
         this._rememberFailure(maskedKey);
         logger.warn("translate failed:", message);
-        this._onError(err);
+        this._onError(message, { fatal: false });
         return error(message);
     }
 
@@ -262,6 +340,29 @@ function isTransient(err) {
     if (err.name === "ConfigError") return false;
     if (err.status === undefined) return true;
     return err.status === 408 || err.status >= 500;
+}
+
+// Every request after one of these would be refused the same way, whatever the message.
+function isFatal(err) {
+    if (!err) return false;
+    if (err.name === "ConfigError") return true;
+    if (err.status === 401 || err.status === 402 || err.status === 403) return true;
+    return err.status === 400 && /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i.test(String(err.body || ""));
+}
+
+function describe(err) {
+    if (!err) return "unknown";
+    if (err.status === 401 || err.status === 403 || (err.status === 400 && isFatal(err))) {
+        return t("error.badKey");
+    }
+    if (err.status === 402) return t("error.noBalance");
+    return err.message || String(err);
+}
+
+function timeoutError() {
+    const err = new Error(t("error.timedOut"));
+    err.name = "TimeoutError";
+    return err;
 }
 
 function aborted() {

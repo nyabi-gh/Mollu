@@ -2,6 +2,7 @@ import { chatCompletion } from "./openai-compatible.js";
 
 export const id = "gemini";
 export const label = "Google Gemini / Gemma";
+export const keyHint = "AIza...";
 export const models = Object.freeze(["gemini-3.1-flash-lite"]);
 export const defaults = Object.freeze({
     model: models[0],

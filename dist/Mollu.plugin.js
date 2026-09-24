@@ -69,6 +69,8 @@ var UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1e3;
 var UPDATE_CHECK_DELAY_MS = 15e3;
 var TRACE_LIMIT = 500;
 var REQUEST_TIMEOUT_MS = 3e4;
+var URGENT_TIMEOUT_MS = 1e4;
+var DISCORD_MESSAGE_LIMIT = 2e3;
 var RATE_LIMIT_PAUSE_MS = 2e4;
 var MAX_RATE_LIMIT_PAUSE_MS = 12e4;
 var MAX_RATE_LIMIT_RETRIES = 3;
@@ -85,6 +87,7 @@ var deepseek_exports = {};
 __export(deepseek_exports, {
   defaults: () => defaults,
   id: () => id,
+  keyHint: () => keyHint,
   label: () => label,
   models: () => models,
   translate: () => translate
@@ -138,6 +141,15 @@ var STRINGS = {
     "error.rateLimited": "Rate limited; retry delayed",
     "error.unsupportedLanguage": "{provider} cannot translate into {language}",
     "error.quotaExceeded": "The API key's translation quota is used up",
+    "error.badKey": "The API key was refused. Check it in the settings.",
+    "error.noBalance": "The API account has no balance left",
+    "error.timedOut": "The backend did not answer in time",
+    "error.busy": "The backend is limiting requests right now",
+    "error.tooLongToSend": "The translation is longer than Discord's {limit} characters",
+    "toast.blocked": "Translation paused until the settings change · {message}",
+    "toast.outgoingPending": "Translating your message…",
+    "toast.testOk": "Connection works · {text}",
+    "toast.testFailed": "Connection failed · {message}",
     "settings.provider": "Translation backend",
     "settings.provider.note": "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately.",
     "settings.apiKey": "{provider} API key",
@@ -164,6 +176,10 @@ var STRINGS = {
     "settings.maxChars": "Maximum characters to translate",
     "settings.maxChars.note": "Longer messages are skipped.",
     "settings.maxConcurrent": "Concurrent requests",
+    "settings.maxConcurrent.note": "How many translations run at once. Lower it to 1–2 if a free tier keeps limiting you.",
+    "settings.testConnection": "Connection",
+    "settings.testConnection.note": "Translates a short sample with the key and model set here.",
+    "settings.testConnection.action": "Test",
     "settings.autoTranslate": "Automatic translation",
     "settings.autoTranslate.note": "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
     "settings.hotkey": "Automatic translation shortcut",
@@ -232,6 +248,15 @@ var STRINGS = {
     "error.rateLimited": "한도 초과로 재시도를 미루는 중",
     "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
     "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
+    "error.badKey": "API 키가 거부되었습니다. 설정에서 확인하세요.",
+    "error.noBalance": "API 계정의 잔액이 없습니다",
+    "error.timedOut": "번역 서비스가 제때 응답하지 않았습니다",
+    "error.busy": "번역 서비스가 지금 요청을 제한하고 있습니다",
+    "error.tooLongToSend": "번역문이 Discord 제한인 {limit}자를 넘습니다",
+    "toast.blocked": "설정을 바꿀 때까지 번역을 멈춥니다 · {message}",
+    "toast.outgoingPending": "보낼 메시지를 번역하는 중…",
+    "toast.testOk": "연결 정상 · {text}",
+    "toast.testFailed": "연결 실패 · {message}",
     "settings.provider": "번역 백엔드",
     "settings.provider.note": "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다.",
     "settings.apiKey": "{provider} API 키",
@@ -258,6 +283,10 @@ var STRINGS = {
     "settings.maxChars": "번역할 최대 글자 수",
     "settings.maxChars.note": "이보다 긴 메시지는 건너뜁니다.",
     "settings.maxConcurrent": "동시 번역 요청 수",
+    "settings.maxConcurrent.note": "한 번에 진행하는 번역 수입니다. 무료 등급에서 요청 제한에 자주 걸리면 1–2로 낮추세요.",
+    "settings.testConnection": "연결 확인",
+    "settings.testConnection.note": "여기 설정된 키와 모델로 짧은 문장을 번역해 봅니다.",
+    "settings.testConnection.action": "테스트",
     "settings.autoTranslate": "자동 번역",
     "settings.autoTranslate.note": "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
     "settings.hotkey": "자동 번역 단축키",
@@ -577,6 +606,7 @@ function outputBudget(text, language) {
 // src/translation/providers/deepseek.js
 var id = "deepseek";
 var label = "DeepSeek";
+var keyHint = "sk-...";
 var models = Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]);
 var defaults = Object.freeze({
   model: models[0],
@@ -601,12 +631,14 @@ var gemini_exports = {};
 __export(gemini_exports, {
   defaults: () => defaults2,
   id: () => id2,
+  keyHint: () => keyHint2,
   label: () => label2,
   models: () => models2,
   translate: () => translate2
 });
 var id2 = "gemini";
 var label2 = "Google Gemini / Gemma";
+var keyHint2 = "AIza...";
 var models2 = Object.freeze(["gemini-3.1-flash-lite"]);
 var defaults2 = Object.freeze({
   model: models2[0],
@@ -624,12 +656,14 @@ var deepl_exports = {};
 __export(deepl_exports, {
   defaults: () => defaults3,
   id: () => id3,
+  keyHint: () => keyHint3,
   label: () => label3,
   models: () => models3,
   translate: () => translate3
 });
 var id3 = "deepl";
 var label3 = "DeepL";
+var keyHint3 = "...:fx";
 var models3 = Object.freeze([]);
 var FREE_BASE = "https://api-free.deepl.com";
 var PRO_BASE = "https://api.deepl.com";
@@ -1078,8 +1112,16 @@ var Settings = class {
           id: "apiKey",
           name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
           note: v.apiKey ? t("settings.apiKey.note", { clear: CLEAR_TOKEN }) : t(`keySource.${v.provider}`),
-          placeholder: v.apiKey ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) }) : "sk-...",
+          placeholder: v.apiKey ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) }) : getProvider(v.provider).keyHint,
           value: ""
+        },
+        {
+          type: "button",
+          id: "testConnection",
+          name: t("settings.testConnection"),
+          note: t("settings.testConnection.note"),
+          children: t("settings.testConnection.action"),
+          onClick: () => this._actions.testConnection?.()
         },
         {
           type: "dropdown",
@@ -1148,6 +1190,7 @@ var Settings = class {
           type: "number",
           id: "maxConcurrent",
           name: t("settings.maxConcurrent"),
+          note: t("settings.maxConcurrent.note"),
           value: v.maxConcurrent,
           min: 1,
           max: 10
@@ -1535,9 +1578,15 @@ var TaskQueue = class {
     this._active = 0;
     this._pending = [];
   }
-  run(task, shouldRun) {
+  // An urgent task starts at once, past the concurrency limit: someone is waiting on it.
+  run(task, shouldRun, { urgent = false } = {}) {
     return new Promise((resolve, reject) => {
-      this._pending.push({ task, resolve, reject, shouldRun });
+      const entry = { task, resolve, reject, shouldRun };
+      if (urgent) {
+        this._start(entry);
+        return;
+      }
+      this._pending.push(entry);
       this._drain();
     });
   }
@@ -1552,19 +1601,22 @@ var TaskQueue = class {
   }
   _drain() {
     while (this._active < Math.max(1, this._limit() | 0) && this._pending.length > 0) {
-      const { task, resolve, reject, shouldRun } = this._pending.shift();
-      if (shouldRun && !shouldRun()) {
+      const entry = this._pending.shift();
+      if (entry.shouldRun && !entry.shouldRun()) {
         const err = new Error("skipped");
         err.name = "SkippedError";
-        reject(err);
+        entry.reject(err);
         continue;
       }
-      this._active += 1;
-      Promise.resolve().then(task).then(resolve, reject).finally(() => {
-        this._active -= 1;
-        this._drain();
-      });
+      this._start(entry);
     }
+  }
+  _start({ task, resolve, reject }) {
+    this._active += 1;
+    Promise.resolve().then(task).then(resolve, reject).finally(() => {
+      this._active -= 1;
+      this._drain();
+    });
   }
 };
 
@@ -1572,6 +1624,12 @@ var TaskQueue = class {
 var skip = () => ({ status: "skip" });
 var done = (text, segments) => ({ status: "done", text, segments });
 var error = (message) => ({ status: "error", message });
+var ALWAYS = () => true;
+var UNBLOCKING = /* @__PURE__ */ new Set(["provider", "apiKey", "model", "baseUrl", "targetLanguage", "outgoingLanguage"]);
+var PROBE_TEXT = {
+  en: "Hello, nice to meet you. See you tomorrow!",
+  ko: "안녕하세요, 만나서 반가워요. 내일 봐요!"
+};
 var Translator = class {
   constructor({ settings, onError }) {
     this._settings = settings;
@@ -1584,15 +1642,24 @@ var Translator = class {
     this._failures = /* @__PURE__ */ new Map();
     this._aborters = /* @__PURE__ */ new Set();
     this._pausedUntil = 0;
+    this._blocked = null;
+    this._unsubscribe = null;
     this._stopped = false;
   }
   start() {
     this._stopped = false;
     this._pausedUntil = 0;
+    this._blocked = null;
     this._cache.load();
+    this._unsubscribe = this._settings.onChange?.((id4) => {
+      if (UNBLOCKING.has(id4)) this._blocked = null;
+    }) ?? null;
   }
   stop() {
     this._stopped = true;
+    this._unsubscribe?.();
+    this._unsubscribe = null;
+    this._blocked = null;
     this._queue.clear();
     for (const controller of this._aborters) {
       try {
@@ -1640,29 +1707,59 @@ var Translator = class {
       return Promise.resolve(this._restore(this._cache.get(key), tokens));
     }
     if (text.length > this._settings.current.maxChars) return Promise.resolve(skip());
-    if (hooks.ignoreBackoff) this._failures.delete(key);
-    else if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
+    if (hooks.ignoreBackoff) {
+      this._failures.delete(key);
+    } else {
+      if (this._blocked) return Promise.resolve(error(this._blocked));
+      if (this._isBackingOff(key)) return Promise.resolve(error(t("error.retryLater")));
+    }
     if (hooks.onStart) this._onStart(key, hooks.onStart);
+    const shouldRun = hooks.shouldRun ?? ALWAYS;
     let job = this._inflight.get(key);
-    if (!job) {
-      job = this._queue.run(async () => {
-        await this._awaitResume();
-        if (this._stopped) throw aborted();
-        if (hooks.shouldRun && !hooks.shouldRun()) throw skipped();
-        this._announceStart(key);
-        return this._callWithRetries(masked, language);
-      }, hooks.shouldRun).then(
-        (raw) => this._resolveSuccess(key, masked, raw),
-        (err) => this._resolveFailure(key, err)
-      ).finally(() => {
-        this._inflight.delete(key);
-        this._starts.delete(key);
-      });
+    if (job) {
+      job.waiters.add(shouldRun);
+    } else {
+      job = this._enqueue(key, masked, language, shouldRun, hooks.urgent === true);
       this._inflight.set(key, job);
     }
-    return job.then(
+    return job.promise.then(
       (outcome) => outcome.status === "done" ? this._restore(outcome.masked, tokens) : outcome
     );
+  }
+  // Several blocks can wait on one request, so it is only pointless once none of them wants it.
+  _enqueue(key, masked, language, shouldRun, urgent) {
+    const waiters = /* @__PURE__ */ new Set([shouldRun]);
+    const wanted = () => [...waiters].some((waiter) => waiter());
+    const promise = this._queue.run(
+      async () => {
+        if (!urgent) await this._awaitResume();
+        if (this._stopped) throw aborted();
+        if (!wanted()) throw skipped();
+        this._announceStart(key);
+        return this._callWithRetries(masked, language, urgent);
+      },
+      wanted,
+      { urgent }
+    ).then(
+      (raw) => this._resolveSuccess(key, masked, raw),
+      (err) => this._resolveFailure(key, err)
+    ).finally(() => {
+      this._inflight.delete(key);
+      this._starts.delete(key);
+    });
+    return { waiters, promise };
+  }
+  async probe() {
+    const { targetLanguage } = this._settings.current;
+    const sample = targetLanguage === "en" ? PROBE_TEXT.ko : PROBE_TEXT.en;
+    try {
+      const raw = await this._callProvider(sample, targetLanguage, URGENT_TIMEOUT_MS);
+      this._blocked = null;
+      return { ok: true, text: stripWrappingQuotes(raw, sample).trim() };
+    } catch (err) {
+      logger.warn("connection test failed:", err && err.message || err);
+      return { ok: false, message: describe(err) };
+    }
   }
   _onStart(key, listener) {
     const waiting2 = this._starts.get(key);
@@ -1687,13 +1784,17 @@ var Translator = class {
     const text = segments.map((segment) => segment.value).join("").trim();
     return text ? done(text, trimEdges(segments)) : skip();
   }
-  async _callWithRetries(maskedText, language) {
+  // Someone waiting on a message they sent is better served by it going out untranslated
+  // than by a minute of retries.
+  async _callWithRetries(maskedText, language, urgent = false) {
+    const retries = urgent ? 0 : TRANSIENT_RETRIES;
+    const timeout = urgent ? URGENT_TIMEOUT_MS : 0;
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this._callProvider(maskedText, language);
+        return await this._callProvider(maskedText, language, timeout);
       } catch (err) {
-        if (attempt >= TRANSIENT_RETRIES || this._stopped || !isTransient(err)) throw err;
-        logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${TRANSIENT_RETRIES}`);
+        if (attempt >= retries || this._stopped || !isTransient(err)) throw err;
+        logger.warn(`transient failure (${err.message}); retry ${attempt + 1}/${retries}`);
         await sleep(TRANSIENT_RETRY_DELAY_MS * (attempt + 1));
       }
     }
@@ -1709,9 +1810,14 @@ var Translator = class {
     this._failures.delete(maskedKey);
     return false;
   }
-  async _callProvider(maskedText, language) {
+  async _callProvider(maskedText, language, timeout = 0) {
     const controller = new AbortController();
     this._aborters.add(controller);
+    let timedOut = false;
+    const timer = timeout > 0 ? setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeout) : null;
     try {
       const settings = this._settings.current;
       const provider = getProvider(settings.provider);
@@ -1720,7 +1826,10 @@ var Translator = class {
         settings: language === settings.targetLanguage ? settings : { ...settings, targetLanguage: language },
         signal: controller.signal
       });
+    } catch (err) {
+      throw timedOut ? timeoutError() : err;
     } finally {
+      clearTimeout(timer);
       this._aborters.delete(controller);
     }
   }
@@ -1752,9 +1861,19 @@ var Translator = class {
       logger.warn(`rate limited; retrying in ${Math.round(after / 1e3)}s`);
       return { status: "retry", after };
     }
+    if (isFatal(err)) {
+      const reason = describe(err);
+      const first = this._blocked == null;
+      this._blocked = reason;
+      if (first) {
+        logger.warn(`translation stopped until the settings change: ${message}`);
+        this._onError(reason, { fatal: true });
+      }
+      return error(reason);
+    }
     this._rememberFailure(maskedKey);
     logger.warn("translate failed:", message);
-    this._onError(err);
+    this._onError(message, { fatal: false });
     return error(message);
   }
   _rememberFailure(maskedKey) {
@@ -1774,6 +1893,25 @@ function isTransient(err) {
   if (err.name === "ConfigError") return false;
   if (err.status === void 0) return true;
   return err.status === 408 || err.status >= 500;
+}
+function isFatal(err) {
+  if (!err) return false;
+  if (err.name === "ConfigError") return true;
+  if (err.status === 401 || err.status === 402 || err.status === 403) return true;
+  return err.status === 400 && /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i.test(String(err.body || ""));
+}
+function describe(err) {
+  if (!err) return "unknown";
+  if (err.status === 401 || err.status === 403 || err.status === 400 && isFatal(err)) {
+    return t("error.badKey");
+  }
+  if (err.status === 402) return t("error.noBalance");
+  return err.message || String(err);
+}
+function timeoutError() {
+  const err = new Error(t("error.timedOut"));
+  err.name = "TimeoutError";
+  return err;
 }
 function aborted() {
   const err = new Error("stopped");
@@ -2343,6 +2481,7 @@ function appendChild(ret, child) {
 }
 
 // src/outgoing-patch.js
+var SLOW_NOTICE_MS = 1500;
 function findMessageActions() {
   try {
     return BdApi.Webpack.getByKeys("sendMessage", "editMessage") ?? null;
@@ -2360,7 +2499,7 @@ function waitForMessageActions(signal) {
   });
 }
 var OutgoingPatch = class {
-  constructor({ target, settings, translator, languageDetector, stores, onFailure }) {
+  constructor({ target, settings, translator, languageDetector, stores, onFailure, onSlow }) {
     this._target = target;
     this._settings = settings;
     this._translator = translator;
@@ -2368,7 +2507,10 @@ var OutgoingPatch = class {
     this._stores = stores;
     this._onFailure = onFailure || (() => {
     });
+    this._onSlow = onSlow || (() => {
+    });
     this._unpatch = null;
+    this._tails = /* @__PURE__ */ new Map();
   }
   install() {
     this._unpatch = BdApi.Patcher.instead(
@@ -2385,6 +2527,8 @@ var OutgoingPatch = class {
       this._unpatch = null;
     }
   }
+  // A message that needs no translation must not overtake one still being translated, so
+  // every send in a channel waits its turn behind the one before it.
   _onSend(self, args, original) {
     let text = null;
     try {
@@ -2392,26 +2536,47 @@ var OutgoingPatch = class {
     } catch (e) {
       logger.error("outgoing gate failed", e);
     }
-    if (!text) return original.apply(self, args);
-    return this._translateThenSend(self, args, original, text);
+    const channelId = args?.[0];
+    const before = this._tails.get(channelId);
+    if (!text && !before) return original.apply(self, args);
+    const turn = (before ?? Promise.resolve()).then(
+      () => text ? this._translateInto(args, text) : null
+    );
+    const sent = turn.then(() => original.apply(self, args));
+    const tail = turn.catch(() => {
+    });
+    this._tails.set(channelId, tail);
+    tail.then(() => {
+      if (this._tails.get(channelId) === tail) this._tails.delete(channelId);
+    });
+    return sent;
   }
-  async _translateThenSend(self, args, original, text) {
+  async _translateInto(args, text) {
+    const slow = setTimeout(() => this._onSlow(), SLOW_NOTICE_MS);
     try {
       const result = await this._translator.translate(text, {
         language: this._settings.current.outgoingLanguage,
-        ignoreBackoff: true
+        ignoreBackoff: true,
+        urgent: true
       });
       if (result.status === "done" && result.text) {
+        if (result.text.length > DISCORD_MESSAGE_LIMIT) {
+          this._onFailure(t("error.tooLongToSend", { limit: DISCORD_MESSAGE_LIMIT }));
+          return;
+        }
         args[1] = { ...args[1], content: result.text };
         this._remember(text, result.text);
-      } else if (result.status === "error" || result.status === "retry") {
+      } else if (result.status === "retry") {
+        this._onFailure(t("error.busy"));
+      } else if (result.status === "error") {
         this._onFailure(result.message);
       }
     } catch (e) {
       logger.error("outgoing translation failed", e);
       this._onFailure(e && e.message || "unknown");
+    } finally {
+      clearTimeout(slow);
     }
-    return original.apply(self, args);
   }
   // The message goes out already translated, so the block under it would pay for a round
   // trip back to what was typed. Hand over the pair instead.
@@ -2634,12 +2799,13 @@ var Mollu = class {
     this._meta = meta;
     this._settings = new Settings({
       clearCache: () => this._confirmClearCache(),
-      checkUpdate: () => this._updater.check({ announce: true })
+      checkUpdate: () => this._updater.check({ announce: true }),
+      testConnection: () => this._testConnection()
     });
     this._detector = new LanguageDetector(this._settings);
     this._translator = new Translator({
       settings: this._settings,
-      onError: (err) => this._notifyError(err)
+      onError: (message, { fatal }) => this._notifyError(message, fatal)
     });
     this._patch = null;
     this._outgoing = null;
@@ -2777,7 +2943,8 @@ var Mollu = class {
       translator: this._translator,
       languageDetector: this._detector,
       stores,
-      onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error")
+      onFailure: (message) => this._toast(t("toast.outgoingFailed", { message }), "error"),
+      onSlow: () => this._toast(t("toast.outgoingPending"), "info")
     });
     this._outgoing.install();
   }
@@ -2811,12 +2978,23 @@ var Mollu = class {
     const language = getLanguage(this._settings.current.outgoingLanguage).label;
     this._toast(t(next ? onKey : offKey, { language }), "info");
   }
-  _notifyError(err) {
+  // A refused key or an empty balance stops every translation, so it is reported even
+  // with failures hidden; the translator raises it once, not per message.
+  _notifyError(message, fatal) {
+    if (fatal) {
+      this._toast(t("toast.blocked", { message }), "error");
+      return;
+    }
     if (!this._settings.current.showErrors) return;
     const now = Date.now();
     if (now - this._lastErrorToast < ERROR_TOAST_COOLDOWN_MS) return;
     this._lastErrorToast = now;
-    this._toast(t("toast.failed", { message: err && err.message || "unknown" }), "error");
+    this._toast(t("toast.failed", { message: message || "unknown" }), "error");
+  }
+  async _testConnection() {
+    const result = await this._translator.probe();
+    if (result.ok) this._toast(t("toast.testOk", { text: result.text }), "success");
+    else this._toast(t("toast.testFailed", { message: result.message }), "error");
   }
   _toast(message, type) {
     try {
