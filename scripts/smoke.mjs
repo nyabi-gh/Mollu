@@ -1184,35 +1184,11 @@ await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint",
         assert.equal(body.model, "gemini-3.1-flash-lite");
         assert.equal(body.messages[0].role, "system");
         assert.ok(!("thinking" in body), "the DeepSeek-only field must not leak to Google");
-        assert.equal(body.reasoning_effort, "minimal", "Gemini 3 cannot stop reasoning, only keep it short");
-
-        settings.current.model = "gemini-2.5-flash";
-        await new Translator({ settings }).translate("hello there");
-        assert.equal(JSON.parse(seen.options.body).reasoning_effort, "none");
-    } finally {
-        BdApi.Net.fetch = previous;
-    }
-});
-
-await checkAsync("gemini: gemma never receives reasoning_effort, which it rejects", async () => {
-    const previous = BdApi.Net.fetch;
-    let body = null;
-    BdApi.Net.fetch = async (_url, options) => {
-        body = JSON.parse(options.body);
-        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), {
-            status: 200,
-        });
-    };
-    try {
-        const settings = stubSettings();
-        Object.assign(settings.current, {
-            provider: "gemini",
-            model: "gemma-4-31b-it",
-            baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-        });
-        await new Translator({ settings }).translate("hello there");
-
-        assert.ok(!("reasoning_effort" in body));
+        assert.equal(
+            body.reasoning_effort,
+            "minimal",
+            "Gemini cannot stop reasoning, only keep it to the least",
+        );
     } finally {
         BdApi.Net.fetch = previous;
     }

@@ -214,7 +214,7 @@ var STRINGS = {
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
     "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
-    "modelHint.gemini": "flash-lite answers in about a second. Any other Gemini or Gemma model can be typed in.",
+    "modelHint.gemini": "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
     "modelHint.deepl": "DeepL has no model to pick.",
     "language.auto": "Match Discord"
   },
@@ -322,7 +322,7 @@ var STRINGS = {
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
     "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
-    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 다른 Gemini·Gemma 모델도 직접 입력하면 됩니다.",
+    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
     "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
@@ -661,7 +661,7 @@ __export(gemini_exports, {
   translate: () => translate2
 });
 var id2 = "gemini";
-var label2 = "Google Gemini / Gemma";
+var label2 = "Google Gemini";
 var keyHint2 = "AIza...";
 var models2 = Object.freeze(["gemini-3.1-flash-lite"]);
 var defaults2 = Object.freeze({
@@ -671,9 +671,8 @@ var defaults2 = Object.freeze({
 function translate2(params) {
   return chatCompletion({ ...params, defaults: defaults2, extend: extend2 });
 }
-function extend2(body, { model }) {
-  if (/^gemini-3/i.test(model)) body.reasoning_effort = "minimal";
-  else if (/^gemini-/i.test(model)) body.reasoning_effort = "none";
+function extend2(body) {
+  body.reasoning_effort = "minimal";
 }
 
 // src/translation/providers/deepl.js

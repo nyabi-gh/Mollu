@@ -128,7 +128,7 @@ const STRINGS = {
         "modelHint.deepseek":
             "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
         "modelHint.gemini":
-            "flash-lite answers in about a second. Any other Gemini or Gemma model can be typed in.",
+            "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
         "modelHint.deepl": "DeepL has no model to pick.",
         "language.auto": "Match Discord",
     },
@@ -261,7 +261,7 @@ const STRINGS = {
         "modelHint.deepseek":
             "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
         "modelHint.gemini":
-            "flash-lite 가 약 1초로 가장 빠릅니다. 다른 Gemini·Gemma 모델도 직접 입력하면 됩니다.",
+            "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
         "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
         "language.auto": "Discord 설정에 맞춤",
     },
