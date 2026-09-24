@@ -170,7 +170,7 @@ var STRINGS = {
     "settings.translateDms": "Translate direct messages",
     "settings.translateDms.note": "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
     "settings.targetLanguage": "Translate into",
-    "settings.targetLanguage.note": "Messages not already in this language are translated into it. Languages written in the Latin alphabet cannot be told apart before sending, so every message is sent once and skipped if it comes back unchanged.",
+    "settings.targetLanguage.note": "Messages not already in this language are translated into it. For a language in the Latin alphabet, a message is skipped only when its common words clearly belong to it; anything unclear is sent once and hidden if it comes back unchanged.",
     "settings.uiLanguage": "Plugin language",
     "settings.uiLanguage.note": "Language of this panel and the plugin's own messages.",
     "settings.threshold": "Treat as already translated above",
@@ -283,7 +283,7 @@ var STRINGS = {
     "settings.translateDms": "DM 도 번역",
     "settings.translateDms.note": "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
     "settings.targetLanguage": "번역할 언어",
-    "settings.targetLanguage.note": "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어끼리는 보내기 전에 구분할 수 없어, 메시지마다 한 번은 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
+    "settings.targetLanguage.note": "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어는 자주 쓰는 단어로 이 언어임이 분명할 때만 건너뛰고, 애매하면 한 번 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
     "settings.uiLanguage": "플러그인 언어",
     "settings.uiLanguage.note": "이 설정 패널과 플러그인 표시 문구의 언어입니다.",
     "settings.threshold": "번역 생략 기준 비율",
@@ -2110,10 +2110,43 @@ function trimEdges(segments) {
   return out;
 }
 
+// src/translation/latin.js
+var COMMON_WORDS = {
+  en: "the and is are you to of it that this what for with have was not but just be do my me we they can will your so on if how why i'm don't it's",
+  es: "el la los las que y es en un una por con para no lo se pero más como muy está yo tú qué del al mi su hay también",
+  fr: "le la les des et est une du que qui pas pour dans ce je tu il elle nous vous sur avec mais très c'est j'ai au aux ne on",
+  de: "der die das und ist nicht ich du er sie wir ein eine zu mit auf für den dem auch aber was wie noch sehr sind habe bin es im",
+  pt: "o os as de que e é um uma não para com do da em eu você mas muito está isso no na por se mais também tem são",
+  id: "yang dan di ke dari ini itu tidak aku saya kamu apa ada untuk dengan juga sudah belum bisa akan mau lagi kita kami ya gak nggak sama tapi karena",
+  vi: "và của là không có tôi bạn được những này một người cho với đã rồi thì mình nhé"
+};
+var SETS = Object.fromEntries(
+  Object.entries(COMMON_WORDS).map(([family, words]) => [family, new Set(words.split(" "))])
+);
+var VIETNAMESE = /[ăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i;
+var WORD = /[\p{L}']+/gu;
+var MIN_WORDS = 3;
+var MIN_SHARE = 0.2;
+function latinFamily(code) {
+  const family = String(code || "").startsWith("pt") ? "pt" : code;
+  return SETS[family] ? family : null;
+}
+function isClearlyIn(text, family) {
+  WORD.lastIndex = 0;
+  const words = String(text).toLowerCase().match(WORD) ?? [];
+  if (words.length < MIN_WORDS || !SETS[family]) return false;
+  const score = (candidate) => words.filter((word) => SETS[candidate].has(word) || candidate === "vi" && VIETNAMESE.test(word)).length;
+  const own = score(family);
+  if (own < 2 || own / words.length < MIN_SHARE) return false;
+  return Object.keys(SETS).every((other) => other === family || score(other) < own);
+}
+
 // src/translation/language-detector.js
 var MASK_RE2 = new RegExp(MASK_PATTERN, "g");
 var NON_LETTER = /[^\p{L}]/gu;
 var FOREIGN_SHARE = 0.2;
+var LATIN = new RegExp("\\p{Script=Latin}", "u");
+var LATIN_SHARE = 0.8;
 var LanguageDetector = class {
   constructor(settings) {
     this._settings = settings;
@@ -2122,8 +2155,9 @@ var LanguageDetector = class {
     if (typeof text !== "string") return false;
     const letters = this._letters(text);
     if (letters.length < 2) return false;
-    const { script, requires, excludes } = getLanguage(language ?? this._settings.current.targetLanguage);
-    if (!script) return true;
+    const code = language ?? this._settings.current.targetLanguage;
+    const { script, requires, excludes } = getLanguage(code);
+    if (!script) return this._needsLatin(text, letters, code);
     let inTarget = 0;
     let required = 0;
     let excluded = 0;
@@ -2135,6 +2169,14 @@ var LanguageDetector = class {
     if (requires && required === 0) return true;
     if (excludes && excluded / letters.length >= FOREIGN_SHARE) return true;
     return inTarget / letters.length < this._threshold();
+  }
+  _needsLatin(text, letters, code) {
+    const family = latinFamily(code);
+    if (!family) return true;
+    const latin = letters.filter((ch) => LATIN.test(ch)).length;
+    if (latin / letters.length < LATIN_SHARE) return true;
+    MASK_RE2.lastIndex = 0;
+    return !isClearlyIn(text.replace(MASK_RE2, " "), family);
   }
   _threshold() {
     const raw = this._settings.current.skipThreshold;

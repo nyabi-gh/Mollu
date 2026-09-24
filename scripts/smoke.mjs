@@ -2020,6 +2020,30 @@ check("providers: exactly the five supported backends are offered", () => {
     );
 });
 
+check("detector: a Latin-alphabet target skips only what is clearly written in it", () => {
+    const latin = new LanguageDetector({ current: { targetLanguage: "en", skipThreshold: 30 } });
+    const cases = [
+        ["en", "what are you doing with that thing", false],
+        ["en", "que es muy bueno para mí", true],
+        ["en", "ok thanks", true],
+        ["en", "안녕하세요 반가워요 hello", true],
+        ["es", "que es muy bueno para mí", false],
+        ["es", "o que você está fazendo agora", true],
+        ["pt-BR", "o que você está fazendo agora", false],
+        ["pt-PT", "o que você está fazendo agora", false],
+        ["fr", "je ne sais pas ce que tu veux", false],
+        ["fr", "ich bin nicht sicher was du willst", true],
+        ["de", "ich bin nicht sicher was du willst", false],
+        ["id", "aku tidak tahu apa yang kamu mau", false],
+        ["vi", "tôi không biết bạn muốn gì", false],
+        ["vi", "what are you doing with that thing", true],
+        ["en", "hey <@123456789> what are you doing with that", false],
+    ];
+    for (const [target, text, expected] of cases) {
+        assert.equal(latin.needsTranslation(text, target), expected, `${target}: ${text}`);
+    }
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 

@@ -69,7 +69,7 @@ const STRINGS = {
             "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
         "settings.targetLanguage": "Translate into",
         "settings.targetLanguage.note":
-            "Messages not already in this language are translated into it. Languages written in the Latin alphabet cannot be told apart before sending, so every message is sent once and skipped if it comes back unchanged.",
+            "Messages not already in this language are translated into it. For a language in the Latin alphabet, a message is skipped only when its common words clearly belong to it; anything unclear is sent once and hidden if it comes back unchanged.",
         "settings.uiLanguage": "Plugin language",
         "settings.uiLanguage.note": "Language of this panel and the plugin's own messages.",
         "settings.threshold": "Treat as already translated above",
@@ -209,7 +209,7 @@ const STRINGS = {
             "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
         "settings.targetLanguage": "번역할 언어",
         "settings.targetLanguage.note":
-            "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어끼리는 보내기 전에 구분할 수 없어, 메시지마다 한 번은 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
+            "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어는 자주 쓰는 단어로 이 언어임이 분명할 때만 건너뛰고, 애매하면 한 번 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
         "settings.uiLanguage": "플러그인 언어",
         "settings.uiLanguage.note": "이 설정 패널과 플러그인 표시 문구의 언어입니다.",
         "settings.threshold": "번역 생략 기준 비율",

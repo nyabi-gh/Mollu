@@ -1,10 +1,13 @@
 import { MASK_PATTERN } from "./tokenizer.js";
 import { getLanguage } from "../languages.js";
 import { DEFAULT_SETTINGS } from "../constants.js";
+import { latinFamily, isClearlyIn } from "./latin.js";
 
 const MASK_RE = new RegExp(MASK_PATTERN, "g");
 const NON_LETTER = /[^\p{L}]/gu;
 const FOREIGN_SHARE = 0.2;
+const LATIN = /\p{Script=Latin}/u;
+const LATIN_SHARE = 0.8;
 
 export class LanguageDetector {
     constructor(settings) {
@@ -16,9 +19,10 @@ export class LanguageDetector {
         const letters = this._letters(text);
         if (letters.length < 2) return false;
 
-        const { script, requires, excludes } = getLanguage(language ?? this._settings.current.targetLanguage);
+        const code = language ?? this._settings.current.targetLanguage;
+        const { script, requires, excludes } = getLanguage(code);
 
-        if (!script) return true;
+        if (!script) return this._needsLatin(text, letters, code);
 
         let inTarget = 0;
         let required = 0;
@@ -31,6 +35,15 @@ export class LanguageDetector {
         if (requires && required === 0) return true;
         if (excludes && excluded / letters.length >= FOREIGN_SHARE) return true;
         return inTarget / letters.length < this._threshold();
+    }
+
+    _needsLatin(text, letters, code) {
+        const family = latinFamily(code);
+        if (!family) return true;
+        const latin = letters.filter((ch) => LATIN.test(ch)).length;
+        if (latin / letters.length < LATIN_SHARE) return true;
+        MASK_RE.lastIndex = 0;
+        return !isClearlyIn(text.replace(MASK_RE, " "), family);
     }
 
     _threshold() {
