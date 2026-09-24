@@ -1906,6 +1906,120 @@ check("cache: a translation that keeps being read outlives newer ones", () => {
     assert.ok(!saved.some(([key]) => key === "k1"));
 });
 
+const { PROVIDER_OPTIONS } = await import("../src/translation/providers/index.js");
+
+function providerSettings(provider, model, baseUrl) {
+    const settings = stubSettings();
+    Object.assign(settings.current, { provider, model, baseUrl });
+    return settings;
+}
+
+await checkAsync("openai: GPT-6 is asked with reasoning at its least and no temperature", async () => {
+    const previous = BdApi.Net.fetch;
+    let seen = null;
+    BdApi.Net.fetch = async (url, options) => {
+        seen = { url, body: JSON.parse(options.body) };
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    };
+    try {
+        const settings = providerSettings("openai", "gpt-6-luna", "https://api.openai.com/v1");
+        assert.equal((await new Translator({ settings }).translate("hello there")).text, "안녕");
+        assert.equal(seen.url, "https://api.openai.com/v1/chat/completions");
+        assert.equal(seen.body.reasoning_effort, "none");
+        assert.ok(!("temperature" in seen.body));
+        assert.ok(!("max_tokens" in seen.body));
+        assert.ok(seen.body.max_completion_tokens > 0);
+
+        settings.current.model = "gpt-6-astra";
+        await new Translator({ settings }).translate("hello there");
+        assert.equal(seen.body.reasoning_effort, "low", "astra cannot switch reasoning off");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("claude: a Messages API request, answered by its text blocks", async () => {
+    const previous = BdApi.Net.fetch;
+    let seen = null;
+    let reply = { stop_reason: "end_turn", content: [{ type: "text", text: "안녕" }] };
+    BdApi.Net.fetch = async (url, options) => {
+        seen = { url, headers: options.headers, body: JSON.parse(options.body) };
+        return new Response(JSON.stringify(reply), { status: 200 });
+    };
+    try {
+        const settings = providerSettings("claude", "claude-haiku-4-5", "https://api.anthropic.com/v1");
+        assert.equal((await new Translator({ settings }).translate("hello there")).text, "안녕");
+        assert.equal(seen.url, "https://api.anthropic.com/v1/messages", "a pasted /v1 is not doubled");
+        assert.equal(seen.headers["x-api-key"], "test-key");
+        assert.equal(seen.headers["anthropic-version"], "2023-06-01");
+        assert.ok(!("Authorization" in seen.headers));
+        assert.equal(seen.body.model, "claude-haiku-4-5");
+        assert.equal(typeof seen.body.system, "string");
+        assert.deepEqual(seen.body.messages, [{ role: "user", content: "hello there" }]);
+        assert.ok(!("output_config" in seen.body), "Haiku 4.5 has no effort control");
+        assert.ok(!("temperature" in seen.body));
+        assert.ok(!("fallbacks" in seen.body));
+
+        settings.current.model = "claude-sonnet-5";
+        reply = {
+            stop_reason: "end_turn",
+            content: [
+                { type: "thinking", thinking: "" },
+                { type: "text", text: "안녕하세요" },
+            ],
+        };
+        assert.equal((await new Translator({ settings }).translate("hi there")).text, "안녕하세요");
+        assert.deepEqual(seen.body.output_config, { effort: "low" });
+
+        settings.current.model = "claude-opus-5";
+        await new Translator({ settings }).translate("good morning");
+        assert.equal(seen.body.fallbacks, "default");
+        assert.equal(seen.headers["anthropic-beta"], "server-side-fallback-2026-07-01");
+
+        reply = { stop_reason: "refusal", content: [] };
+        const refused = await new Translator({ settings }).translate("something else");
+        assert.equal(refused.status, "error");
+        assert.equal(refused.message, t("error.refused"));
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+await checkAsync("claude: an empty balance stops translation like a refused key", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(
+            JSON.stringify({
+                type: "error",
+                error: {
+                    type: "invalid_request_error",
+                    message: "Your credit balance is too low to access the Anthropic API.",
+                },
+            }),
+            { status: 400 },
+        );
+    try {
+        const settings = providerSettings("claude", "claude-haiku-4-5", "https://api.anthropic.com");
+        const reported = [];
+        const translator = new Translator({
+            settings,
+            onError: (message, info) => reported.push([message, info.fatal]),
+        });
+        const result = await translator.translate("hello there");
+        assert.equal(result.message, t("error.noBalance"));
+        assert.deepEqual(reported, [[t("error.noBalance"), true]]);
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
+check("providers: exactly the five supported backends are offered", () => {
+    assert.deepEqual(
+        PROVIDER_OPTIONS.map((option) => option.value),
+        ["deepseek", "gemini", "openai", "claude", "deepl"],
+    );
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 

@@ -35,15 +35,17 @@ BetterDiscord 1.14.0 or newer is required.
 
 ## First-time setup
 
-Translation runs through an outside service, so you need **an API key**. Pick one of the three.
+Translation runs through an outside service, so you need **an API key**. Pick one of the five.
 
 | Service | Cost | Where to get a key |
 | --- | --- | --- |
 | **DeepL** | 500,000 characters a month, free | [deepl.com/pro-api](https://www.deepl.com/pro-api) |
 | **Google Gemini** | Has a free tier | [aistudio.google.com](https://aistudio.google.com) |
 | **DeepSeek** | Paid, but very cheap | [platform.deepseek.com](https://platform.deepseek.com) |
+| **OpenAI** | Paid; the default `gpt-6-luna` is very cheap | [platform.openai.com](https://platform.openai.com) |
+| **Anthropic Claude** | Paid; the default is `claude-haiku-4-5` | [platform.claude.com](https://platform.claude.com) |
 
-**DeepL** is the easiest way to start for free. It is a dedicated translation service, so it is fast and there is no model to choose. DeepSeek and Gemini read more naturally, though — they keep tone and slang.
+**DeepL** is the easiest way to start for free. It is a dedicated translation service, so it is fast and there is no model to choose. DeepSeek, Gemini, OpenAI and Claude read more naturally, though, keeping tone and slang. Gemini is supported from 3.1 on.
 
 Once you have a key, in the plugin settings:
 

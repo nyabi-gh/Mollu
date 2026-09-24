@@ -33,6 +33,7 @@ const STRINGS = {
         "error.rateLimited": "Rate limited; retry delayed",
         "error.unsupportedLanguage": "{provider} cannot translate into {language}",
         "error.quotaExceeded": "The API key's translation quota is used up",
+        "error.refused": "The model declined to translate this message",
         "error.badKey": "The API key was refused. Check it in the settings.",
         "error.noBalance": "The API account has no balance left",
         "error.timedOut": "The backend did not answer in time",
@@ -56,7 +57,7 @@ const STRINGS = {
         "settings.customModel.note":
             "The model id exactly as the backend writes it, so a model released after this plugin was built can still be used. Blank falls back to {fallback}.",
         "settings.baseUrl": "API base URL",
-        "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
+        "settings.baseUrl.note": "The backend's API address. Filled in when you pick a backend.",
         "settings.allGuilds": "Translate in every server",
         "settings.allGuilds.note":
             "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
@@ -123,6 +124,8 @@ const STRINGS = {
 
         "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
+        "keySource.openai": "Get one at platform.openai.com → API keys.",
+        "keySource.claude": "Get one at platform.claude.com → API Keys.",
         "keySource.deepl":
             "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
         "modelHint.deepseek":
@@ -130,6 +133,9 @@ const STRINGS = {
         "modelHint.gemini":
             "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
         "modelHint.deepl": "DeepL has no model to pick.",
+        "modelHint.openai":
+            "luna is cheap and fast with reasoning off; sol reads better; astra is more than a translation needs.",
+        "modelHint.claude": "haiku is the fastest and cheapest; sonnet and opus read better and cost more.",
         "language.auto": "Match Discord",
     },
     ko: {
@@ -167,6 +173,7 @@ const STRINGS = {
         "error.rateLimited": "한도 초과로 재시도를 미루는 중",
         "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
         "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
+        "error.refused": "모델이 이 메시지의 번역을 거절했습니다",
         "error.badKey": "API 키가 거부되었습니다. 설정에서 확인하세요.",
         "error.noBalance": "API 계정의 잔액이 없습니다",
         "error.timedOut": "번역 서비스가 제때 응답하지 않았습니다",
@@ -190,7 +197,7 @@ const STRINGS = {
         "settings.customModel.note":
             "백엔드가 쓰는 모델 ID 를 그대로 입력하세요. 플러그인이 모르는 새 모델도 이렇게 쓸 수 있습니다. 비워 두면 {fallback} 을 씁니다.",
         "settings.baseUrl": "API Base URL",
-        "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
+        "settings.baseUrl.note": "백엔드의 API 주소. 백엔드를 고르면 자동으로 채워집니다.",
         "settings.allGuilds": "모든 서버에서 번역",
         "settings.allGuilds.note":
             "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
@@ -256,6 +263,8 @@ const STRINGS = {
 
         "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+        "keySource.openai": "platform.openai.com → API keys 에서 발급합니다.",
+        "keySource.claude": "platform.claude.com → API Keys 에서 발급합니다.",
         "keySource.deepl":
             "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
         "modelHint.deepseek":
@@ -263,6 +272,9 @@ const STRINGS = {
         "modelHint.gemini":
             "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
         "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
+        "modelHint.openai":
+            "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋고, astra 는 번역에는 과합니다.",
+        "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 과 opus 는 문장이 더 좋지만 비쌉니다.",
         "language.auto": "Discord 설정에 맞춤",
     },
 };

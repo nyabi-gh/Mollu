@@ -142,6 +142,7 @@ var STRINGS = {
     "error.rateLimited": "Rate limited; retry delayed",
     "error.unsupportedLanguage": "{provider} cannot translate into {language}",
     "error.quotaExceeded": "The API key's translation quota is used up",
+    "error.refused": "The model declined to translate this message",
     "error.badKey": "The API key was refused. Check it in the settings.",
     "error.noBalance": "The API account has no balance left",
     "error.timedOut": "The backend did not answer in time",
@@ -161,7 +162,7 @@ var STRINGS = {
     "settings.customModel": "Model name",
     "settings.customModel.note": "The model id exactly as the backend writes it, so a model released after this plugin was built can still be used. Blank falls back to {fallback}.",
     "settings.baseUrl": "API base URL",
-    "settings.baseUrl.note": "OpenAI-compatible endpoint. Filled in when you pick a backend.",
+    "settings.baseUrl.note": "The backend's API address. Filled in when you pick a backend.",
     "settings.allGuilds": "Translate in every server",
     "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
     "settings.guildIds": "Target server ids",
@@ -212,10 +213,14 @@ var STRINGS = {
     "settings.debugLog.note": "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
     "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
     "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
+    "keySource.openai": "Get one at platform.openai.com → API keys.",
+    "keySource.claude": "Get one at platform.claude.com → API Keys.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
     "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
     "modelHint.gemini": "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
     "modelHint.deepl": "DeepL has no model to pick.",
+    "modelHint.openai": "luna is cheap and fast with reasoning off; sol reads better; astra is more than a translation needs.",
+    "modelHint.claude": "haiku is the fastest and cheapest; sonnet and opus read better and cost more.",
     "language.auto": "Match Discord"
   },
   ko: {
@@ -250,6 +255,7 @@ var STRINGS = {
     "error.rateLimited": "한도 초과로 재시도를 미루는 중",
     "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
     "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
+    "error.refused": "모델이 이 메시지의 번역을 거절했습니다",
     "error.badKey": "API 키가 거부되었습니다. 설정에서 확인하세요.",
     "error.noBalance": "API 계정의 잔액이 없습니다",
     "error.timedOut": "번역 서비스가 제때 응답하지 않았습니다",
@@ -269,7 +275,7 @@ var STRINGS = {
     "settings.customModel": "직접 입력한 모델 이름",
     "settings.customModel.note": "백엔드가 쓰는 모델 ID 를 그대로 입력하세요. 플러그인이 모르는 새 모델도 이렇게 쓸 수 있습니다. 비워 두면 {fallback} 을 씁니다.",
     "settings.baseUrl": "API Base URL",
-    "settings.baseUrl.note": "OpenAI 호환 엔드포인트. 백엔드를 고르면 자동으로 채워집니다.",
+    "settings.baseUrl.note": "백엔드의 API 주소. 백엔드를 고르면 자동으로 채워집니다.",
     "settings.allGuilds": "모든 서버에서 번역",
     "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
     "settings.guildIds": "대상 서버 ID",
@@ -320,10 +326,14 @@ var STRINGS = {
     "settings.debugLog.note": "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
     "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
     "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",
+    "keySource.openai": "platform.openai.com → API keys 에서 발급합니다.",
+    "keySource.claude": "platform.claude.com → API Keys 에서 발급합니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
     "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
     "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
     "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
+    "modelHint.openai": "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋고, astra 는 번역에는 과합니다.",
+    "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 과 opus 는 문장이 더 좋지만 비쌉니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
 };
@@ -515,11 +525,11 @@ function combine(...patterns) {
 }
 
 // src/translation/providers/openai-compatible.js
-async function chatCompletion({ text, settings, signal, defaults: defaults4, extend: extend3 }) {
+async function chatCompletion({ text, settings, signal, defaults: defaults6, extend: extend4 }) {
   const apiKey = String(settings.apiKey || "").trim();
   if (!apiKey) throw configError(t("error.noApiKey"));
-  const base = normalizeBaseUrl(settings.baseUrl, defaults4.baseUrl);
-  const model = String(settings.model || defaults4.model).trim();
+  const base = normalizeBaseUrl(settings.baseUrl, defaults6.baseUrl);
+  const model = String(settings.model || defaults6.model).trim();
   const target = getLanguage(settings.targetLanguage);
   const body = {
     model,
@@ -531,7 +541,7 @@ async function chatCompletion({ text, settings, signal, defaults: defaults4, ext
     stream: false,
     max_tokens: outputBudget(text, target)
   };
-  if (extend3) extend3(body, { base, model });
+  if (extend4) extend4(body, { base, model });
   const url = `${base}/chat/completions`;
   const first = await send(url, { apiKey, signal, body });
   let json = first.json;
@@ -675,9 +685,9 @@ function extend2(body) {
   body.reasoning_effort = "minimal";
 }
 
-// src/translation/providers/deepl.js
-var deepl_exports = {};
-__export(deepl_exports, {
+// src/translation/providers/openai.js
+var openai_exports = {};
+__export(openai_exports, {
   defaults: () => defaults3,
   id: () => id3,
   keyHint: () => keyHint3,
@@ -685,13 +695,107 @@ __export(deepl_exports, {
   models: () => models3,
   translate: () => translate3
 });
-var id3 = "deepl";
-var label3 = "DeepL";
-var keyHint3 = "...:fx";
-var models3 = Object.freeze([]);
+var id3 = "openai";
+var label3 = "OpenAI";
+var keyHint3 = "sk-proj-...";
+var models3 = Object.freeze(["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"]);
+var defaults3 = Object.freeze({
+  model: models3[0],
+  baseUrl: "https://api.openai.com/v1"
+});
+var LEAST_EFFORT = { "gpt-6-astra": "low" };
+function translate3(params) {
+  return chatCompletion({ ...params, defaults: defaults3, extend: extend3 });
+}
+function extend3(body, { model }) {
+  delete body.temperature;
+  body.max_completion_tokens = body.max_tokens;
+  delete body.max_tokens;
+  body.reasoning_effort = LEAST_EFFORT[model] ?? "none";
+}
+
+// src/translation/providers/claude.js
+var claude_exports = {};
+__export(claude_exports, {
+  defaults: () => defaults4,
+  id: () => id4,
+  keyHint: () => keyHint4,
+  label: () => label4,
+  models: () => models4,
+  translate: () => translate4
+});
+var id4 = "claude";
+var label4 = "Anthropic Claude";
+var keyHint4 = "sk-ant-...";
+var models4 = Object.freeze(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"]);
+var defaults4 = Object.freeze({ model: models4[0], baseUrl: "https://api.anthropic.com" });
+var API_VERSION = "2023-06-01";
+var FALLBACK_BETA = "server-side-fallback-2026-07-01";
+async function translate4({ text, settings, signal }) {
+  const apiKey = String(settings.apiKey || "").trim();
+  if (!apiKey) throw configError(t("error.noApiKey"));
+  const root = normalizeBaseUrl(settings.baseUrl, defaults4.baseUrl).replace(/\/v1$/, "");
+  const model = String(settings.model || defaults4.model).trim();
+  const body = {
+    model,
+    max_tokens: MAX_OUTPUT_TOKENS,
+    system: systemPrompt(getLanguage(settings.targetLanguage).name),
+    messages: [{ role: "user", content: text }]
+  };
+  if (!/^claude-haiku/i.test(model)) body.output_config = { effort: "low" };
+  const headers = {
+    "x-api-key": apiKey,
+    "anthropic-version": API_VERSION,
+    "anthropic-dangerous-direct-browser-access": "true"
+  };
+  if (model === "claude-opus-5") {
+    body.fallbacks = "default";
+    headers["anthropic-beta"] = FALLBACK_BETA;
+  }
+  const json = await send2(`${root}/v1/messages`, { headers, signal, body });
+  if (json?.stop_reason === "refusal") throw new Error(t("error.refused"));
+  const output = (Array.isArray(json?.content) ? json.content : []).filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("").trim();
+  if (!output) {
+    logger.warn(
+      `${model} gave no answer (stop_reason ${json?.stop_reason ?? "none"}, usage ${JSON.stringify(json?.usage ?? null)})`
+    );
+    throw new Error(
+      t(json?.stop_reason === "max_tokens" ? "error.reasoningOnly" : "error.emptyResponse")
+    );
+  }
+  return output;
+}
+async function send2(url, { headers, signal, body }) {
+  try {
+    return await postJson(url, { headers, signal, body });
+  } catch (err) {
+    if (!(err?.status === 400 && body.output_config && /effort|output_config/i.test(String(err.body || "")))) {
+      throw err;
+    }
+    logger.warn(`${body.model} rejected the effort setting; asking again without it`);
+    const retry = { ...body };
+    delete retry.output_config;
+    return postJson(url, { headers, signal, body: retry });
+  }
+}
+
+// src/translation/providers/deepl.js
+var deepl_exports = {};
+__export(deepl_exports, {
+  defaults: () => defaults5,
+  id: () => id5,
+  keyHint: () => keyHint5,
+  label: () => label5,
+  models: () => models5,
+  translate: () => translate5
+});
+var id5 = "deepl";
+var label5 = "DeepL";
+var keyHint5 = "...:fx";
+var models5 = Object.freeze([]);
 var FREE_BASE = "https://api-free.deepl.com";
 var PRO_BASE = "https://api.deepl.com";
-var defaults3 = Object.freeze({ model: "", baseUrl: FREE_BASE });
+var defaults5 = Object.freeze({ model: "", baseUrl: FREE_BASE });
 var TARGET_LANG = {
   ko: "KO",
   en: "EN-US",
@@ -709,7 +813,7 @@ var TARGET_LANG = {
   ar: "AR",
   hi: "HI"
 };
-async function translate3({ text, settings, signal }) {
+async function translate5({ text, settings, signal }) {
   const apiKey = String(settings.apiKey || "").trim();
   if (!apiKey) throw configError(t("error.noApiKey"));
   const targetLang = TARGET_LANG[settings.targetLanguage];
@@ -717,7 +821,7 @@ async function translate3({ text, settings, signal }) {
     throw configError(
       t("error.unsupportedLanguage", {
         language: getLanguage(settings.targetLanguage).label,
-        provider: label3
+        provider: label5
       })
     );
   }
@@ -762,7 +866,9 @@ function restore(text) {
 var PROVIDERS = {
   [id]: deepseek_exports,
   [id2]: gemini_exports,
-  [id3]: deepl_exports
+  [id3]: openai_exports,
+  [id4]: claude_exports,
+  [id5]: deepl_exports
 };
 var DEFAULT_PROVIDER = id;
 function getProvider(providerId) {
@@ -777,8 +883,8 @@ function knownModels(providerId) {
   return getProvider(providerId).models ?? [];
 }
 function isCustomModel(providerId, model) {
-  const models4 = knownModels(providerId);
-  return models4.length > 0 && !models4.includes(String(model ?? "").trim());
+  const models6 = knownModels(providerId);
+  return models6.length > 0 && !models6.includes(String(model ?? "").trim());
 }
 
 // src/hotkey.js
@@ -855,8 +961,8 @@ var Hotkey = class {
   install() {
     if (typeof document === "undefined") return;
     this._apply(this._settings.current[this._field]);
-    this._unsubscribe = this._settings.onChange((id4, value) => {
-      if (id4 === this._field) this._apply(value);
+    this._unsubscribe = this._settings.onChange((id6, value) => {
+      if (id6 === this._field) this._apply(value);
     });
     document.addEventListener("keydown", this._onKeyDown, true);
   }
@@ -982,17 +1088,17 @@ function waitForMessageContent(signal) {
     resolve: findMessageContent
   });
 }
-function waitForLazyModule({ label: label4, signal, buildFilters, resolve, searchExports = false }) {
+function waitForLazyModule({ label: label6, signal, buildFilters, resolve, searchExports = false }) {
   const waitForModule = BdApi.Webpack?.waitForModule;
   if (typeof waitForModule !== "function") {
-    logger.warn(`BdApi.Webpack.waitForModule is unavailable; cannot wait for ${label4}`);
+    logger.warn(`BdApi.Webpack.waitForModule is unavailable; cannot wait for ${label6}`);
     return Promise.resolve(null);
   }
   let filters;
   try {
     filters = buildFilters();
   } catch (e) {
-    logger.warn(`could not build the ${label4} filters`, e);
+    logger.warn(`could not build the ${label6} filters`, e);
     return Promise.resolve(null);
   }
   const matches = (exports) => {
@@ -1008,14 +1114,14 @@ function waitForLazyModule({ label: label4, signal, buildFilters, resolve, searc
   try {
     pending = waitForModule.call(BdApi.Webpack, matches, { signal, searchExports });
   } catch (e) {
-    logger.warn(`waitForModule threw while waiting for ${label4}`, e);
+    logger.warn(`waitForModule threw while waiting for ${label6}`, e);
     return Promise.resolve(null);
   }
   if (!pending || typeof pending.then !== "function") return Promise.resolve(null);
   return pending.then(
     () => signal?.aborted ? null : resolve(),
     (e) => {
-      logger.warn(`waiting for ${label4} failed`, e);
+      logger.warn(`waiting for ${label6} failed`, e);
       return null;
     }
   );
@@ -1058,25 +1164,25 @@ var Settings = class {
     this._listeners.add(listener);
     return () => this._listeners.delete(listener);
   }
-  set(id4, value) {
-    if (id4 === CUSTOM_MODEL_FIELD) return this.set("model", value);
-    if (id4 === "model" && value === CUSTOM_MODEL) return this._openCustomModel();
-    const next = coerce(id4, value, this._values[id4]);
-    if (next === KEEP || same(next, this._values[id4])) return;
-    if (id4 === "provider") {
+  set(id6, value) {
+    if (id6 === CUSTOM_MODEL_FIELD) return this.set("model", value);
+    if (id6 === "model" && value === CUSTOM_MODEL) return this._openCustomModel();
+    const next = coerce(id6, value, this._values[id6]);
+    if (next === KEEP || same(next, this._values[id6])) return;
+    if (id6 === "provider") {
       this._stashProfile();
       this._values.provider = next;
       this._restoreProfile(next);
     } else {
-      this._values[id4] = next;
-      if (CREDENTIAL_FIELDS.has(id4)) this._stashProfile();
+      this._values[id6] = next;
+      if (CREDENTIAL_FIELDS.has(id6)) this._stashProfile();
     }
-    if (id4 === "guildIds") this._guildIdSet = parseGuildIds(next);
-    if (id4 === "uiLanguage") setLocale(next);
+    if (id6 === "guildIds") this._guildIdSet = parseGuildIds(next);
+    if (id6 === "uiLanguage") setLocale(next);
     this._persist();
     for (const listener of this._listeners) {
       try {
-        listener(id4, next);
+        listener(id6, next);
       } catch {
       }
     }
@@ -1093,11 +1199,11 @@ var Settings = class {
     this._values.profiles = { ...this._values.profiles, [provider]: { apiKey, model, baseUrl } };
   }
   _restoreProfile(providerId) {
-    const { defaults: defaults4 } = getProvider(providerId);
+    const { defaults: defaults6 } = getProvider(providerId);
     const saved = this._values.profiles?.[providerId] ?? {};
     this._values.apiKey = saved.apiKey || "";
-    this._values.model = saved.model || defaults4.model;
-    this._values.baseUrl = saved.baseUrl || defaults4.baseUrl;
+    this._values.model = saved.model || defaults6.model;
+    this._values.baseUrl = saved.baseUrl || defaults6.baseUrl;
   }
   _persist() {
     try {
@@ -1112,11 +1218,11 @@ var Settings = class {
       const [revision, bump] = React.useState(0);
       React.useEffect(() => {
         let custom = settings.usesCustomModel;
-        return settings.onChange((id4) => {
+        return settings.onChange((id6) => {
           const nowCustom = settings.usesCustomModel;
           const flipped = nowCustom !== custom;
           custom = nowCustom;
-          if (PANEL_REBUILD.has(id4) || id4 === "model" && flipped) bump((n) => n + 1);
+          if (PANEL_REBUILD.has(id6) || id6 === "model" && flipped) bump((n) => n + 1);
         });
       }, []);
       const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
@@ -1128,8 +1234,8 @@ var Settings = class {
     const v = this._values;
     return {
       onChange: (_categoryId, settingId, value) => this.set(settingId, value),
-      onDrawerToggle: (id4, shown) => DRAWERS.set(id4, shown),
-      getDrawerState: (id4, fallback) => DRAWERS.get(id4) ?? fallback,
+      onDrawerToggle: (id6, shown) => DRAWERS.set(id6, shown),
+      getDrawerState: (id6, fallback) => DRAWERS.get(id6) ?? fallback,
       settings: withChangeHandlers(this, [
         {
           type: "dropdown",
@@ -1347,8 +1453,8 @@ var Settings = class {
 };
 var CUSTOM_MODEL_FIELD = "customModel";
 function modelFields(v, custom) {
-  const models4 = knownModels(v.provider);
-  if (models4.length === 0) return [];
+  const models6 = knownModels(v.provider);
+  if (models6.length === 0) return [];
   const dropdown = {
     type: "dropdown",
     id: "model",
@@ -1356,7 +1462,7 @@ function modelFields(v, custom) {
     note: t(`modelHint.${v.provider}`),
     value: custom ? CUSTOM_MODEL : v.model,
     options: [
-      ...models4.map((model) => ({ label: model, value: model })),
+      ...models6.map((model) => ({ label: model, value: model })),
       { label: t("settings.model.custom"), value: CUSTOM_MODEL }
     ]
   };
@@ -1368,7 +1474,7 @@ function modelFields(v, custom) {
       id: CUSTOM_MODEL_FIELD,
       name: t("settings.customModel"),
       note: t("settings.customModel.note", { fallback: getProvider(v.provider).defaults.model }),
-      placeholder: models4[0],
+      placeholder: models6[0],
       value: v.model
     }
   ];
@@ -1407,10 +1513,10 @@ function normalize(values) {
   }
   return values;
 }
-function coerce(id4, value, previous) {
-  if (!TRIMMED_FIELDS.has(id4) || typeof value !== "string") return value;
+function coerce(id6, value, previous) {
+  if (!TRIMMED_FIELDS.has(id6) || typeof value !== "string") return value;
   const trimmed = value.trim();
-  if (id4 !== "apiKey") return trimmed;
+  if (id6 !== "apiKey") return trimmed;
   if (!trimmed) return previous ? KEEP : "";
   return trimmed === CLEAR_TOKEN ? "" : trimmed;
 }
@@ -1692,8 +1798,8 @@ var Translator = class {
     this._pausedUntil = 0;
     this._blocked = null;
     this._cache.load();
-    this._unsubscribe = this._settings.onChange?.((id4) => {
-      if (UNBLOCKING.has(id4)) this._blocked = null;
+    this._unsubscribe = this._settings.onChange?.((id6) => {
+      if (UNBLOCKING.has(id6)) this._blocked = null;
     }) ?? null;
   }
   stop() {
@@ -1935,18 +2041,22 @@ function isTransient(err) {
   if (err.status === void 0) return true;
   return err.status === 408 || err.status >= 500;
 }
+var BAD_KEY_400 = /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i;
+var NO_BALANCE_400 = /credit balance is too low/i;
 function isFatal(err) {
   if (!err) return false;
   if (err.name === "ConfigError") return true;
   if (err.status === 401 || err.status === 402 || err.status === 403) return true;
-  return err.status === 400 && /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i.test(String(err.body || ""));
+  return err.status === 400 && (BAD_KEY_400.test(String(err.body || "")) || NO_BALANCE_400.test(String(err.body || "")));
 }
 function describe(err) {
   if (!err) return "unknown";
+  if (err.status === 402 || err.status === 400 && NO_BALANCE_400.test(String(err.body || ""))) {
+    return t("error.noBalance");
+  }
   if (err.status === 401 || err.status === 403 || err.status === 400 && isFatal(err)) {
     return t("error.badKey");
   }
-  if (err.status === 402) return t("error.noBalance");
   return err.message || String(err);
 }
 function timeoutError() {
@@ -2056,11 +2166,11 @@ function renderSegments(segments, stores, guildId) {
 function renderToken(token, stores, guildId, key) {
   const emoji = CUSTOM_EMOJI.exec(token);
   if (emoji) {
-    const [, animated, name, id4] = emoji;
+    const [, animated, name, id6] = emoji;
     return React.createElement("img", {
       key,
       className: "mollu-translation__emoji",
-      src: `${EMOJI_CDN}/${id4}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
+      src: `${EMOJI_CDN}/${id6}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
       alt: `:${name}:`,
       title: `:${name}:`,
       draggable: false
@@ -2412,8 +2522,8 @@ function renderBody(status, result, ctx) {
 function useDisplaySettings(settings) {
   const [display, setDisplay] = React.useState(() => pickDisplay(settings));
   React.useEffect(() => {
-    const unsubscribe = settings.onChange((id4) => {
-      if (MIRRORED.has(id4)) setDisplay(pickDisplay(settings));
+    const unsubscribe = settings.onChange((id6) => {
+      if (MIRRORED.has(id6)) setDisplay(pickDisplay(settings));
     });
     return () => {
       unsubscribe();
@@ -2511,12 +2621,12 @@ var MessagePatch = class {
   }
   _trace(message, reason) {
     if (!this._settings.current.debugLog) return;
-    const id4 = message?.id ?? "?";
-    const key = `${id4}${reason}`;
+    const id6 = message?.id ?? "?";
+    const key = `${id6}${reason}`;
     if (this._traced.has(key)) return;
     if (this._traced.size >= TRACE_LIMIT) this._traced.clear();
     this._traced.add(key);
-    logger.info(`not translated · ${id4} · ${reason}`);
+    logger.info(`not translated · ${id6} · ${reason}`);
   }
 };
 function appendChild(ret, child) {
@@ -3023,9 +3133,9 @@ var Mollu = class {
     else if (status === "unavailable") this._toast(t("toast.updateUnavailable"), "warning");
     else this._toast(t("toast.updateFailed", { message: message || "unknown" }), "error");
   }
-  _toggle(id4, onKey, offKey) {
-    const next = !this._settings.current[id4];
-    this._settings.set(id4, next);
+  _toggle(id6, onKey, offKey) {
+    const next = !this._settings.current[id6];
+    this._settings.set(id6, next);
     const language = getLanguage(this._settings.current.outgoingLanguage).label;
     this._toast(t(next ? onKey : offKey, { language }), "info");
   }

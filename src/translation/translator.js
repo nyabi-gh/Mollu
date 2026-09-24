@@ -342,20 +342,29 @@ function isTransient(err) {
     return err.status === 408 || err.status >= 500;
 }
 
+// Gemini answers a bad key, and Anthropic an empty balance, with a plain 400.
+const BAD_KEY_400 = /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i;
+const NO_BALANCE_400 = /credit balance is too low/i;
+
 // Every request after one of these would be refused the same way, whatever the message.
 function isFatal(err) {
     if (!err) return false;
     if (err.name === "ConfigError") return true;
     if (err.status === 401 || err.status === 402 || err.status === 403) return true;
-    return err.status === 400 && /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i.test(String(err.body || ""));
+    return (
+        err.status === 400 &&
+        (BAD_KEY_400.test(String(err.body || "")) || NO_BALANCE_400.test(String(err.body || "")))
+    );
 }
 
 function describe(err) {
     if (!err) return "unknown";
+    if (err.status === 402 || (err.status === 400 && NO_BALANCE_400.test(String(err.body || "")))) {
+        return t("error.noBalance");
+    }
     if (err.status === 401 || err.status === 403 || (err.status === 400 && isFatal(err))) {
         return t("error.badKey");
     }
-    if (err.status === 402) return t("error.noBalance");
     return err.message || String(err);
 }
 

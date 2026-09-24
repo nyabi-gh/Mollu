@@ -35,15 +35,17 @@ BetterDiscord는 1.14.0 이상이 필요합니다.
 
 ## 처음 설정
 
-번역은 외부 번역 서비스를 쓰기 때문에 **API 키를 발급받아 넣어야** 합니다. 세 곳 중에 고르면 됩니다.
+번역은 외부 번역 서비스를 쓰기 때문에 **API 키를 발급받아 넣어야** 합니다. 다섯 곳 중에 고르면 됩니다.
 
 | 서비스 | 요금 | 발급처 |
 | --- | --- | --- |
 | **DeepL** | 매달 50만 자까지 무료 | [deepl.com/pro-api](https://www.deepl.com/pro-api) |
 | **Google Gemini** | 무료 사용량 있음 | [aistudio.google.com](https://aistudio.google.com) |
 | **DeepSeek** | 유료지만 매우 저렴 | [platform.deepseek.com](https://platform.deepseek.com) |
+| **OpenAI** | 유료. 기본 모델 `gpt-6-luna` 는 매우 저렴 | [platform.openai.com](https://platform.openai.com) |
+| **Anthropic Claude** | 유료. 기본 모델은 `claude-haiku-4-5` | [platform.claude.com](https://platform.claude.com) |
 
-무료로 시작한다면 **DeepL** 이 가장 간단합니다. 번역 전용 서비스라 빠르고, 모델 같은 걸 고를 필요가 없습니다. 다만 번역 품질은 DeepSeek·Gemini 쪽이 낫습니다.
+무료로 시작한다면 **DeepL** 이 가장 간단합니다. 번역 전용 서비스라 빠르고, 모델 같은 걸 고를 필요가 없습니다. 다만 말투와 속어까지 자연스럽게 옮기는 건 DeepSeek·Gemini·OpenAI·Claude 쪽이 낫습니다. Gemini 는 3.1 이후 모델만 지원합니다.
 
 API키를 받았으면 플러그인 설정에서:
 

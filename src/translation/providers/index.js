@@ -1,10 +1,14 @@
 import * as deepseek from "./deepseek.js";
 import * as gemini from "./gemini.js";
+import * as openai from "./openai.js";
+import * as claude from "./claude.js";
 import * as deepl from "./deepl.js";
 
 export const PROVIDERS = {
     [deepseek.id]: deepseek,
     [gemini.id]: gemini,
+    [openai.id]: openai,
+    [claude.id]: claude,
     [deepl.id]: deepl,
 };
 
