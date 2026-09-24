@@ -269,6 +269,8 @@ const STRINGS = {
 
 export const UI_LANGUAGES = ["en", "ko"];
 
+export const UI_LANGUAGE_NAMES = { en: "English", ko: "한국어" };
+
 // A missing key is not a runtime error -- t() quietly serves the English one -- so only a
 // check with the tables in hand can catch the drift.
 export function stringKeys(locale) {

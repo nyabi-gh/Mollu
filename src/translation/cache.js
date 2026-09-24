@@ -69,8 +69,14 @@ export class TranslationCache {
         return this._map.has(key);
     }
 
+    // Reading an entry moves it to the back, so trimming drops what has gone unused longest.
     get(key) {
-        return this._map.get(key);
+        const value = this._map.get(key);
+        if (value !== undefined || this._map.has(key)) {
+            this._map.delete(key);
+            this._map.set(key, value);
+        }
+        return value;
     }
 
     set(key, value) {

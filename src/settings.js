@@ -7,7 +7,7 @@ import {
     PROVIDER_OPTIONS,
 } from "./translation/providers/index.js";
 import { LANGUAGE_OPTIONS } from "./languages.js";
-import { setLocale, t, UI_LANGUAGES } from "./i18n.js";
+import { setLocale, t, UI_LANGUAGES, UI_LANGUAGE_NAMES } from "./i18n.js";
 import { keysFromString } from "./hotkey.js";
 import { React } from "./discord.js";
 import { logger } from "./lib/logger.js";
@@ -191,7 +191,10 @@ export class Settings {
                     value: v.uiLanguage,
                     options: [
                         { label: t("language.auto"), value: "auto" },
-                        ...UI_LANGUAGES.map((code) => ({ label: code.toUpperCase(), value: code })),
+                        ...UI_LANGUAGES.map((code) => ({
+                            label: UI_LANGUAGE_NAMES[code] ?? code,
+                            value: code,
+                        })),
                     ],
                 },
                 {

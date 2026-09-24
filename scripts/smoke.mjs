@@ -1916,6 +1916,20 @@ check("hotkey: a Hangul input source or Option still reaches the letter on the k
     assert.ok(!matchesHotkey(combo, event({ key: "ㅛ", code: "KeyY" })));
 });
 
+check("cache: a translation that keeps being read outlives newer ones", () => {
+    const saved = captureSave(() => {
+        const cache = new TranslationCache();
+        cache.set("k0", "v0");
+        for (let i = 1; i < CACHE_LIMIT + 5; i += 1) {
+            cache.set(`k${i}`, `v${i}`);
+            if (i === CACHE_LIMIT) cache.get("k0");
+        }
+        cache.save();
+    });
+    assert.ok(saved.some(([key]) => key === "k0"));
+    assert.ok(!saved.some(([key]) => key === "k1"));
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
