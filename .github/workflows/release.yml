@@ -1,6 +1,7 @@
 name: Release
 
 # Push a tag named after meta.json's version (v1.3.0) to publish the plugin with its signature.
+# Release notes come from docs/releases/<tag>.md when that file exists.
 on:
   push:
     tags: ["v*"]
@@ -36,7 +37,7 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release create "$GITHUB_REF_NAME"
-          dist/Mollu.plugin.js dist/Mollu.plugin.js.sig
-          --title "$GITHUB_REF_NAME" --generate-notes
+        run: |
+          notes="docs/releases/$GITHUB_REF_NAME.md"
+          if [ -f "$notes" ]; then set -- --notes-file "$notes"; else set -- --generate-notes; fi
+          gh release create "$GITHUB_REF_NAME" dist/Mollu.plugin.js dist/Mollu.plugin.js.sig --title "$GITHUB_REF_NAME" "$@"
