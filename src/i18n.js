@@ -24,6 +24,13 @@ const STRINGS = {
         "toast.upToDate": "Already up to date (v{version})",
         "toast.updateUnavailable": "No release to update from. Check the plugin's source repository.",
         "toast.updateFailed": "Could not check for updates · {message}",
+        "toast.updateUnsigned": "v{version} is out but carries no signature, so it was not installed",
+        "toast.updateBadSignature":
+            "v{version} failed its signature check and was not installed. Download it only from the official repository.",
+        "update.title": "Mollu v{version} is available",
+        "update.body": "Installed: v{current}. The signature checks out. What changed: {notes}",
+        "update.confirm": "Install",
+        "update.cancel": "Later",
 
         "error.noApiKey": "No API key configured",
         "error.emptyResponse": "Empty response",
@@ -116,9 +123,9 @@ const STRINGS = {
         "settings.section.outgoing": "Messages I send",
         "settings.section.display": "Display",
         "settings.section.advanced": "Advanced",
-        "settings.autoUpdate": "Update automatically",
+        "settings.autoUpdate": "Check for updates automatically",
         "settings.autoUpdate.note":
-            "Checks the repository in the plugin's metadata every few hours and installs a newer build. BetterDiscord reloads the plugin on its own once the file is replaced.",
+            "Checks the plugin's repository every few hours. A new version is installed only if its signature checks out, and only after you agree to it.",
         "settings.checkUpdate": "Updates",
         "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
         "settings.checkUpdate.action": "Check",
@@ -177,6 +184,13 @@ const STRINGS = {
         "toast.upToDate": "이미 최신 버전입니다 (v{version})",
         "toast.updateUnavailable": "업데이트를 받을 릴리즈가 없습니다. 플러그인의 소스 저장소를 확인하세요.",
         "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
+        "toast.updateUnsigned": "v{version} 이 나왔지만 서명이 없어 설치하지 않았습니다",
+        "toast.updateBadSignature":
+            "v{version} 의 서명이 맞지 않아 설치하지 않았습니다. 공식 저장소에서만 받으세요.",
+        "update.title": "Mollu v{version} 이 나왔습니다",
+        "update.body": "지금 버전: v{current}. 서명을 확인했습니다. 변경 내역: {notes}",
+        "update.confirm": "설치",
+        "update.cancel": "나중에",
 
         "error.noApiKey": "API 키가 설정되지 않았습니다",
         "error.emptyResponse": "빈 응답",
@@ -268,9 +282,9 @@ const STRINGS = {
         "settings.section.outgoing": "보내는 메시지",
         "settings.section.display": "표시",
         "settings.section.advanced": "고급",
-        "settings.autoUpdate": "자동 업데이트",
+        "settings.autoUpdate": "업데이트 자동 확인",
         "settings.autoUpdate.note":
-            "플러그인 정보에 적힌 저장소를 몇 시간마다 확인해 더 새로운 빌드를 설치합니다. 파일이 바뀌면 BetterDiscord 가 알아서 다시 불러옵니다.",
+            "몇 시간마다 플러그인 저장소를 확인합니다. 새 버전은 서명이 맞을 때만, 설치할지 물어본 뒤에 설치합니다.",
         "settings.checkUpdate": "업데이트",
         "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
         "settings.checkUpdate.action": "확인",

@@ -1,6 +1,7 @@
 import { NAME } from "./constants.js";
 import { getText } from "./lib/net.js";
 import { logger } from "./lib/logger.js";
+import { UPDATE_PUBLIC_KEY } from "./update-key.js";
 
 const GITHUB_HOST = "https://github.com";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -31,14 +32,56 @@ export function isNewer(remote, current) {
     return false;
 }
 
+// A plugin runs with Node's reach, so a release is installed only when it carries a signature
+// made with the key whose public half ships in this build. A hijacked account or release page
+// cannot produce one.
+export async function verifySignature(text, signature, publicKey = UPDATE_PUBLIC_KEY) {
+    const subtle = globalThis.crypto?.subtle;
+    if (!subtle || !publicKey || typeof signature !== "string") return false;
+    try {
+        const key = await subtle.importKey(
+            "spki",
+            fromBase64(publicKey),
+            { name: "ECDSA", namedCurve: "P-256" },
+            false,
+            ["verify"],
+        );
+        return await subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" },
+            key,
+            fromBase64(signature.trim()),
+            new TextEncoder().encode(text),
+        );
+    } catch (e) {
+        logger.warn("could not check the update signature", e);
+        return false;
+    }
+}
+
 export class Updater {
-    constructor({ meta, settings, interval, delay, onResult }) {
+    constructor({
+        meta,
+        settings,
+        interval,
+        delay,
+        onResult,
+        confirm,
+        publicKey = UPDATE_PUBLIC_KEY,
+        write = writePlugin,
+    }) {
         this._meta = meta;
         this._settings = settings;
         this._interval = interval;
         this._delay = delay;
         this._onResult = onResult || (() => {});
+        this._confirm = confirm || (() => false);
+        this._publicKey = publicKey;
+        this._write = write;
         this._timers = [];
+        this._running = null;
+        // Versions already offered or warned about, so a background check every few hours
+        // does not ask again about something the user already saw.
+        this._seen = new Set();
     }
 
     start() {
@@ -54,7 +97,16 @@ export class Updater {
         this._timers = [];
     }
 
-    async check({ announce = false } = {}) {
+    check({ announce = false } = {}) {
+        if (!this._running) {
+            this._running = this._check(announce).finally(() => {
+                this._running = null;
+            });
+        }
+        return this._running;
+    }
+
+    async _check(announce) {
         const url = downloadUrlFor(this._meta?.source);
         if (!url) {
             logger.warn(`no update url; meta.source is not a github repository: ${this._meta?.source}`);
@@ -67,7 +119,6 @@ export class Updater {
             text = await getText(url);
         } catch (e) {
             logger.warn("update check failed:", (e && e.message) || e);
-
             if (e && e.status === 404) {
                 if (announce) this._onResult({ status: "unavailable" });
                 return null;
@@ -89,8 +140,33 @@ export class Updater {
             return null;
         }
 
+        const firstTime = !this._seen.has(version);
+        if (!announce && !firstTime) return null;
+        this._seen.add(version);
+
+        let signature = null;
         try {
-            writePlugin(text);
+            signature = await getText(`${url}.sig`);
+        } catch (e) {
+            logger.warn(`v${version} has no signature:`, (e && e.message) || e);
+        }
+        if (signature == null) {
+            this._onResult({ status: "unsigned", version });
+            return null;
+        }
+        if (!(await verifySignature(text, signature, this._publicKey))) {
+            logger.error(`v${version} failed its signature check; not installing it`);
+            this._onResult({ status: "badSignature", version });
+            return null;
+        }
+
+        if (!(await this._confirm({ version, current }))) {
+            logger.info(`v${version} is verified; the user chose not to install it now`);
+            return null;
+        }
+
+        try {
+            this._write(text);
         } catch (e) {
             logger.error("could not write the plugin file", e);
             this._onResult({ status: "failed", message: (e && e.message) || "unknown" });
@@ -110,6 +186,10 @@ export class Updater {
     _tick() {
         if (this._settings.current.autoUpdate) this.check();
     }
+}
+
+function fromBase64(value) {
+    return Uint8Array.from(atob(value), (ch) => ch.charCodeAt(0));
 }
 
 function writePlugin(text) {

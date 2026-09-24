@@ -1,0 +1,42 @@
+name: Release
+
+# Push a tag named after meta.json's version (v1.3.0) to publish the plugin with its signature.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - name: Committed plugin matches the source
+        run: git diff --exit-code -- dist/
+      - name: Tag and versions agree
+        run: |
+          meta=$(node -p "require('./meta.json').version")
+          pkg=$(node -p "require('./package.json').version")
+          test "v$meta" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match meta.json $meta"; exit 1; }
+          test "$meta" = "$pkg" || { echo "meta.json $meta and package.json $pkg differ"; exit 1; }
+      - name: Sign
+        env:
+          MOLLU_SIGNING_KEY: ${{ secrets.MOLLU_SIGNING_KEY }}
+        run: npm run sign
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME"
+          dist/Mollu.plugin.js dist/Mollu.plugin.js.sig
+          --title "$GITHUB_REF_NAME" --generate-notes

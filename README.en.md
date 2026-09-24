@@ -15,7 +15,7 @@ It works in both directions — into your language, or out of it.
 - Translations are remembered, so repeating the same sentence costs nothing extra.
 - **Your own outgoing messages** can be translated too — type in Korean, send in English. Off by default.
 - The things you turn on and off often have keyboard shortcuts.
-- New versions install themselves from inside Discord.
+- When a new version is out, its signature is checked and Discord asks whether to install it.
 
 ## Installing
 
@@ -119,7 +119,7 @@ The settings come in six sections. **Advanced** starts folded.
 | --- | --- |
 | API base URL | Filled in when you pick a service. You will rarely touch it |
 | Concurrent requests | How many translations to run at once. Lower it to 1–2 if you keep hitting a free-tier limit |
-| Update automatically | Installs a new version when one appears. Checks every few hours |
+| Check for updates automatically | Looks for a new version every few hours. Only a version carrying the publisher's signature is offered, and it installs only when you agree |
 | Updates | `Check` looks right now |
 | Translation cache | `Clear` deletes every saved translation. Use it when a translation is wrong or you switched services |
 | Log why a message was skipped | Records the reason a message was not translated. For when nothing shows up and you cannot tell why |
@@ -144,3 +144,11 @@ The settings come in six sections. **Advanced** starts folded.
   - macOS: `~/Library/Application Support/BetterDiscord/plugins/Mollu.config.json`
   - Linux: `~/.config/BetterDiscord/plugins/Mollu.config.json`
 - To erase everything, disable the plugin and delete that file.
+
+## Releasing (maintainers)
+
+Automatic updates install only signed releases.
+
+1. Once, run `npm run keygen`. The private key goes to `~/.config/mollu/update-signing-key.pem` and the public key into `src/update-key.js`. Back the private key up somewhere safe: without it, builds that carry this public key cannot install any later version.
+2. Store the private key as a repository secret: `gh secret set MOLLU_SIGNING_KEY < ~/.config/mollu/update-signing-key.pem`
+3. Bump the version in `meta.json` and `package.json`, commit the built `dist/`, and push a matching tag (`v1.3.0`). The workflow checks, signs and publishes the release.

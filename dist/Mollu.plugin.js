@@ -135,6 +135,12 @@ var STRINGS = {
     "toast.upToDate": "Already up to date (v{version})",
     "toast.updateUnavailable": "No release to update from. Check the plugin's source repository.",
     "toast.updateFailed": "Could not check for updates · {message}",
+    "toast.updateUnsigned": "v{version} is out but carries no signature, so it was not installed",
+    "toast.updateBadSignature": "v{version} failed its signature check and was not installed. Download it only from the official repository.",
+    "update.title": "Mollu v{version} is available",
+    "update.body": "Installed: v{current}. The signature checks out. What changed: {notes}",
+    "update.confirm": "Install",
+    "update.cancel": "Later",
     "error.noApiKey": "No API key configured",
     "error.emptyResponse": "Empty response",
     "error.reasoningOnly": "Response was cut off while the model was still reasoning",
@@ -210,8 +216,8 @@ var STRINGS = {
     "settings.section.outgoing": "Messages I send",
     "settings.section.display": "Display",
     "settings.section.advanced": "Advanced",
-    "settings.autoUpdate": "Update automatically",
-    "settings.autoUpdate.note": "Checks the repository in the plugin's metadata every few hours and installs a newer build. BetterDiscord reloads the plugin on its own once the file is replaced.",
+    "settings.autoUpdate": "Check for updates automatically",
+    "settings.autoUpdate.note": "Checks the plugin's repository every few hours. A new version is installed only if its signature checks out, and only after you agree to it.",
     "settings.checkUpdate": "Updates",
     "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
     "settings.checkUpdate.action": "Check",
@@ -260,6 +266,12 @@ var STRINGS = {
     "toast.upToDate": "이미 최신 버전입니다 (v{version})",
     "toast.updateUnavailable": "업데이트를 받을 릴리즈가 없습니다. 플러그인의 소스 저장소를 확인하세요.",
     "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
+    "toast.updateUnsigned": "v{version} 이 나왔지만 서명이 없어 설치하지 않았습니다",
+    "toast.updateBadSignature": "v{version} 의 서명이 맞지 않아 설치하지 않았습니다. 공식 저장소에서만 받으세요.",
+    "update.title": "Mollu v{version} 이 나왔습니다",
+    "update.body": "지금 버전: v{current}. 서명을 확인했습니다. 변경 내역: {notes}",
+    "update.confirm": "설치",
+    "update.cancel": "나중에",
     "error.noApiKey": "API 키가 설정되지 않았습니다",
     "error.emptyResponse": "빈 응답",
     "error.reasoningOnly": "모델이 추론하는 도중에 응답이 잘렸습니다",
@@ -335,8 +347,8 @@ var STRINGS = {
     "settings.section.outgoing": "보내는 메시지",
     "settings.section.display": "표시",
     "settings.section.advanced": "고급",
-    "settings.autoUpdate": "자동 업데이트",
-    "settings.autoUpdate.note": "플러그인 정보에 적힌 저장소를 몇 시간마다 확인해 더 새로운 빌드를 설치합니다. 파일이 바뀌면 BetterDiscord 가 알아서 다시 불러옵니다.",
+    "settings.autoUpdate": "업데이트 자동 확인",
+    "settings.autoUpdate.note": "몇 시간마다 플러그인 저장소를 확인합니다. 새 버전은 서명이 맞을 때만, 설치할지 물어본 뒤에 설치합니다.",
     "settings.checkUpdate": "업데이트",
     "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
     "settings.checkUpdate.action": "확인",
@@ -3077,6 +3089,9 @@ var OutgoingPatch = class {
   }
 };
 
+// src/update-key.js
+var UPDATE_PUBLIC_KEY = "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEMgO1qbsTM4gt1c2NVOY3WrZpToLrIeHAzud3zNHfbPyvK1sh9VAAQn+EODVdwpx2wBATMorvNfzq8jieCCjGzA==";
+
 // src/updater.js
 var GITHUB_HOST = "https://github.com";
 var MAX_BYTES = 5 * 1024 * 1024;
@@ -3100,15 +3115,51 @@ function isNewer(remote, current) {
   }
   return false;
 }
+async function verifySignature(text, signature, publicKey = UPDATE_PUBLIC_KEY) {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle || !publicKey || typeof signature !== "string") return false;
+  try {
+    const key = await subtle.importKey(
+      "spki",
+      fromBase64(publicKey),
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"]
+    );
+    return await subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      fromBase64(signature.trim()),
+      new TextEncoder().encode(text)
+    );
+  } catch (e) {
+    logger.warn("could not check the update signature", e);
+    return false;
+  }
+}
 var Updater = class {
-  constructor({ meta, settings, interval, delay, onResult }) {
+  constructor({
+    meta,
+    settings,
+    interval,
+    delay,
+    onResult,
+    confirm,
+    publicKey = UPDATE_PUBLIC_KEY,
+    write = writePlugin
+  }) {
     this._meta = meta;
     this._settings = settings;
     this._interval = interval;
     this._delay = delay;
     this._onResult = onResult || (() => {
     });
+    this._confirm = confirm || (() => false);
+    this._publicKey = publicKey;
+    this._write = write;
     this._timers = [];
+    this._running = null;
+    this._seen = /* @__PURE__ */ new Set();
   }
   start() {
     this._schedule(setTimeout(() => this._tick(), this._delay));
@@ -3121,7 +3172,15 @@ var Updater = class {
     }
     this._timers = [];
   }
-  async check({ announce = false } = {}) {
+  check({ announce = false } = {}) {
+    if (!this._running) {
+      this._running = this._check(announce).finally(() => {
+        this._running = null;
+      });
+    }
+    return this._running;
+  }
+  async _check(announce) {
     const url = downloadUrlFor(this._meta?.source);
     if (!url) {
       logger.warn(`no update url; meta.source is not a github repository: ${this._meta?.source}`);
@@ -3151,8 +3210,30 @@ var Updater = class {
       if (announce) this._onResult({ status: "current", version: current });
       return null;
     }
+    const firstTime = !this._seen.has(version);
+    if (!announce && !firstTime) return null;
+    this._seen.add(version);
+    let signature = null;
     try {
-      writePlugin(text);
+      signature = await getText(`${url}.sig`);
+    } catch (e) {
+      logger.warn(`v${version} has no signature:`, e && e.message || e);
+    }
+    if (signature == null) {
+      this._onResult({ status: "unsigned", version });
+      return null;
+    }
+    if (!await verifySignature(text, signature, this._publicKey)) {
+      logger.error(`v${version} failed its signature check; not installing it`);
+      this._onResult({ status: "badSignature", version });
+      return null;
+    }
+    if (!await this._confirm({ version, current })) {
+      logger.info(`v${version} is verified; the user chose not to install it now`);
+      return null;
+    }
+    try {
+      this._write(text);
     } catch (e) {
       logger.error("could not write the plugin file", e);
       this._onResult({ status: "failed", message: e && e.message || "unknown" });
@@ -3170,6 +3251,9 @@ var Updater = class {
     if (this._settings.current.autoUpdate) this.check();
   }
 };
+function fromBase64(value) {
+  return Uint8Array.from(atob(value), (ch) => ch.charCodeAt(0));
+}
 function writePlugin(text) {
   const fs = require("fs");
   const path = require("path");
@@ -3437,7 +3521,8 @@ var Mollu = class {
       settings: this._settings,
       interval: UPDATE_CHECK_INTERVAL_MS,
       delay: UPDATE_CHECK_DELAY_MS,
-      onResult: (result) => this._reportUpdate(result)
+      onResult: (result) => this._reportUpdate(result),
+      confirm: (offer) => this._confirmUpdate(offer)
     });
     this._menus = new ContextMenus({ settings: this._settings });
     this._lastErrorToast = 0;
@@ -3579,8 +3664,39 @@ var Mollu = class {
       clear();
     }
   }
+  // Resolves false for any way out of the dialog other than Install, so a dismissed dialog never
+  // leaves the updater waiting.
+  _confirmUpdate({ version, current }) {
+    return new Promise((resolve) => {
+      let settled = false;
+      const answer = (value) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      const notes = `${String(this._meta?.source ?? "").replace(/\/+$/, "")}/releases/latest`;
+      try {
+        BdApi.UI.showConfirmationModal(
+          t("update.title", { version }),
+          t("update.body", { current, notes }),
+          {
+            confirmText: t("update.confirm"),
+            cancelText: t("update.cancel"),
+            onConfirm: () => answer(true),
+            onCancel: () => answer(false),
+            onClose: () => answer(false)
+          }
+        );
+      } catch (e) {
+        logger.warn("confirmation modal unavailable; not installing", e);
+        answer(false);
+      }
+    });
+  }
   _reportUpdate({ status, version, message }) {
-    if (status === "updated") this._toast(t("toast.updated", { version }), "success");
+    if (status === "unsigned") this._toast(t("toast.updateUnsigned", { version }), "warning");
+    else if (status === "badSignature") this._toast(t("toast.updateBadSignature", { version }), "error");
+    else if (status === "updated") this._toast(t("toast.updated", { version }), "success");
     else if (status === "current") this._toast(t("toast.upToDate", { version }), "info");
     else if (status === "unavailable") this._toast(t("toast.updateUnavailable"), "warning");
     else this._toast(t("toast.updateFailed", { message: message || "unknown" }), "error");

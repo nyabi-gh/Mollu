@@ -12,7 +12,9 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "pretest": "npm run build",
-        "test": "node scripts/smoke.mjs"
+        "test": "node scripts/smoke.mjs",
+        "keygen": "node scripts/keygen.mjs",
+        "sign": "node scripts/sign.mjs"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

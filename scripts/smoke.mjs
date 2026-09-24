@@ -1342,7 +1342,7 @@ check("hotkey: only the exact combo fires, and never mid-composition", () => {
     assert.ok(!matchesHotkey(null, event()));
 });
 
-const { downloadUrlFor, readVersion, isNewer, Updater } = await import("../src/updater.js");
+const { downloadUrlFor, readVersion, isNewer, Updater, verifySignature } = await import("../src/updater.js");
 
 check("updater: the download url is the latest release asset, from meta.source and nowhere else", () => {
     assert.equal(
@@ -2184,6 +2184,84 @@ check("settings: every field sits in a section, and only the advanced one starts
     const connection = sections[0].settings.map((entry) => entry.id);
     assert.deepEqual(connection, ["provider", "apiKey", "model", "testConnection"]);
 });
+
+await checkAsync(
+    "updater: only a release signed with the shipped key is offered, and only installed on yes",
+    async () => {
+        const { generateKeyPairSync, sign } = await import("node:crypto");
+        const { privateKey, publicKey } = generateKeyPairSync("ec", { namedCurve: "prime256v1" });
+        const spki = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+        const signed = (text) =>
+            sign("sha256", Buffer.from(text), { key: privateKey, dsaEncoding: "ieee-p1363" }).toString(
+                "base64",
+            );
+
+        const release = "/**\n * @name Mollu\n * @version 1.3.0\n */\nvar x = 1; // 번역\n";
+        assert.equal(
+            await verifySignature(release, signed(release), spki),
+            true,
+            "Node's signature verifies in WebCrypto",
+        );
+        assert.equal(await verifySignature(release + " ", signed(release), spki), false);
+        assert.equal(await verifySignature(release, signed(release), ""), false, "no key, no install");
+
+        let served = { text: release, sig: signed(release) };
+        const previous = BdApi.Net.fetch;
+        BdApi.Net.fetch = async (url) => {
+            const body = url.endsWith(".sig") ? served.sig : served.text;
+            return body == null
+                ? new Response("Not Found", { status: 404 })
+                : new Response(body, { status: 200 });
+        };
+        const make = (answer) => {
+            const log = { results: [], asked: 0, written: [] };
+            const updater = new Updater({
+                meta: { source: "https://github.com/nyabi-gh/Mollu", version: "1.2.0" },
+                settings: { current: { autoUpdate: true } },
+                onResult: (result) => log.results.push(result),
+                confirm: async (offer) => {
+                    log.asked += 1;
+                    assert.deepEqual(offer, { version: "1.3.0", current: "1.2.0" });
+                    return answer;
+                },
+                publicKey: spki,
+                write: (text) => log.written.push(text),
+            });
+            return { updater, log };
+        };
+        try {
+            let { updater, log } = make(true);
+            assert.equal(await updater.check(), "1.3.0");
+            assert.deepEqual(log.written, [release]);
+            assert.deepEqual(log.results, [{ status: "updated", version: "1.3.0" }]);
+
+            ({ updater, log } = make(false));
+            const [first, second] = [updater.check(), updater.check()];
+            assert.equal(first, second, "overlapping checks share one run");
+            assert.equal(await first, null);
+            assert.equal(log.asked, 1);
+            await updater.check();
+            assert.equal(log.asked, 1, "a background check does not ask again about the same version");
+            await updater.check({ announce: true });
+            assert.equal(log.asked, 2, "checking by hand offers it again");
+            assert.deepEqual(log.written, []);
+
+            ({ updater, log } = make(true));
+            served = { text: release, sig: signed(release.replace("번역", "악성")) };
+            await updater.check();
+            assert.deepEqual(log.results, [{ status: "badSignature", version: "1.3.0" }]);
+            assert.equal(log.asked, 0);
+
+            ({ updater, log } = make(true));
+            served = { text: release, sig: null };
+            await updater.check();
+            assert.deepEqual(log.results, [{ status: "unsigned", version: "1.3.0" }]);
+            assert.deepEqual(log.written, []);
+        } finally {
+            BdApi.Net.fetch = previous;
+        }
+    },
+);
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);

@@ -58,6 +58,7 @@ export default class Mollu {
             interval: UPDATE_CHECK_INTERVAL_MS,
             delay: UPDATE_CHECK_DELAY_MS,
             onResult: (result) => this._reportUpdate(result),
+            confirm: (offer) => this._confirmUpdate(offer),
         });
         this._menus = new ContextMenus({ settings: this._settings });
         this._lastErrorToast = 0;
@@ -225,8 +226,40 @@ export default class Mollu {
         }
     }
 
+    // Resolves false for any way out of the dialog other than Install, so a dismissed dialog never
+    // leaves the updater waiting.
+    _confirmUpdate({ version, current }) {
+        return new Promise((resolve) => {
+            let settled = false;
+            const answer = (value) => {
+                if (settled) return;
+                settled = true;
+                resolve(value);
+            };
+            const notes = `${String(this._meta?.source ?? "").replace(/\/+$/, "")}/releases/latest`;
+            try {
+                BdApi.UI.showConfirmationModal(
+                    t("update.title", { version }),
+                    t("update.body", { current, notes }),
+                    {
+                        confirmText: t("update.confirm"),
+                        cancelText: t("update.cancel"),
+                        onConfirm: () => answer(true),
+                        onCancel: () => answer(false),
+                        onClose: () => answer(false),
+                    },
+                );
+            } catch (e) {
+                logger.warn("confirmation modal unavailable; not installing", e);
+                answer(false);
+            }
+        });
+    }
+
     _reportUpdate({ status, version, message }) {
-        if (status === "updated") this._toast(t("toast.updated", { version }), "success");
+        if (status === "unsigned") this._toast(t("toast.updateUnsigned", { version }), "warning");
+        else if (status === "badSignature") this._toast(t("toast.updateBadSignature", { version }), "error");
+        else if (status === "updated") this._toast(t("toast.updated", { version }), "success");
         else if (status === "current") this._toast(t("toast.upToDate", { version }), "info");
         else if (status === "unavailable") this._toast(t("toast.updateUnavailable"), "warning");
         else this._toast(t("toast.updateFailed", { message: message || "unknown" }), "error");
