@@ -68,33 +68,57 @@ Click the field in settings and press the keys you want. Clear it to use no shor
 
 ## Settings
 
+The settings come in six sections. **Advanced** starts folded.
+
+**Translation service**
+
 | Setting | What it means |
 | --- | --- |
 | Translation backend | Which service to use. Switching fills in the rest, and each service's key is remembered separately |
-| API key | Required — nothing happens without it. Once saved only the last 4 characters are shown; type `-` to erase it |
-| Translate in every server | Every server you are in becomes a target. Direct messages have their own switch |
-| Target server ids | The servers to translate. The right-click switch fills this in; ids can also be typed, separated by commas or spaces |
-| Channels left untranslated | Channels skipped inside the target servers, switched from a channel's right-click menu |
-| Translate direct messages | Translates one-to-one and group DMs, whatever the two settings above say. Off by default |
-| Translate into | The language to translate messages into |
-| Plugin language | The language of the settings panel and the plugin's own messages |
-| Treat as already translated above | Skip a message when this share of it is already in the target language |
-| Maximum characters to translate | Longer messages are skipped, which keeps a wall of text from costing a lot at once |
-| Concurrent requests | How many translations to run at once. Lower it to 1–2 if you keep hitting a free-tier limit |
-| Automatic translation | Off is manual mode: only messages whose `Translate` button you press are sent |
-| Translate the messages I send | **Replaces what you type with its translation** before sending. Other people never see the original |
-| Send my messages in | The language your own messages are translated into |
-| Translate bot messages / Translate my own messages | What to include |
-| Show while translating | Shows `Translating…` under a message while it is being translated |
-| Pop up a notice when a translation fails | A toast for every failure. The failure line under the message is always shown; a refused key or empty balance is always announced |
+| API key | Required: nothing happens without it. Once saved only the last 4 characters are shown; type `-` to erase it |
+| Model | Which model translates. Pick `Type a name in…` for one the list does not carry, and write its id as the service documents it. DeepL has no model to choose |
+| Connection | `Test` translates a short sample with the key and model above |
 
-**Advanced**:
+**Where to translate**
 
 | Setting | What it means |
 | --- | --- |
-| Model | Which model translates. Pick `Type a name in…` for one the list does not carry. DeepL has no model to choose |
-| Model name | Appears once `Type a name in…` is picked. Write the model id exactly as the service documents it, and a model released after this plugin was built works right away |
+| Translate in every server | Every server you are in becomes a target. Direct messages have their own switch |
+| Target server ids | The servers to translate. The right-click switch fills this in; ids can also be typed, separated by commas or spaces |
+| Channels left untranslated | Channels skipped inside the target servers, switched from a channel's right-click menu |
+| Translate direct messages | Translates one-to-one and group DMs, whatever the settings above say. Off by default |
+
+**Messages I receive**
+
+| Setting | What it means |
+| --- | --- |
+| Translate into | The language to translate messages into |
+| Automatic translation | Off is manual mode: only messages whose `Translate` button you press are sent |
+| Treat as already translated above | Skip a message when this share of it is already in the target language |
+| Maximum characters to translate | Longer messages are skipped, which keeps a wall of text from costing a lot at once |
+| Translate bot messages / Translate my own messages | What to include |
+
+**Messages I send**
+
+| Setting | What it means |
+| --- | --- |
+| Translate the messages I send | **Replaces what you type with its translation** before sending. Other people never see the original |
+| Send my messages in | The language your own messages are translated into |
+
+**Display**
+
+| Setting | What it means |
+| --- | --- |
+| Show while translating | Shows `Translating…` under a message while it is being translated |
+| Pop up a notice when a translation fails | A toast for every failure. The failure line under the message is always shown; a refused key or empty balance is always announced |
+| Plugin language | The language of the settings panel and the plugin's own messages |
+
+**Advanced**
+
+| Setting | What it means |
+| --- | --- |
 | API base URL | Filled in when you pick a service. You will rarely touch it |
+| Concurrent requests | How many translations to run at once. Lower it to 1–2 if you keep hitting a free-tier limit |
 | Update automatically | Installs a new version when one appears. Checks every few hours |
 | Updates | `Check` looks right now |
 | Translation cache | `Clear` deletes every saved translation. Use it when a translation is wrong or you switched services |

@@ -1261,7 +1261,7 @@ check("settings: the stored api key is never rendered into the panel", () => {
     const settings = new Settings();
     settings.set("apiKey", "  sk-abcdefgh1234  ");
 
-    const field = settings._panelSpec().settings.find((entry) => entry.id === "apiKey");
+    const field = panelFields(settings).find((entry) => entry.id === "apiKey");
     assert.equal(field.value, "", "the panel must not carry the key");
     assert.ok(!JSON.stringify(field).includes("abcdefgh"), "no part of the key may leak into the panel");
     assert.ok(field.placeholder.includes("1234"), "a last-4 fingerprint identifies the saved key");
@@ -1415,7 +1415,11 @@ check("settings: the panel is a live component, not a one-shot spec", () => {
     assert.equal(typeof panel.type, "function", "a plain spec cannot react to a provider change");
 
     const rendered = panel.type();
-    assert.ok(rendered.__spec.settings.some((entry) => entry.id === "provider"));
+    assert.ok(
+        rendered.__spec.settings
+            .flatMap((entry) => entry.settings ?? entry)
+            .some((entry) => entry.id === "provider"),
+    );
 
     assert.match(String(rendered.props.key), /^panel-/);
 });
@@ -2161,6 +2165,24 @@ check("context menu: a server and a channel are switched from their right-click 
         BdApi.Data = previousData;
         BdApi.ContextMenu = previousMenu;
     }
+});
+
+check("settings: every field sits in a section, and only the advanced one starts folded", () => {
+    const sections = new Settings()._panelSpec().settings;
+    assert.ok(sections.every((entry) => entry.type === "category"));
+    assert.deepEqual(
+        sections.map((entry) => [entry.id, entry.shown]),
+        [
+            ["connection", true],
+            ["scope", true],
+            ["incoming", true],
+            ["outgoing", true],
+            ["display", true],
+            ["advanced", false],
+        ],
+    );
+    const connection = sections[0].settings.map((entry) => entry.id);
+    assert.deepEqual(connection, ["provider", "apiKey", "model", "testConnection"]);
 });
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
