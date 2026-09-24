@@ -826,8 +826,16 @@ function parseHotkey(keys) {
 function matchesHotkey(combo, event) {
   if (!combo || !event || event.repeat) return false;
   if (event.isComposing) return false;
-  if (String(event.key || "").toLowerCase() !== combo.key) return false;
+  if (pressedKey(event) !== combo.key) return false;
   return event.ctrlKey === combo.ctrl && event.shiftKey === combo.shift && event.altKey === combo.alt && event.metaKey === combo.meta;
+}
+var PRINTABLE_ASCII = /^[\x21-\x7e]$/;
+var PHYSICAL = /^(?:Key([A-Z])|Digit(\d))$/;
+function pressedKey(event) {
+  const key = String(event.key || "");
+  if (key.length > 1 || PRINTABLE_ASCII.test(key)) return key.toLowerCase();
+  const physical = PHYSICAL.exec(String(event.code || ""));
+  return physical ? (physical[1] || physical[2]).toLowerCase() : key.toLowerCase();
 }
 var Hotkey = class {
   constructor({ settings, field, onTrigger }) {

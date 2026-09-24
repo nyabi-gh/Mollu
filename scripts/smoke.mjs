@@ -1892,6 +1892,30 @@ check("detector: Japanese and Chinese are told apart by their kana", () => {
     );
 });
 
+check("hotkey: a Hangul input source or Option still reaches the letter on the key", () => {
+    const combo = parseHotkey("Ctrl+Shift+T");
+    const event = (overrides) => ({
+        key: "T",
+        code: "KeyT",
+        ctrlKey: true,
+        shiftKey: true,
+        altKey: false,
+        metaKey: false,
+        repeat: false,
+        isComposing: false,
+        ...overrides,
+    });
+    assert.ok(matchesHotkey(combo, event({ key: "ㅆ" })), "Hangul 2-set gives ㅆ for Shift+T");
+    assert.ok(
+        matchesHotkey(
+            parseHotkey("Alt+T"),
+            event({ key: "†", ctrlKey: false, shiftKey: false, altKey: true }),
+        ),
+    );
+    assert.ok(!matchesHotkey(combo, event({ key: "Y", code: "KeyT" })), "a layout's own letter wins");
+    assert.ok(!matchesHotkey(combo, event({ key: "ㅛ", code: "KeyY" })));
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 

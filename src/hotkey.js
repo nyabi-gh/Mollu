@@ -57,7 +57,7 @@ export function matchesHotkey(combo, event) {
 
     if (event.isComposing) return false;
 
-    if (String(event.key || "").toLowerCase() !== combo.key) return false;
+    if (pressedKey(event) !== combo.key) return false;
 
     return (
         event.ctrlKey === combo.ctrl &&
@@ -65,6 +65,19 @@ export function matchesHotkey(combo, event) {
         event.altKey === combo.alt &&
         event.metaKey === combo.meta
     );
+}
+
+const PRINTABLE_ASCII = /^[\x21-\x7e]$/;
+const PHYSICAL = /^(?:Key([A-Z])|Digit(\d))$/;
+
+// With a Hangul input source or Option held, event.key is a jamo or a symbol instead of the
+// letter on the key. Fall back to the physical key only then, so other layouts keep their own
+// letters.
+function pressedKey(event) {
+    const key = String(event.key || "");
+    if (key.length > 1 || PRINTABLE_ASCII.test(key)) return key.toLowerCase();
+    const physical = PHYSICAL.exec(String(event.code || ""));
+    return physical ? (physical[1] || physical[2]).toLowerCase() : key.toLowerCase();
 }
 
 export class Hotkey {
