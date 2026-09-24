@@ -7,6 +7,7 @@ import {
     FAILURE_RECORD_LIMIT,
     RATE_LIMIT_PAUSE_MS,
     MAX_RATE_LIMIT_PAUSE_MS,
+    OVERLOAD_PAUSE_MS,
     TRANSIENT_RETRIES,
     TRANSIENT_RETRY_DELAY_MS,
     URGENT_TIMEOUT_MS,
@@ -40,6 +41,8 @@ export class Translator {
         this._aborters = new Set();
         this._pausedUntil = 0;
         this._blocked = null;
+        this._spacing = 0;
+        this._nextSlot = 0;
         this._unsubscribe = null;
         this._stopped = false;
     }
@@ -51,7 +54,9 @@ export class Translator {
         this._cache.load();
         this._unsubscribe =
             this._settings.onChange?.((id) => {
-                if (UNBLOCKING.has(id)) this._blocked = null;
+                if (!UNBLOCKING.has(id)) return;
+                this._blocked = null;
+                this._spacing = 0;
             }) ?? null;
     }
 
@@ -147,7 +152,10 @@ export class Translator {
         const promise = this._queue
             .run(
                 async () => {
-                    if (!urgent) await this._awaitResume();
+                    if (!urgent) {
+                        await this._awaitResume();
+                        await this._awaitSlot();
+                    }
                     if (this._stopped) throw aborted();
                     if (!wanted()) throw skipped();
                     this._announceStart(key);
@@ -229,6 +237,25 @@ export class Translator {
         return wait > 0 ? sleep(wait) : Promise.resolve();
     }
 
+    // Once the backend has named its per-minute limit, requests are spread to stay under it
+    // instead of bursting into the limit and waiting.
+    async _awaitSlot() {
+        if (!(this._spacing > 0)) return;
+        const now = Date.now();
+        const at = Math.max(now, this._nextSlot);
+        this._nextSlot = at + this._spacing;
+        if (at > now) await sleep(at - now);
+    }
+
+    _learnLimit(body) {
+        const limit = perMinuteLimit(body);
+        if (!limit) return;
+        const spacing = Math.ceil((60000 / limit) * 1.05);
+        if (spacing !== this._spacing)
+            logger.info(`the backend allows ${limit} requests a minute; pacing them`);
+        this._spacing = spacing;
+    }
+
     _isBackingOff(maskedKey) {
         const failedAt = this._failures.get(maskedKey);
         if (failedAt == null) return false;
@@ -297,10 +324,15 @@ export class Translator {
 
         if (err && err.name === "SkippedError") return { status: "unknown" };
 
-        if (err && err.status === 429) {
-            const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
+        // A rate limit and an overloaded backend both say "later", not "this message failed".
+        if (err && (err.status === 429 || OVERLOADED.has(err.status))) {
+            const fallback = err.status === 429 ? RATE_LIMIT_PAUSE_MS : OVERLOAD_PAUSE_MS;
+            const after = Math.min(err.retryAfterMs || fallback, MAX_RATE_LIMIT_PAUSE_MS);
             this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
-            logger.warn(`rate limited; retrying in ${Math.round(after / 1000)}s`);
+            if (err.status === 429) this._learnLimit(err.body);
+            logger.warn(
+                `${err.status === 429 ? "rate limited" : "backend overloaded"}; retrying in ${Math.round(after / 1000)}s`,
+            );
             return { status: "retry", after };
         }
 
@@ -335,11 +367,34 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 503 (Google) and 529 (Anthropic) mean the backend is overloaded; hammering it again within
+// seconds only prolongs that.
+const OVERLOADED = new Set([503, 529]);
+
 function isTransient(err) {
     if (!err || err.name === "AbortError" || err.name === "SkippedError") return false;
     if (err.name === "ConfigError") return false;
     if (err.status === undefined) return true;
-    return err.status === 408 || err.status >= 500;
+    return err.status === 408 || (err.status >= 500 && !OVERLOADED.has(err.status));
+}
+
+// Google names the quota a 429 hit; only a per-minute one says how to pace.
+function perMinuteLimit(body) {
+    let parsed;
+    try {
+        parsed = JSON.parse(String(body || ""));
+    } catch {
+        return 0;
+    }
+    const details = (Array.isArray(parsed) ? parsed[0] : parsed)?.error?.details;
+    if (!Array.isArray(details)) return 0;
+    for (const detail of details) {
+        for (const violation of detail?.violations ?? []) {
+            const limit = Number(violation?.quotaValue);
+            if (/PerMinute/i.test(String(violation?.quotaId ?? "")) && limit > 0) return limit;
+        }
+    }
+    return 0;
 }
 
 // Gemini answers a bad key, and Anthropic an empty balance, with a plain 400.

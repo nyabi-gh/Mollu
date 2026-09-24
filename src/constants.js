@@ -52,6 +52,7 @@ export const DISCORD_MESSAGE_LIMIT = 2000;
 export const RATE_LIMIT_PAUSE_MS = 20000;
 export const MAX_RATE_LIMIT_PAUSE_MS = 120000;
 export const MAX_RATE_LIMIT_RETRIES = 3;
+export const OVERLOAD_PAUSE_MS = 10000;
 
 export const TRANSIENT_RETRIES = 2;
 export const TRANSIENT_RETRY_DELAY_MS = 1500;

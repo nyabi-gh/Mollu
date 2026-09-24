@@ -75,6 +75,7 @@ var DISCORD_MESSAGE_LIMIT = 2e3;
 var RATE_LIMIT_PAUSE_MS = 2e4;
 var MAX_RATE_LIMIT_PAUSE_MS = 12e4;
 var MAX_RATE_LIMIT_RETRIES = 3;
+var OVERLOAD_PAUSE_MS = 1e4;
 var TRANSIENT_RETRIES = 2;
 var TRANSIENT_RETRY_DELAY_MS = 1500;
 var FAILURE_BACKOFF_MS = 6e4;
@@ -115,7 +116,7 @@ var STRINGS = {
     "block.pending": "Translating…",
     "block.error": "Translation failed · {message}",
     "block.errorTitle": "Click to try again",
-    "block.waiting": "Waiting for the backend's rate limit…",
+    "block.waiting": "The backend is busy; trying again shortly…",
     "block.spoiler": "Spoiler, click to show",
     "error.retryLater": "Waiting before trying again",
     "block.trigger": "Translate",
@@ -147,14 +148,14 @@ var STRINGS = {
     "error.badBaseUrl": "API Base URL is not valid: {url}",
     "error.badProtocol": "Unsupported protocol: {protocol}",
     "error.insecureUrl": "An http:// address sends the API key in the clear. Use https://.",
-    "error.rateLimited": "Rate limited; retry delayed",
+    "error.rateLimited": "The backend stayed busy",
     "error.unsupportedLanguage": "{provider} cannot translate into {language}",
     "error.quotaExceeded": "The API key's translation quota is used up",
     "error.refused": "The model declined to translate this message",
     "error.badKey": "The API key was refused. Check it in the settings.",
     "error.noBalance": "The API account has no balance left",
     "error.timedOut": "The backend did not answer in time",
-    "error.busy": "The backend is limiting requests right now",
+    "error.busy": "The backend is busy right now",
     "error.tooLongToSend": "The translation is longer than Discord's {limit} characters",
     "toast.blocked": "Translation paused until the settings change · {message}",
     "toast.outgoingPending": "Translating your message…",
@@ -246,7 +247,7 @@ var STRINGS = {
     "block.pending": "번역 중…",
     "block.error": "번역 실패 · {message}",
     "block.errorTitle": "클릭하면 다시 시도합니다",
-    "block.waiting": "요청 제한이 풀리길 기다리는 중…",
+    "block.waiting": "번역 서비스가 바빠 잠시 후 다시 시도합니다…",
     "block.spoiler": "스포일러, 클릭하면 보입니다",
     "error.retryLater": "재시도를 기다리는 중",
     "block.trigger": "번역",
@@ -278,14 +279,14 @@ var STRINGS = {
     "error.badBaseUrl": "API Base URL이 올바르지 않습니다: {url}",
     "error.badProtocol": "지원하지 않는 프로토콜입니다: {protocol}",
     "error.insecureUrl": "http:// 주소로는 API 키가 평문으로 전송됩니다. https:// 를 사용하세요.",
-    "error.rateLimited": "한도 초과로 재시도를 미루는 중",
+    "error.rateLimited": "번역 서비스가 계속 바빴습니다",
     "error.unsupportedLanguage": "{provider} 는 {language} 로 번역할 수 없습니다",
     "error.quotaExceeded": "API 키의 번역 할당량을 모두 사용했습니다",
     "error.refused": "모델이 이 메시지의 번역을 거절했습니다",
     "error.badKey": "API 키가 거부되었습니다. 설정에서 확인하세요.",
     "error.noBalance": "API 계정의 잔액이 없습니다",
     "error.timedOut": "번역 서비스가 제때 응답하지 않았습니다",
-    "error.busy": "번역 서비스가 지금 요청을 제한하고 있습니다",
+    "error.busy": "번역 서비스가 지금 바쁩니다",
     "error.tooLongToSend": "번역문이 Discord 제한인 {limit}자를 넘습니다",
     "toast.blocked": "설정을 바꿀 때까지 번역을 멈춥니다 · {message}",
     "toast.outgoingPending": "보낼 메시지를 번역하는 중…",
@@ -1923,6 +1924,8 @@ var Translator = class {
     this._aborters = /* @__PURE__ */ new Set();
     this._pausedUntil = 0;
     this._blocked = null;
+    this._spacing = 0;
+    this._nextSlot = 0;
     this._unsubscribe = null;
     this._stopped = false;
   }
@@ -1932,7 +1935,9 @@ var Translator = class {
     this._blocked = null;
     this._cache.load();
     this._unsubscribe = this._settings.onChange?.((id6) => {
-      if (UNBLOCKING.has(id6)) this._blocked = null;
+      if (!UNBLOCKING.has(id6)) return;
+      this._blocked = null;
+      this._spacing = 0;
     }) ?? null;
   }
   stop() {
@@ -2012,7 +2017,10 @@ var Translator = class {
     const wanted = () => [...waiters].some((waiter) => waiter());
     const promise = this._queue.run(
       async () => {
-        if (!urgent) await this._awaitResume();
+        if (!urgent) {
+          await this._awaitResume();
+          await this._awaitSlot();
+        }
         if (this._stopped) throw aborted();
         if (!wanted()) throw skipped();
         this._announceStart(key);
@@ -2083,6 +2091,23 @@ var Translator = class {
     const wait = this._pausedUntil - Date.now();
     return wait > 0 ? sleep(wait) : Promise.resolve();
   }
+  // Once the backend has named its per-minute limit, requests are spread to stay under it
+  // instead of bursting into the limit and waiting.
+  async _awaitSlot() {
+    if (!(this._spacing > 0)) return;
+    const now = Date.now();
+    const at = Math.max(now, this._nextSlot);
+    this._nextSlot = at + this._spacing;
+    if (at > now) await sleep(at - now);
+  }
+  _learnLimit(body) {
+    const limit = perMinuteLimit(body);
+    if (!limit) return;
+    const spacing = Math.ceil(6e4 / limit * 1.05);
+    if (spacing !== this._spacing)
+      logger.info(`the backend allows ${limit} requests a minute; pacing them`);
+    this._spacing = spacing;
+  }
   _isBackingOff(maskedKey) {
     const failedAt = this._failures.get(maskedKey);
     if (failedAt == null) return false;
@@ -2135,10 +2160,14 @@ var Translator = class {
     const message = err && err.message || String(err);
     if (err && err.name === "AbortError") return error(message);
     if (err && err.name === "SkippedError") return { status: "unknown" };
-    if (err && err.status === 429) {
-      const after = Math.min(err.retryAfterMs || RATE_LIMIT_PAUSE_MS, MAX_RATE_LIMIT_PAUSE_MS);
+    if (err && (err.status === 429 || OVERLOADED.has(err.status))) {
+      const fallback = err.status === 429 ? RATE_LIMIT_PAUSE_MS : OVERLOAD_PAUSE_MS;
+      const after = Math.min(err.retryAfterMs || fallback, MAX_RATE_LIMIT_PAUSE_MS);
       this._pausedUntil = Math.max(this._pausedUntil, Date.now() + after);
-      logger.warn(`rate limited; retrying in ${Math.round(after / 1e3)}s`);
+      if (err.status === 429) this._learnLimit(err.body);
+      logger.warn(
+        `${err.status === 429 ? "rate limited" : "backend overloaded"}; retrying in ${Math.round(after / 1e3)}s`
+      );
       return { status: "retry", after };
     }
     if (isFatal(err)) {
@@ -2168,11 +2197,29 @@ var Translator = class {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+var OVERLOADED = /* @__PURE__ */ new Set([503, 529]);
 function isTransient(err) {
   if (!err || err.name === "AbortError" || err.name === "SkippedError") return false;
   if (err.name === "ConfigError") return false;
   if (err.status === void 0) return true;
-  return err.status === 408 || err.status >= 500;
+  return err.status === 408 || err.status >= 500 && !OVERLOADED.has(err.status);
+}
+function perMinuteLimit(body) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(body || ""));
+  } catch {
+    return 0;
+  }
+  const details = (Array.isArray(parsed) ? parsed[0] : parsed)?.error?.details;
+  if (!Array.isArray(details)) return 0;
+  for (const detail of details) {
+    for (const violation of detail?.violations ?? []) {
+      const limit = Number(violation?.quotaValue);
+      if (/PerMinute/i.test(String(violation?.quotaId ?? "")) && limit > 0) return limit;
+    }
+  }
+  return 0;
 }
 var BAD_KEY_400 = /API[_ ]key[_ ](?:not[_ ]valid|invalid)/i;
 var NO_BALANCE_400 = /credit balance is too low/i;

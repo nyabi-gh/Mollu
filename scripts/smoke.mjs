@@ -1788,7 +1788,7 @@ await checkAsync("translator: an urgent request is not retried", async () => {
     let calls = 0;
     BdApi.Net.fetch = async () => {
         calls += 1;
-        return new Response("{}", { status: 503 });
+        return new Response("{}", { status: 500 });
     };
     try {
         const translator = new Translator({ settings: stubSettings() });
@@ -2262,6 +2262,78 @@ await checkAsync(
         }
     },
 );
+
+await checkAsync(
+    "translator: an overloaded backend is waited out, not hammered or reported as failed",
+    async () => {
+        const previous = BdApi.Net.fetch;
+        let calls = 0;
+        BdApi.Net.fetch = async () => {
+            calls += 1;
+            return new Response(
+                JSON.stringify({ error: { code: 503, message: "The model is overloaded." } }),
+                {
+                    status: 503,
+                },
+            );
+        };
+        try {
+            const translator = new Translator({ settings: stubSettings() });
+            const result = await translator.translate("hello there");
+            assert.equal(result.status, "retry");
+            assert.equal(calls, 1, "no quick retries against an overloaded backend");
+            assert.ok(translator._pausedUntil > Date.now());
+            assert.equal(translator._failures.size, 0);
+        } finally {
+            BdApi.Net.fetch = previous;
+        }
+    },
+);
+
+await checkAsync("translator: a per-minute quota named in a 429 paces the requests after it", async () => {
+    const previous = BdApi.Net.fetch;
+    BdApi.Net.fetch = async () =>
+        new Response(
+            JSON.stringify([
+                {
+                    error: {
+                        code: 429,
+                        details: [
+                            {
+                                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                                violations: [
+                                    {
+                                        quotaId: "GenerateRequestsPerMinutePerProjectPerModel-FreeTier",
+                                        quotaDimensions: {
+                                            location: "global",
+                                            model: "gemini-3.1-flash-lite",
+                                        },
+                                        quotaValue: "15",
+                                    },
+                                ],
+                            },
+                            { "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "3s" },
+                        ],
+                    },
+                },
+            ]),
+            { status: 429 },
+        );
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        const result = await translator.translate("hello there");
+        assert.equal(result.after, 3000);
+        assert.equal(translator._spacing, 4200, "15 a minute is one every four seconds, with a margin");
+
+        translator._spacing = 40;
+        translator._nextSlot = 0;
+        const started = Date.now();
+        await Promise.all([translator._awaitSlot(), translator._awaitSlot(), translator._awaitSlot()]);
+        assert.ok(Date.now() - started >= 75, "three requests take two gaps");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
 
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
