@@ -4,6 +4,7 @@ const STRINGS = {
         "block.error": "Translation failed · {message}",
         "block.errorTitle": "Click to try again",
         "block.waiting": "Waiting for the backend's rate limit…",
+        "block.spoiler": "Spoiler, click to show",
         "error.retryLater": "Waiting before trying again",
         "block.trigger": "Translate",
 
@@ -143,6 +144,7 @@ const STRINGS = {
         "block.error": "번역 실패 · {message}",
         "block.errorTitle": "클릭하면 다시 시도합니다",
         "block.waiting": "요청 제한이 풀리길 기다리는 중…",
+        "block.spoiler": "스포일러, 클릭하면 보입니다",
         "error.retryLater": "재시도를 기다리는 중",
         "block.trigger": "번역",
 

@@ -115,6 +115,7 @@ var STRINGS = {
     "block.error": "Translation failed · {message}",
     "block.errorTitle": "Click to try again",
     "block.waiting": "Waiting for the backend's rate limit…",
+    "block.spoiler": "Spoiler, click to show",
     "error.retryLater": "Waiting before trying again",
     "block.trigger": "Translate",
     "toast.outdatedBd": "BetterDiscord is out of date; API requests may be blocked. Please update.",
@@ -228,6 +229,7 @@ var STRINGS = {
     "block.error": "번역 실패 · {message}",
     "block.errorTitle": "클릭하면 다시 시도합니다",
     "block.waiting": "요청 제한이 풀리길 기다리는 중…",
+    "block.spoiler": "스포일러, 클릭하면 보입니다",
     "error.retryLater": "재시도를 기다리는 중",
     "block.trigger": "번역",
     "toast.outdatedBd": "BetterDiscord가 오래되어 API 요청이 차단될 수 있습니다. 최신 버전으로 업데이트하세요.",
@@ -462,7 +464,7 @@ function systemPrompt(languageName) {
     "",
     "Rules:",
     "- Output ONLY the translated text. No explanations, no notes, no surrounding quotes, no romanization.",
-    "- Preserve Markdown (*, _, ~~, `, #, >, lists), emoji, line breaks and spacing exactly as in the source.",
+    "- Preserve Markdown (*, _, __, ~~, ||, `, #, -#, >, lists, [text](link)), emoji, line breaks and spacing exactly as in the source. Translate the text inside the markers, spoilers (||...||) included.",
     "- Tokens shaped like 【0】 or 【1】 are placeholders. Copy each one verbatim, keep it in the same position, and never translate or renumber it.",
     "- Keep the register of the source: casual stays casual, formal stays formal. Render internet slang naturally.",
     `- If the message is already written in ${languageName}, return it unchanged.`,
@@ -754,7 +756,7 @@ async function translate4({ text, settings, signal }) {
   }
   const json = await send2(`${root}/v1/messages`, { headers, signal, body });
   if (json?.stop_reason === "refusal") throw new Error(t("error.refused"));
-  const output = (Array.isArray(json?.content) ? json.content : []).filter((block) => block?.type === "text" && typeof block.text === "string").map((block) => block.text).join("").trim();
+  const output = (Array.isArray(json?.content) ? json.content : []).filter((block2) => block2?.type === "text" && typeof block2.text === "string").map((block2) => block2.text).join("").trim();
   if (!output) {
     logger.warn(
       `${model} gave no answer (stop_reason ${json?.stop_reason ?? "none"}, usage ${JSON.stringify(json?.usage ?? null)})`
@@ -2200,9 +2202,149 @@ var TIMESTAMP = /^<t:(\d+)(?::([tTdDfFR]))?>$/;
 var FENCED_CODE = /^```(?:[\w+-]*\n)?([\s\S]*?)```$/;
 var INLINE_CODE = /^`([^`\n]+)`$/;
 var EMOJI_CDN = "https://cdn.discordapp.com/emojis";
+var REF_OPEN = "﷐";
+var REF_CLOSE = "﷑";
+var REF_BASE = 57344;
+var REF = "﷐([-])﷑";
+var INLINE_RULES = [
+  { re: new RegExp(REF), render: (m, ctx) => renderRef(m[1], ctx) },
+  { re: new RegExp(`\\[([^\\]\\n]+)\\]\\(${REF}\\)`), render: renderLink },
+  {
+    re: /\|\|([\s\S]+?)\|\|/,
+    render: (m, ctx) => React.createElement(Spoiler, { key: ctx.key++ }, ...inline(m[1], ctx))
+  },
+  { re: /\*\*([\s\S]+?)\*\*/, render: wrap("strong") },
+  { re: /__([\s\S]+?)__/, render: wrap("u") },
+  { re: /~~([\s\S]+?)~~/, render: wrap("s") },
+  { re: /\*(?!\s)([^*\n]+?)\*/, render: wrap("em") },
+  { re: /(?<![\p{L}\p{N}])_(?!\s)([^_\n]+?)_(?![\p{L}\p{N}])/u, render: wrap("em") }
+];
+var HEADING = /^(#{1,3}) (.+)$/;
+var SUBTEXT = /^-# (.+)$/;
+var QUOTE = /^> ?(.*)$/;
+var QUOTE_REST = /^>>> ?/;
 function renderSegments(segments, stores, guildId) {
-  return segments.map(
-    (segment, index) => segment.type === "token" ? renderToken(segment.value, stores, guildId, index) : segment.value
+  const tokens = [];
+  const source = segments.map((segment) => {
+    if (segment.type !== "token") return segment.value;
+    tokens.push(segment.value);
+    return `${REF_OPEN}${String.fromCharCode(REF_BASE + tokens.length - 1)}${REF_CLOSE}`;
+  }).join("");
+  return renderBlocks(source, { tokens, stores, guildId, key: 0 });
+}
+function renderBlocks(source, ctx) {
+  const out = [];
+  const lines = source.split("\n");
+  let plain = [];
+  const flush = (trailingBreak) => {
+    if (plain.length) out.push(...inline(plain.join("\n") + (trailingBreak ? "\n" : ""), ctx));
+    plain = [];
+  };
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (QUOTE_REST.test(line)) {
+      flush(false);
+      const rest = [line.replace(QUOTE_REST, ""), ...lines.slice(i + 1)].join("\n");
+      out.push(block("mollu-md-quote", rest, ctx));
+      return out;
+    }
+    if (QUOTE.test(line)) {
+      flush(false);
+      const quoted = [];
+      while (i < lines.length && QUOTE.test(lines[i])) quoted.push(QUOTE.exec(lines[i++])[1]);
+      i -= 1;
+      out.push(block("mollu-md-quote", quoted.join("\n"), ctx));
+      continue;
+    }
+    const heading = HEADING.exec(line);
+    const subtext = SUBTEXT.exec(line);
+    if (heading || subtext) {
+      flush(false);
+      out.push(
+        heading ? block(`mollu-md-h${heading[1].length}`, heading[2], ctx) : block("mollu-md-subtext", subtext[1], ctx)
+      );
+      continue;
+    }
+    plain.push(line);
+  }
+  flush(false);
+  return out;
+}
+function block(className, text, ctx) {
+  return React.createElement("span", { key: ctx.key++, className }, ...inline(text, ctx));
+}
+function inline(text, ctx) {
+  const out = [];
+  let rest = text;
+  while (rest) {
+    let best = null;
+    for (const rule of INLINE_RULES) {
+      const match = rule.re.exec(rest);
+      if (match && (!best || match.index < best.match.index)) best = { rule, match };
+    }
+    if (!best) {
+      out.push(rest);
+      break;
+    }
+    if (best.match.index > 0) out.push(rest.slice(0, best.match.index));
+    out.push(...[].concat(best.rule.render(best.match, ctx)));
+    rest = rest.slice(best.match.index + best.match[0].length);
+  }
+  return out;
+}
+function wrap(tag) {
+  return (match, ctx) => React.createElement(tag, { key: ctx.key++ }, ...inline(match[1], ctx));
+}
+function tokenAt(ref, ctx) {
+  return ctx.tokens[ref.charCodeAt(0) - REF_BASE];
+}
+function renderRef(ref, ctx) {
+  const token = tokenAt(ref, ctx);
+  if (token === void 0) return "";
+  if (URL_TOKEN.test(token)) return anchor(token, [token], ctx);
+  return renderToken(token, ctx.stores, ctx.guildId, ctx.key++);
+}
+function renderLink(match, ctx) {
+  const url = tokenAt(match[2], ctx);
+  if (!url || !URL_TOKEN.test(url))
+    return ["[", ...inline(match[1], ctx), "](", renderRef(match[2], ctx), ")"];
+  return anchor(url, inline(match[1], ctx), ctx);
+}
+function anchor(url, children, ctx) {
+  return React.createElement(
+    "a",
+    {
+      key: ctx.key++,
+      className: "mollu-md-link",
+      href: url,
+      title: url,
+      target: "_blank",
+      rel: "noreferrer noopener"
+    },
+    ...children
+  );
+}
+var URL_TOKEN = /^https?:\/\//;
+function Spoiler({ children }) {
+  const [shown, setShown] = React.useState(false);
+  const reveal = (event) => {
+    if (shown) return;
+    event.stopPropagation?.();
+    setShown(true);
+  };
+  return React.createElement(
+    "span",
+    shown ? { className: "mollu-md-spoiler mollu-md-spoiler--shown" } : {
+      className: "mollu-md-spoiler",
+      role: "button",
+      tabIndex: 0,
+      "aria-label": t("block.spoiler"),
+      onClick: reveal,
+      onKeyDown: (event) => {
+        if (event.key === "Enter" || event.key === " ") reveal(event);
+      }
+    },
+    ...[].concat(children ?? [])
   );
 }
 function renderToken(token, stores, guildId, key) {
@@ -2621,7 +2763,7 @@ var MessagePatch = class {
       this._trace(message, "already in the target language");
       return ret;
     }
-    const block = React.createElement(TranslationBlock, {
+    const block2 = React.createElement(TranslationBlock, {
       key: "mollu-translation",
       text: message.content,
       guildId,
@@ -2629,7 +2771,7 @@ var MessagePatch = class {
       translator: this._translator,
       settings: this._settings
     });
-    return appendChild(ret, block);
+    return appendChild(ret, block2);
   }
   _resolve(message) {
     if (!message || typeof message.content !== "string" || !message.content.trim()) {
@@ -2955,6 +3097,61 @@ var STYLES = `
     font-size: 0.85em;
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
+}
+.mollu-md-h1,
+.mollu-md-h2,
+.mollu-md-h3,
+.mollu-md-subtext,
+.mollu-md-quote {
+    display: block;
+}
+.mollu-md-h1 {
+    font-size: 1.25em;
+    font-weight: 700;
+}
+.mollu-md-h2 {
+    font-size: 1.15em;
+    font-weight: 700;
+}
+.mollu-md-h3 {
+    font-size: 1.05em;
+    font-weight: 700;
+}
+.mollu-md-subtext {
+    font-size: 0.8em;
+}
+.mollu-md-quote {
+    margin: 2px 0;
+    padding-left: 10px;
+    border-left: 3px solid var(--background-modifier-accent, rgba(148, 155, 164, 0.4));
+}
+.mollu-md-link {
+    color: var(--text-link, #00a8fc);
+    text-decoration: none;
+}
+.mollu-md-link:hover {
+    text-decoration: underline;
+}
+.mollu-md-spoiler {
+    padding: 0 2px;
+    border-radius: 3px;
+    color: transparent;
+    background: var(--spoiler-hidden-background, #1e1f22);
+    cursor: pointer;
+}
+.mollu-md-spoiler > * {
+    opacity: 0;
+}
+.mollu-md-spoiler:focus-visible {
+    outline: 2px solid var(--focus-primary, #00a8fc);
+}
+.mollu-md-spoiler--shown {
+    color: inherit;
+    background: var(--spoiler-revealed-background, rgba(148, 155, 164, 0.16));
+    cursor: auto;
+}
+.mollu-md-spoiler--shown > * {
+    opacity: 1;
 }
 .mollu-translation__trigger {
     display: inline-block;

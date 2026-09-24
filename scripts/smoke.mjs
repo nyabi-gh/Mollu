@@ -2044,6 +2044,48 @@ check("detector: a Latin-alphabet target skips only what is clearly written in i
     }
 });
 
+check("rich text: Markdown renders as elements, and a spoiler stays hidden until clicked", () => {
+    const text = (value) => [{ type: "text", value }];
+    const flat = (node) =>
+        typeof node === "string"
+            ? node
+            : []
+                  .concat(node?.props?.children ?? [])
+                  .map(flat)
+                  .join("");
+
+    const [bold, , struck] = renderSegments(text("**굵게** 그리고 ~~취소~~"), {}, null);
+    assert.equal(bold.type, "strong");
+    assert.equal(flat(bold), "굵게");
+    assert.equal(struck.type, "s");
+
+    const [spoiler] = renderSegments(text("||범인은 **집사**||"), {}, null);
+    assert.equal(spoiler.props.children[0], "범인은 ");
+    assert.equal(spoiler.props.children[1].type, "strong");
+    const hidden = spoiler.type({ children: spoiler.props.children });
+    assert.equal(hidden.props.className, "mollu-md-spoiler");
+    assert.equal(hidden.props.role, "button");
+
+    const nodes = renderSegments(
+        [
+            { type: "text", value: "# 제목\n> 인용\n본문 [여기](" },
+            { type: "token", value: "https://example.com/a" },
+            { type: "text", value: ")" },
+        ],
+        {},
+        null,
+    );
+    assert.equal(nodes[0].props.className, "mollu-md-h1");
+    assert.equal(nodes[1].props.className, "mollu-md-quote");
+    assert.equal(nodes[2], "본문 ");
+    assert.equal(nodes[3].type, "a");
+    assert.equal(nodes[3].props.href, "https://example.com/a");
+    assert.equal(flat(nodes[3]), "여기");
+
+    assert.deepEqual(renderSegments(text("snake_case_name 그대로"), {}, null), ["snake_case_name 그대로"]);
+    assert.deepEqual(renderSegments(text("1 * 2 * 3"), {}, null), ["1 * 2 * 3"]);
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
