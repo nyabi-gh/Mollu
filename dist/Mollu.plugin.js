@@ -469,8 +469,8 @@ var DEVANAGARI = /[ऀ-ॿ]/;
 var LANGUAGES = [
   { code: "ko", label: "한국어 (Korean)", name: "Korean", script: HANGUL },
   { code: "en", label: "English", name: "English", script: null },
-  { code: "ja", label: "日本語 (Japanese)", name: "Japanese", script: combine(KANA, HAN) },
-  { code: "zh", label: "中文 (Chinese)", name: "Simplified Chinese", script: HAN },
+  { code: "ja", label: "日本語 (Japanese)", name: "Japanese", script: combine(KANA, HAN), requires: KANA },
+  { code: "zh", label: "中文 (Chinese)", name: "Simplified Chinese", script: HAN, excludes: KANA },
   { code: "es", label: "Español (Spanish)", name: "Spanish", script: null },
   { code: "fr", label: "Français (French)", name: "French", script: null },
   { code: "de", label: "Deutsch (German)", name: "German", script: null },
@@ -1985,6 +1985,7 @@ function trimEdges(segments) {
 // src/translation/language-detector.js
 var MASK_RE2 = new RegExp(MASK_PATTERN, "g");
 var NON_LETTER = /[^\p{L}]/gu;
+var FOREIGN_SHARE = 0.2;
 var LanguageDetector = class {
   constructor(settings) {
     this._settings = settings;
@@ -1993,12 +1994,18 @@ var LanguageDetector = class {
     if (typeof text !== "string") return false;
     const letters = this._letters(text);
     if (letters.length < 2) return false;
-    const { script } = getLanguage(language ?? this._settings.current.targetLanguage);
+    const { script, requires, excludes } = getLanguage(language ?? this._settings.current.targetLanguage);
     if (!script) return true;
     let inTarget = 0;
+    let required = 0;
+    let excluded = 0;
     for (const ch of letters) {
       if (script.test(ch)) inTarget += 1;
+      if (requires?.test(ch)) required += 1;
+      if (excludes?.test(ch)) excluded += 1;
     }
+    if (requires && required === 0) return true;
+    if (excludes && excluded / letters.length >= FOREIGN_SHARE) return true;
     return inTarget / letters.length < this._threshold();
   }
   _threshold() {

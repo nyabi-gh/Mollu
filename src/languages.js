@@ -6,13 +6,15 @@ const ARABIC = /[؀-ۿݐ-ݿ]/;
 const THAI = /[฀-๿]/;
 const DEVANAGARI = /[ऀ-ॿ]/;
 
+// requires / excludes: a script shared with another language (Han) cannot tell Japanese from
+// Chinese on its own, so kana decides which of the two a message is written in.
 // tokensPerChar: what a character of this language costs a model, for the scripts that
 // tokenize badly enough that a character-sized output budget cuts them off.
 export const LANGUAGES = [
     { code: "ko", label: "한국어 (Korean)", name: "Korean", script: HANGUL },
     { code: "en", label: "English", name: "English", script: null },
-    { code: "ja", label: "日本語 (Japanese)", name: "Japanese", script: combine(KANA, HAN) },
-    { code: "zh", label: "中文 (Chinese)", name: "Simplified Chinese", script: HAN },
+    { code: "ja", label: "日本語 (Japanese)", name: "Japanese", script: combine(KANA, HAN), requires: KANA },
+    { code: "zh", label: "中文 (Chinese)", name: "Simplified Chinese", script: HAN, excludes: KANA },
     { code: "es", label: "Español (Spanish)", name: "Spanish", script: null },
     { code: "fr", label: "Français (French)", name: "French", script: null },
     { code: "de", label: "Deutsch (German)", name: "German", script: null },

@@ -1875,6 +1875,23 @@ await checkAsync(
     },
 );
 
+check("detector: Japanese and Chinese are told apart by their kana", () => {
+    const settings = { current: { targetLanguage: "ko", skipThreshold: 30 } };
+    const cjk = new LanguageDetector(settings);
+    const chinese = "你好，我们今天晚上一起去吃饭吧";
+    const japanese = "日本語の勉強は本当に難しいと思います";
+
+    assert.equal(cjk.needsTranslation(chinese, "ja"), true, "Chinese is not Japanese");
+    assert.equal(cjk.needsTranslation(japanese, "ja"), false);
+    assert.equal(cjk.needsTranslation(japanese, "zh"), true, "Japanese is not Chinese");
+    assert.equal(cjk.needsTranslation(chinese, "zh"), false);
+    assert.equal(
+        cjk.needsTranslation("我昨天和朋友一起玩了这个游戏，名字叫ポケモン，真的很好玩", "zh"),
+        false,
+        "one borrowed word is not Japanese",
+    );
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 

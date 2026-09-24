@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS } from "../constants.js";
 
 const MASK_RE = new RegExp(MASK_PATTERN, "g");
 const NON_LETTER = /[^\p{L}]/gu;
+const FOREIGN_SHARE = 0.2;
 
 export class LanguageDetector {
     constructor(settings) {
@@ -15,14 +16,20 @@ export class LanguageDetector {
         const letters = this._letters(text);
         if (letters.length < 2) return false;
 
-        const { script } = getLanguage(language ?? this._settings.current.targetLanguage);
+        const { script, requires, excludes } = getLanguage(language ?? this._settings.current.targetLanguage);
 
         if (!script) return true;
 
         let inTarget = 0;
+        let required = 0;
+        let excluded = 0;
         for (const ch of letters) {
             if (script.test(ch)) inTarget += 1;
+            if (requires?.test(ch)) required += 1;
+            if (excludes?.test(ch)) excluded += 1;
         }
+        if (requires && required === 0) return true;
+        if (excludes && excluded / letters.length >= FOREIGN_SHARE) return true;
         return inTarget / letters.length < this._threshold();
     }
 
