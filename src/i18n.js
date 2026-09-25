@@ -79,6 +79,8 @@ const STRINGS = {
         "menu.translateGuild": "Translate with Mollu",
         "menu.everyGuild": "Translate with Mollu (every server is on)",
         "menu.translateChannel": "Translate with Mollu",
+        "menu.showTranslation": "Show Mollu translation",
+        "menu.retranslate": "Translate again with Mollu",
         "settings.translateDms": "Translate direct messages",
         "settings.translateDms.note":
             "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
@@ -131,7 +133,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "Check",
         "settings.clearCache": "Translation cache",
         "settings.clearCache.note":
-            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh; clear this when a translation is wrong or you changed the base URL.",
+            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Mollu; clear this after changing the base URL.",
         "settings.clearCache.action": "Clear",
         "clearCache.title": "Clear the translation cache?",
         "clearCache.body":
@@ -239,6 +241,8 @@ const STRINGS = {
         "menu.translateGuild": "Mollu로 번역",
         "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
         "menu.translateChannel": "Mollu로 번역",
+        "menu.showTranslation": "Mollu 번역 보이기",
+        "menu.retranslate": "Mollu로 다시 번역",
         "settings.translateDms": "DM 도 번역",
         "settings.translateDms.note":
             "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
@@ -290,7 +294,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "확인",
         "settings.clearCache": "번역 캐시",
         "settings.clearCache.note":
-            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역이 이상하거나 Base URL 을 바꿨을 때 비우세요.",
+            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Mollu로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
         "settings.clearCache.action": "비우기",
         "clearCache.title": "번역 캐시를 비울까요?",
         "clearCache.body":

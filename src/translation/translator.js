@@ -97,6 +97,14 @@ export class Translator {
         return { status: "unknown" };
     }
 
+    isCached(text) {
+        return this._cache.has(this._cacheKey(mask(text).masked, this._settings.current.targetLanguage));
+    }
+
+    forget(text) {
+        this._cache.delete(this._cacheKey(mask(text).masked, this._settings.current.targetLanguage));
+    }
+
     // A translation belongs to the model that produced it.
     _cacheKey(masked, language) {
         const { provider, model } = this._settings.current;

@@ -12,6 +12,7 @@ import { Hotkey } from "./hotkey.js";
 import { OutgoingPatch, findMessageActions, waitForMessageActions } from "./outgoing-patch.js";
 import { Updater } from "./updater.js";
 import { ContextMenus } from "./context-menu.js";
+import { BlockControls } from "./ui/block-controls.js";
 import { findMessageContent, waitForMessageContent, createStores } from "./discord.js";
 import { hasNativeFetch } from "./lib/net.js";
 import { STYLES } from "./ui/styles.js";
@@ -37,6 +38,7 @@ export default class Mollu {
             settings: this._settings,
             onError: (message, { fatal }) => this._notifyError(message, fatal),
         });
+        this._blocks = new BlockControls({ translator: this._translator });
         this._patch = null;
         this._outgoing = null;
         this._pending = null;
@@ -60,7 +62,7 @@ export default class Mollu {
             onResult: (result) => this._reportUpdate(result),
             confirm: (offer) => this._confirmUpdate(offer),
         });
-        this._menus = new ContextMenus({ settings: this._settings });
+        this._menus = new ContextMenus({ settings: this._settings, blocks: this._blocks });
         this._lastErrorToast = 0;
     }
 
@@ -129,6 +131,7 @@ export default class Mollu {
         this._pending = null;
 
         this._menus.remove();
+        this._blocks.clear();
         for (const hotkey of this._hotkeys) hotkey.remove();
         this._updater.stop();
 
@@ -168,6 +171,7 @@ export default class Mollu {
             target,
             settings: this._settings,
             translator: this._translator,
+            blocks: this._blocks,
             languageDetector: this._detector,
             stores,
         });

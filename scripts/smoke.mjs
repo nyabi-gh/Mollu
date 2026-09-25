@@ -1478,6 +1478,8 @@ check("settings: listeners fire and unsubscribe, and pasted values are trimmed",
 
 const { MessagePatch } = await import("../src/message-patch.js");
 const { ContextMenus } = await import("../src/context-menu.js");
+const { BlockControls } = await import("../src/ui/block-controls.js");
+const { TranslationBlock } = await import("../src/ui/translation-block.js");
 
 check("target servers: the list gates by default, the toggle opens every server", () => {
     const inList = "1101573652786446417";
@@ -2112,7 +2114,12 @@ check("context menu: a server and a channel are switched from their right-click 
         const settings = new Settings();
         const menus = new ContextMenus({ settings });
         menus.install();
-        assert.deepEqual([...patches.keys()].sort(), ["channel-context", "guild-context", "thread-context"]);
+        assert.deepEqual([...patches.keys()].sort(), [
+            "channel-context",
+            "guild-context",
+            "message",
+            "thread-context",
+        ]);
 
         const open = (navId, props) => {
             const tree = { props: { children: [] } };
@@ -2165,6 +2172,132 @@ check("context menu: a server and a channel are switched from their right-click 
         BdApi.Data = previousData;
         BdApi.ContextMenu = previousMenu;
     }
+});
+
+check("translator: forgetting a sentence drops only its entry for the current target", () => {
+    const settings = stubSettings();
+    const translator = new Translator({ settings });
+    translator.remember("hello there", "안녕하세요", "ko");
+    translator.remember("good night", "잘 자", "ko");
+    translator.remember("hello there", "こんにちは", "ja");
+
+    translator.forget("hello there");
+    assert.equal(translator.isCached("hello there"), false);
+    assert.equal(translator.peek("hello there").status, "unknown");
+    assert.equal(translator.peek("good night").text, "잘 자", "other sentences stay");
+
+    settings.current.targetLanguage = "ja";
+    assert.equal(translator.peek("hello there").text, "こんにちは", "other targets stay");
+});
+
+check("context menu: a message's translation is hidden or asked for again from its right-click menu", () => {
+    const previousMenu = BdApi.ContextMenu;
+    const patches = new Map();
+    BdApi.ContextMenu = {
+        patch: (navId, callback) => {
+            patches.set(navId, callback);
+            return () => patches.delete(navId);
+        },
+        buildItem: (item) => item,
+    };
+    try {
+        const settings = stubSettings();
+        const translator = new Translator({ settings });
+        translator.remember("hello there", "안녕하세요", "ko");
+        const blocks = new BlockControls({ translator });
+        const menus = new ContextMenus({ settings, blocks });
+        menus.install();
+
+        const open = (id) => {
+            const tree = { props: { children: [] } };
+            patches.get("message")(tree, { message: { id } });
+            return tree.props.children.filter((item) => item.type !== "separator");
+        };
+        const ids = (id) => open(id).map((item) => item.id);
+
+        assert.deepEqual(open("m1"), [], "a message without a block gets nothing, not a stray separator");
+
+        let status = "done";
+        const events = [];
+        const handle = (name, text) => ({
+            text,
+            status: () => status,
+            refresh: () => events.push(`${name}:refresh`),
+            retranslate: () => events.push(`${name}:retranslate`),
+        });
+        const unmount = blocks.mount("m1", handle("a", "hello there"));
+        blocks.mount("m2", handle("b", "hello there"));
+        blocks.mount("m3", handle("c", "good night"));
+
+        const [show] = open("m1");
+        assert.equal(show.checked, true);
+        show.action();
+        assert.ok(blocks.isHidden("m1"));
+        assert.deepEqual(events, ["a:refresh"], "only that message's block redraws");
+        assert.deepEqual(ids("m1"), ["mollu-show-translation"], "a hidden translation can only be shown");
+        open("m1")[0].action();
+        assert.equal(blocks.isHidden("m1"), false);
+
+        events.length = 0;
+        open("m1")
+            .find((item) => item.id === "mollu-retranslate")
+            .action();
+        assert.equal(translator.isCached("hello there"), false);
+        assert.deepEqual(events, ["a:retranslate", "b:retranslate"], "every block with that text is redone");
+        assert.deepEqual(ids("m1"), ["mollu-show-translation"], "nothing to redo until the new one lands");
+
+        translator._cache.set(translator._cacheKey("hello there", "ko"), null);
+        status = "skip";
+        assert.deepEqual(
+            ids("m1"),
+            ["mollu-retranslate"],
+            "a sentence judged already translated can be retried",
+        );
+        status = "idle";
+        translator.forget("hello there");
+        assert.deepEqual(ids("m1"), [], "nothing to hide or redo before a translation");
+
+        settings.current.provider = "deepl";
+        settings.current.model = "";
+        translator.remember("hello there", "안녕하세요", "ko");
+        status = "done";
+        assert.deepEqual(ids("m1"), ["mollu-show-translation"], "DeepL would answer the same again");
+
+        unmount();
+        assert.deepEqual(open("m1"), []);
+        menus.remove();
+    } finally {
+        BdApi.ContextMenu = previousMenu;
+    }
+});
+
+check("translation block: hidden leaves nothing in automatic mode and the button in manual mode", () => {
+    const translator = new Translator({ settings: stubSettings() });
+    translator.remember("hello there", "안녕하세요", "ko");
+    const blocks = new BlockControls({ translator });
+    const render = (autoTranslate) => {
+        const settings = stubSettings();
+        settings.current.autoTranslate = autoTranslate;
+        settings.onChange = () => () => {};
+        const block = TranslationBlock({
+            text: "hello there",
+            messageId: "m1",
+            translator,
+            blocks,
+            settings,
+            stores: {},
+            guildId: null,
+        });
+        return block.props.children[1];
+    };
+
+    assert.equal(render(true).props.className, "mollu-translation");
+    blocks.setHidden("m1", true);
+    assert.equal(render(true), null);
+    assert.equal(render(false).props.className, "mollu-translation__trigger");
+
+    blocks.clear();
+    assert.equal(render(false).props.className, "mollu-translation", "stopping the plugin shows them again");
 });
 
 check("settings: every field sits in a section, and only the advanced one starts folded", () => {

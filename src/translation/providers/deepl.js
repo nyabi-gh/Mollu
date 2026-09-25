@@ -6,6 +6,8 @@ export const id = "deepl";
 export const label = "DeepL";
 export const keyHint = "...:fx";
 export const models = Object.freeze([]);
+// The same text always comes back the same way, so asking again changes nothing.
+export const deterministic = true;
 
 const FREE_BASE = "https://api-free.deepl.com";
 const PRO_BASE = "https://api.deepl.com";

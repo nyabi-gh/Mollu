@@ -13,6 +13,7 @@ It works in both directions — into your language, or out of it.
 - Pick from 15 languages. Messages already written in that language are left alone.
 - **Automatic mode** translates what is on screen by itself. **Manual mode** puts a `Translate` button under each message and only sends what you press.
 - Translations are remembered, so repeating the same sentence costs nothing extra.
+- Right-click a message to hide its translation, or to translate it again when it came out wrong.
 - **Your own outgoing messages** can be translated too — type in Korean, send in English. Off by default.
 - The things you turn on and off often have keyboard shortcuts.
 - When a new version is out, its signature is checked and Discord asks whether to install it.
@@ -121,7 +122,7 @@ The settings come in six sections. **Advanced** starts folded.
 | Concurrent requests | How many translations to run at once. Lower it to 1–2 if you keep hitting a free-tier limit |
 | Check for updates automatically | Looks for a new version every few hours. Only a version carrying the publisher's signature is offered, and it installs only when you agree |
 | Updates | `Check` looks right now |
-| Translation cache | `Clear` deletes every saved translation. Use it when a translation is wrong or you switched services |
+| Translation cache | `Clear` deletes every saved translation. Use it after changing the API base URL; for one wrong translation, the message's right-click menu is enough |
 | Log why a message was skipped | Records the reason a message was not translated. For when nothing shows up and you cannot tell why |
 
 ## Worth knowing
@@ -130,6 +131,8 @@ The settings come in six sections. **Advanced** starts folded.
 - Your own messages are not translated by default. Turn on `Translate my own messages` to test with your own typing.
 - Languages that share the Latin alphabet — English, Spanish, French — cannot be told apart before sending, so each sentence is sent once. The verdict is saved, so no sentence costs twice.
 - When a translation fails, click the failure line to try again.
+- To hide one message's translation, right-click it and switch off **Show Mollu translation**. In manual mode the `Translate` button comes back. Hidden translations show again when Discord restarts.
+- **Translate again with Mollu** in the same menu asks the service afresh. Use it on a translation that came out wrong, or on a message that got none because the service judged it already in your language. DeepL translates the same text the same way every time, so it does not offer this.
 - Editing a message re-translates it.
 - A large Discord update can stop translations from appearing. Wait for a plugin update.
 

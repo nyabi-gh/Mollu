@@ -182,6 +182,8 @@ var STRINGS = {
     "menu.translateGuild": "Translate with Mollu",
     "menu.everyGuild": "Translate with Mollu (every server is on)",
     "menu.translateChannel": "Translate with Mollu",
+    "menu.showTranslation": "Show Mollu translation",
+    "menu.retranslate": "Translate again with Mollu",
     "settings.translateDms": "Translate direct messages",
     "settings.translateDms.note": "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
     "settings.targetLanguage": "Translate into",
@@ -223,7 +225,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
     "settings.checkUpdate.action": "Check",
     "settings.clearCache": "Translation cache",
-    "settings.clearCache.note": "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh; clear this when a translation is wrong or you changed the base URL.",
+    "settings.clearCache.note": "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Mollu; clear this after changing the base URL.",
     "settings.clearCache.action": "Clear",
     "clearCache.title": "Clear the translation cache?",
     "clearCache.body": "{count} saved translations will be deleted. Messages already on screen will be sent to the API again, at the usual cost.",
@@ -313,6 +315,8 @@ var STRINGS = {
     "menu.translateGuild": "Mollu로 번역",
     "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
     "menu.translateChannel": "Mollu로 번역",
+    "menu.showTranslation": "Mollu 번역 보이기",
+    "menu.retranslate": "Mollu로 다시 번역",
     "settings.translateDms": "DM 도 번역",
     "settings.translateDms.note": "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
     "settings.targetLanguage": "번역할 언어",
@@ -354,7 +358,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
     "settings.checkUpdate.action": "확인",
     "settings.clearCache": "번역 캐시",
-    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역이 이상하거나 Base URL 을 바꿨을 때 비우세요.",
+    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Mollu로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
     "settings.clearCache.action": "비우기",
     "clearCache.title": "번역 캐시를 비울까요?",
     "clearCache.body": "저장된 번역 {count}개가 삭제됩니다. 화면에 있는 메시지는 다시 API 로 전송되고 그만큼 비용이 듭니다.",
@@ -821,6 +825,7 @@ async function send2(url, { headers, signal, body }) {
 var deepl_exports = {};
 __export(deepl_exports, {
   defaults: () => defaults5,
+  deterministic: () => deterministic,
   id: () => id5,
   keyHint: () => keyHint5,
   label: () => label5,
@@ -831,6 +836,7 @@ var id5 = "deepl";
 var label5 = "DeepL";
 var keyHint5 = "...:fx";
 var models5 = Object.freeze([]);
+var deterministic = true;
 var FREE_BASE = "https://api-free.deepl.com";
 var PRO_BASE = "https://api.deepl.com";
 var defaults5 = Object.freeze({ model: "", baseUrl: FREE_BASE });
@@ -1824,6 +1830,9 @@ var TranslationCache = class {
     }
     return value;
   }
+  delete(key) {
+    if (this._map.delete(key)) this._scheduleSave();
+  }
   set(key, value) {
     this._map.set(key, value);
     this._scheduleSave();
@@ -1973,6 +1982,12 @@ var Translator = class {
     if (this._cache.has(key)) return this._restore(this._cache.get(key), tokens);
     if (text.length > this._settings.current.maxChars) return skip();
     return { status: "unknown" };
+  }
+  isCached(text) {
+    return this._cache.has(this._cacheKey(mask(text).masked, this._settings.current.targetLanguage));
+  }
+  forget(text) {
+    this._cache.delete(this._cacheKey(mask(text).masked, this._settings.current.targetLanguage));
   }
   // A translation belongs to the model that produced it.
   _cacheKey(masked, language) {
@@ -2719,13 +2734,29 @@ function initialResult(translator, text) {
   const known = translator.peek(text);
   return known.status === "done" || known.status === "skip" ? known : { status: "idle" };
 }
-function TranslationBlock({ text, translator, settings, stores, guildId }) {
+function TranslationBlock({ text, messageId, translator, blocks, settings, stores, guildId }) {
   const anchorRef = React.useRef(null);
   const bodyRef = React.useRef(null);
   const heightRef = React.useRef(null);
   const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } = useDisplaySettings(settings);
   const triggerRef = React.useRef(null);
+  const statusRef = React.useRef(null);
+  const forcedRef = React.useRef(false);
   const [result, setResult] = React.useState(() => initialResult(translator, text));
+  const [hidden, setHidden] = React.useState(() => blocks.isHidden(messageId));
+  const [round, setRound] = React.useState(0);
+  React.useEffect(
+    () => blocks.mount(messageId, {
+      text,
+      status: () => statusRef.current,
+      refresh: () => setHidden(blocks.isHidden(messageId)),
+      retranslate: () => {
+        forcedRef.current = true;
+        setRound((n) => n + 1);
+      }
+    }),
+    [blocks, messageId, text]
+  );
   React.useEffect(() => {
     let alive = true;
     let visible = false;
@@ -2739,12 +2770,14 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
         if (alive) setResult(next);
       });
     };
+    const forced = forcedRef.current;
+    forcedRef.current = false;
     const known = translator.peek(text);
     if (known.status === "done" || known.status === "skip") {
       setResult(known);
       return void 0;
     }
-    setResult({ status: "idle" });
+    setResult({ status: forced ? "pending" : "idle" });
     const schedule = (delay) => {
       dwell = setTimeout(() => {
         dwell = null;
@@ -2780,10 +2813,15 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     triggerRef.current = run;
     if (!autoTranslate) {
       visible = true;
+      if (forced) run(true);
       return () => {
         alive = false;
         release?.();
       };
+    }
+    if (forced) {
+      visible = true;
+      run(true);
     }
     const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
       visible = isVisible;
@@ -2808,14 +2846,19 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       stopObserving();
       if (dwell != null) clearTimeout(dwell);
     };
-  }, [text, autoTranslate, targetLanguage, maxChars, provider, model]);
+  }, [text, autoTranslate, targetLanguage, maxChars, provider, model, round]);
   const status = result && result.status;
+  statusRef.current = status;
   React.useLayoutEffect(() => {
     const height = blockHeight(bodyRef.current);
     const previous = heightRef.current;
     heightRef.current = height;
     if (previous !== null) keepPlace(anchorRef.current, height - previous);
-  }, [status]);
+  }, [status, hidden]);
+  const reveal = () => {
+    blocks.setHidden(messageId, false);
+    if (status !== "done") triggerRef.current?.(true);
+  };
   return React.createElement(
     React.Fragment,
     null,
@@ -2824,7 +2867,7 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
       className: "mollu-translation__anchor",
       "aria-hidden": "true"
     }),
-    renderBody(status, result, {
+    hidden ? autoTranslate ? null : renderTrigger(bodyRef, reveal) : renderBody(status, result, {
       ref: bodyRef,
       showPending,
       stores,
@@ -2836,18 +2879,19 @@ function TranslationBlock({ text, translator, settings, stores, guildId }) {
     })
   );
 }
+function renderTrigger(ref, onClick) {
+  return React.createElement(
+    "button",
+    { ref, type: "button", className: "mollu-translation__trigger", onClick },
+    t("block.trigger")
+  );
+}
 function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
 function renderBody(status, result, ctx) {
   const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
-  if (status === "idle" && !autoTranslate) {
-    return React.createElement(
-      "button",
-      { ref, type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
-      t("block.trigger")
-    );
-  }
+  if (status === "idle" && !autoTranslate) return renderTrigger(ref, onTrigger);
   if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
   if (status === "retry") return null;
   if (status === "pending") {
@@ -2909,10 +2953,11 @@ function isExcludedChannel(settings, stores, channelId) {
 // src/message-patch.js
 var TRANSLATABLE_TYPES = /* @__PURE__ */ new Set([0, 19, 20]);
 var MessagePatch = class {
-  constructor({ target, settings, translator, languageDetector, stores }) {
+  constructor({ target, settings, translator, blocks, languageDetector, stores }) {
     this._target = target;
     this._settings = settings;
     this._translator = translator;
+    this._blocks = blocks;
     this._detector = languageDetector;
     this._stores = stores;
     this._unpatch = null;
@@ -2951,9 +2996,11 @@ var MessagePatch = class {
     const block2 = React.createElement(TranslationBlock, {
       key: "mollu-translation",
       text: message.content,
+      messageId: message.id,
       guildId,
       stores: this._stores,
       translator: this._translator,
+      blocks: this._blocks,
       settings: this._settings
     });
     return appendChild(ret, block2);
@@ -3310,8 +3357,9 @@ function writePlugin(text) {
 // src/context-menu.js
 var CHANNEL_MENUS = ["channel-context", "thread-context"];
 var ContextMenus = class {
-  constructor({ settings }) {
+  constructor({ settings, blocks }) {
     this._settings = settings;
+    this._blocks = blocks;
     this._unpatches = [];
   }
   install() {
@@ -3324,6 +3372,7 @@ var ContextMenus = class {
     for (const navId of CHANNEL_MENUS) {
       this._patch(api, navId, (tree, props) => this._channel(api, tree, props));
     }
+    this._patch(api, "message", (tree, props) => this._message(api, tree, props));
   }
   remove() {
     for (const unpatch of this._unpatches) {
@@ -3352,14 +3401,16 @@ var ContextMenus = class {
     const guildId = props?.guild?.id;
     if (!guildId) return;
     const { allGuilds } = this._settings.current;
-    append(api, tree, {
-      type: "toggle",
-      id: "mollu-translate-guild",
-      label: t(allGuilds ? "menu.everyGuild" : "menu.translateGuild"),
-      checked: allGuilds || this._settings.guildIdSet.has(guildId),
-      disabled: allGuilds,
-      action: () => this._settings.toggleGuild(guildId)
-    });
+    append(api, tree, [
+      {
+        type: "toggle",
+        id: "mollu-translate-guild",
+        label: t(allGuilds ? "menu.everyGuild" : "menu.translateGuild"),
+        checked: allGuilds || this._settings.guildIdSet.has(guildId),
+        disabled: allGuilds,
+        action: () => this._settings.toggleGuild(guildId)
+      }
+    ]);
   }
   _channel(api, tree, props) {
     const channel = props?.channel;
@@ -3367,21 +3418,103 @@ var ContextMenus = class {
     if (!channel?.id || !guildId) return;
     const { allGuilds } = this._settings.current;
     if (!allGuilds && !this._settings.guildIdSet.has(guildId)) return;
-    append(api, tree, {
-      type: "toggle",
-      id: "mollu-translate-channel",
-      label: t("menu.translateChannel"),
-      checked: !this._settings.excludedChannelSet.has(channel.id),
-      action: () => this._settings.toggleExcludedChannel(channel.id)
-    });
+    append(api, tree, [
+      {
+        type: "toggle",
+        id: "mollu-translate-channel",
+        label: t("menu.translateChannel"),
+        checked: !this._settings.excludedChannelSet.has(channel.id),
+        action: () => this._settings.toggleExcludedChannel(channel.id)
+      }
+    ]);
+  }
+  _message(api, tree, props) {
+    const messageId = props?.message?.id;
+    const menu = messageId ? this._blocks.menuFor(messageId) : null;
+    if (!menu) return;
+    const items = [];
+    if (menu.canHide) {
+      items.push({
+        type: "toggle",
+        id: "mollu-show-translation",
+        label: t("menu.showTranslation"),
+        checked: !menu.hidden,
+        action: () => this._blocks.setHidden(messageId, !menu.hidden)
+      });
+    }
+    if (menu.canRetranslate && !getProvider(this._settings.current.provider).deterministic) {
+      items.push({
+        type: "text",
+        id: "mollu-retranslate",
+        label: t("menu.retranslate"),
+        action: () => this._blocks.retranslate(messageId)
+      });
+    }
+    append(api, tree, items);
   }
 };
-function append(api, tree, item) {
-  const built = [api.buildItem({ type: "separator" }), api.buildItem(item)];
+function append(api, tree, items) {
+  if (!items.length) return;
+  const built = [api.buildItem({ type: "separator" }), ...items.map((item) => api.buildItem(item))];
   const children = tree?.props?.children;
   if (Array.isArray(children)) children.push(...built);
   else if (tree?.props) tree.props.children = [children, ...built].filter((child) => child != null);
 }
+
+// src/ui/block-controls.js
+var BlockControls = class {
+  constructor({ translator }) {
+    this._translator = translator;
+    this._hidden = /* @__PURE__ */ new Set();
+    this._mounted = /* @__PURE__ */ new Map();
+  }
+  mount(messageId, handle) {
+    let handles = this._mounted.get(messageId);
+    if (!handles) {
+      handles = /* @__PURE__ */ new Set();
+      this._mounted.set(messageId, handles);
+    }
+    handles.add(handle);
+    return () => {
+      handles.delete(handle);
+      if (!handles.size && this._mounted.get(messageId) === handles) this._mounted.delete(messageId);
+    };
+  }
+  menuFor(messageId) {
+    const handle = this._first(messageId);
+    if (!handle) return null;
+    const hidden = this._hidden.has(messageId);
+    const status = handle.status();
+    return {
+      hidden,
+      canHide: hidden || status === "done" || status === "error",
+      canRetranslate: !hidden && this._translator.isCached(handle.text)
+    };
+  }
+  isHidden(messageId) {
+    return this._hidden.has(messageId);
+  }
+  setHidden(messageId, hidden) {
+    if (hidden) this._hidden.add(messageId);
+    else this._hidden.delete(messageId);
+    for (const handle of this._mounted.get(messageId) ?? []) handle.refresh();
+  }
+  // The cache is keyed by text, so every block showing the same text is redone with it.
+  retranslate(messageId) {
+    const text = this._first(messageId)?.text;
+    if (text == null) return;
+    this._translator.forget(text);
+    for (const handles of this._mounted.values()) {
+      for (const handle of handles) if (handle.text === text) handle.retranslate();
+    }
+  }
+  clear() {
+    this._hidden.clear();
+  }
+  _first(messageId) {
+    return this._mounted.get(messageId)?.values().next().value;
+  }
+};
 
 // src/ui/styles.js
 var STYLES = `
@@ -3548,6 +3681,7 @@ var Mollu = class {
       settings: this._settings,
       onError: (message, { fatal }) => this._notifyError(message, fatal)
     });
+    this._blocks = new BlockControls({ translator: this._translator });
     this._patch = null;
     this._outgoing = null;
     this._pending = null;
@@ -3571,7 +3705,7 @@ var Mollu = class {
       onResult: (result) => this._reportUpdate(result),
       confirm: (offer) => this._confirmUpdate(offer)
     });
-    this._menus = new ContextMenus({ settings: this._settings });
+    this._menus = new ContextMenus({ settings: this._settings, blocks: this._blocks });
     this._lastErrorToast = 0;
   }
   getName() {
@@ -3623,6 +3757,7 @@ var Mollu = class {
     this._pending?.abort();
     this._pending = null;
     this._menus.remove();
+    this._blocks.clear();
     for (const hotkey of this._hotkeys) hotkey.remove();
     this._updater.stop();
     BdApi.Patcher.unpatchAll(NAME);
@@ -3658,6 +3793,7 @@ var Mollu = class {
       target,
       settings: this._settings,
       translator: this._translator,
+      blocks: this._blocks,
       languageDetector: this._detector,
       stores
     });

@@ -7,10 +7,11 @@ import { isExcludedChannel } from "./scope.js";
 const TRANSLATABLE_TYPES = new Set([0, 19, 20]);
 
 export class MessagePatch {
-    constructor({ target, settings, translator, languageDetector, stores }) {
+    constructor({ target, settings, translator, blocks, languageDetector, stores }) {
         this._target = target;
         this._settings = settings;
         this._translator = translator;
+        this._blocks = blocks;
         this._detector = languageDetector;
         this._stores = stores;
         this._unpatch = null;
@@ -54,9 +55,11 @@ export class MessagePatch {
         const block = React.createElement(TranslationBlock, {
             key: "mollu-translation",
             text: message.content,
+            messageId: message.id,
             guildId,
             stores: this._stores,
             translator: this._translator,
+            blocks: this._blocks,
             settings: this._settings,
         });
         return appendChild(ret, block);

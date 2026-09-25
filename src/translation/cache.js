@@ -79,6 +79,10 @@ export class TranslationCache {
         return value;
     }
 
+    delete(key) {
+        if (this._map.delete(key)) this._scheduleSave();
+    }
+
     set(key, value) {
         this._map.set(key, value);
         this._scheduleSave();

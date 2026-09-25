@@ -13,14 +13,32 @@ function initialResult(translator, text) {
     return known.status === "done" || known.status === "skip" ? known : { status: "idle" };
 }
 
-export function TranslationBlock({ text, translator, settings, stores, guildId }) {
+export function TranslationBlock({ text, messageId, translator, blocks, settings, stores, guildId }) {
     const anchorRef = React.useRef(null);
     const bodyRef = React.useRef(null);
     const heightRef = React.useRef(null);
     const { showPending, autoTranslate, targetLanguage, maxChars, provider, model } =
         useDisplaySettings(settings);
     const triggerRef = React.useRef(null);
+    const statusRef = React.useRef(null);
+    const forcedRef = React.useRef(false);
     const [result, setResult] = React.useState(() => initialResult(translator, text));
+    const [hidden, setHidden] = React.useState(() => blocks.isHidden(messageId));
+    const [round, setRound] = React.useState(0);
+
+    React.useEffect(
+        () =>
+            blocks.mount(messageId, {
+                text,
+                status: () => statusRef.current,
+                refresh: () => setHidden(blocks.isHidden(messageId)),
+                retranslate: () => {
+                    forcedRef.current = true;
+                    setRound((n) => n + 1);
+                },
+            }),
+        [blocks, messageId, text],
+    );
 
     React.useEffect(() => {
         let alive = true;
@@ -37,12 +55,15 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             });
         };
 
+        const forced = forcedRef.current;
+        forcedRef.current = false;
+
         const known = translator.peek(text);
         if (known.status === "done" || known.status === "skip") {
             setResult(known);
             return undefined;
         }
-        setResult({ status: "idle" });
+        setResult({ status: forced ? "pending" : "idle" });
 
         const schedule = (delay) => {
             dwell = setTimeout(() => {
@@ -87,10 +108,16 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
 
         if (!autoTranslate) {
             visible = true;
+            if (forced) run(true);
             return () => {
                 alive = false;
                 release?.();
             };
+        }
+
+        if (forced) {
+            visible = true;
+            run(true);
         }
 
         const stopObserving = observeVisibility(anchorRef.current, (isVisible) => {
@@ -118,9 +145,10 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             stopObserving();
             if (dwell != null) clearTimeout(dwell);
         };
-    }, [text, autoTranslate, targetLanguage, maxChars, provider, model]);
+    }, [text, autoTranslate, targetLanguage, maxChars, provider, model, round]);
 
     const status = result && result.status;
+    statusRef.current = status;
 
     React.useLayoutEffect(() => {
         const height = blockHeight(bodyRef.current);
@@ -130,7 +158,12 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
         // The first pass only records what the message was born with. A block that was already
         // in its first layout pushed nothing, and Discord accounts for it like any other height.
         if (previous !== null) keepPlace(anchorRef.current, height - previous);
-    }, [status]);
+    }, [status, hidden]);
+
+    const reveal = () => {
+        blocks.setHidden(messageId, false);
+        if (status !== "done") triggerRef.current?.(true);
+    };
 
     return React.createElement(
         React.Fragment,
@@ -140,16 +173,28 @@ export function TranslationBlock({ text, translator, settings, stores, guildId }
             className: "mollu-translation__anchor",
             "aria-hidden": "true",
         }),
-        renderBody(status, result, {
-            ref: bodyRef,
-            showPending,
-            stores,
-            guildId,
-            autoTranslate,
-            badge: badgeFor(targetLanguage),
-            language: targetLanguage,
-            onTrigger: () => triggerRef.current?.(true),
-        }),
+        hidden
+            ? autoTranslate
+                ? null
+                : renderTrigger(bodyRef, reveal)
+            : renderBody(status, result, {
+                  ref: bodyRef,
+                  showPending,
+                  stores,
+                  guildId,
+                  autoTranslate,
+                  badge: badgeFor(targetLanguage),
+                  language: targetLanguage,
+                  onTrigger: () => triggerRef.current?.(true),
+              }),
+    );
+}
+
+function renderTrigger(ref, onClick) {
+    return React.createElement(
+        "button",
+        { ref, type: "button", className: "mollu-translation__trigger", onClick },
+        t("block.trigger"),
     );
 }
 
@@ -159,13 +204,7 @@ function jitter() {
 
 function renderBody(status, result, ctx) {
     const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
-    if (status === "idle" && !autoTranslate) {
-        return React.createElement(
-            "button",
-            { ref, type: "button", className: "mollu-translation__trigger", onClick: onTrigger },
-            t("block.trigger"),
-        );
-    }
+    if (status === "idle" && !autoTranslate) return renderTrigger(ref, onTrigger);
     if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
     if (status === "retry") return null;
     if (status === "pending") {
