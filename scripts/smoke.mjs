@@ -1621,30 +1621,17 @@ await checkAsync(
     },
 );
 
-await checkAsync("outgoing: what you typed is handed back, so your own message costs nothing", async () => {
-    const remembered = [];
-    const inGuild = "1101573652786446417";
-    const translator = (text) => ({
-        translate: async () => ({ status: "done", text }),
-        remember: (...args) => remembered.push(args),
-    });
+await checkAsync(
+    "outgoing: the block under your own message is translated afresh, not what you typed",
+    async () => {
+        const translator = new Translator({ settings: stubSettings() });
+        translator.translate = async () => ({ status: "done", text: "that's not it" });
+        const patch = outgoingWith({ translateOutgoing: true }, "1101573652786446417", translator);
 
-    const typedInTarget = outgoingWith(
-        { translateOutgoing: true, outgoingLanguage: "en", targetLanguage: "ko" },
-        inGuild,
-        translator("hello everyone"),
-    );
-    await typedInTarget._onSend(null, ["c", { content: "안녕하세요 여러분" }], () => "sent");
-    assert.deepEqual(remembered, [["hello everyone", "안녕하세요 여러분", "ko"]]);
-
-    const typedInAnother = outgoingWith(
-        { translateOutgoing: true, outgoingLanguage: "ja", targetLanguage: "ko" },
-        inGuild,
-        translator("こんにちは"),
-    );
-    await typedInAnother._onSend(null, ["c", { content: "hello everyone" }], () => "sent");
-    assert.equal(remembered.length, 1, "what you typed was not the language the block asks for");
-});
+        await patch._onSend(null, ["c", { content: "그게아닌뒈~" }], () => "sent");
+        assert.equal(translator.peek("that's not it").status, "unknown");
+    },
+);
 
 check("outgoing: the gate is skipped without a promise when it does not apply", () => {
     const patch = outgoingWith({}, "1101573652786446417");

@@ -92,7 +92,6 @@ export class OutgoingPatch {
                     return;
                 }
                 args[1] = { ...args[1], content: result.text };
-                this._remember(text, result.text);
             } else if (result.status === "retry") {
                 this._onFailure(t("error.busy"));
             } else if (result.status === "error") {
@@ -104,14 +103,6 @@ export class OutgoingPatch {
         } finally {
             clearTimeout(slow);
         }
-    }
-
-    // The message goes out already translated, so the block under it would pay for a round
-    // trip back to what was typed. Hand over the pair instead.
-    _remember(original, sent) {
-        const { targetLanguage } = this._settings.current;
-        if (this._detector.needsTranslation(original, targetLanguage)) return;
-        this._translator.remember?.(sent, original, targetLanguage);
     }
 
     _pick(args) {
