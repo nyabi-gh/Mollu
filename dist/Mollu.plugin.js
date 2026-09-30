@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.3.1
+ * @version 1.3.2
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyabi-gh/Mollu
  */
@@ -1994,6 +1994,10 @@ var Translator = class {
     const { provider, model } = this._settings.current;
     const engine = model || getProvider(provider).defaults.model;
     return `${provider}${engine}${language}${masked}`;
+  }
+  remember(text, translation, language) {
+    if (mask(text).tokens.length || mask(translation).tokens.length) return;
+    this._cache.set(this._cacheKey(text, language), translation);
   }
   translate(text, hooks = {}) {
     const { masked, tokens } = mask(text);
