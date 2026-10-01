@@ -2455,6 +2455,30 @@ await checkAsync("translator: a per-minute quota named in a 429 paces the reques
     }
 });
 
+await checkAsync("translator: a message scrolled away during a pause gives up its paced slot", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        translator._spacing = 5000;
+        translator._nextSlot = 0;
+        translator._pausedUntil = Date.now() + 40;
+        let visible = true;
+        const pending = translator.translate("hello there", { shouldRun: () => visible });
+        visible = false;
+        const result = await pending;
+        assert.equal(result.status, "unknown", "nobody wants it once the pause ends");
+        assert.equal(calls, 0);
+        assert.equal(translator._nextSlot, 0, "no slot is reserved for it");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
@@ -2598,6 +2622,8 @@ function installBdApiStub() {
             useState: (init) => [typeof init === "function" ? init() : init, noop],
             useEffect: noop,
             useLayoutEffect: noop,
+            useMemo: (fn) => fn(),
+            useCallback: (fn) => fn,
             useRef: (v = null) => ({ current: v }),
             Fragment: "Fragment",
         },

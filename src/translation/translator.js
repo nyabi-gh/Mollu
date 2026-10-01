@@ -162,6 +162,9 @@ export class Translator {
                 async () => {
                     if (!urgent) {
                         await this._awaitResume();
+                        // A paced slot is seconds long; one reserved for a message scrolled
+                        // away during the pause delays every message still on screen.
+                        if (!wanted()) throw skipped();
                         await this._awaitSlot();
                     }
                     if (this._stopped) throw aborted();
