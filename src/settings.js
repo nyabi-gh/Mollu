@@ -489,8 +489,15 @@ function migrate(stored) {
     for (const field of ["hotkey", "outgoingHotkey"]) {
         if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
     }
+
+    for (const saved of [stored, ...Object.values(stored.profiles ?? {})]) {
+        if (saved && RENAMED_MODELS.has(saved.model)) saved.model = RENAMED_MODELS.get(saved.model);
+    }
     return stored;
 }
+
+// DeepSeek retired V4 Flash and serves the old name from its successor.
+const RENAMED_MODELS = new Map([["deepseek-v4-flash", "deepseek-flash"]]);
 
 function normalize(values) {
     for (const field of TRIMMED_FIELDS) {

@@ -8,7 +8,7 @@ import { t } from "../../i18n.js";
 export const id = "claude";
 export const label = "Anthropic Claude";
 export const keyHint = "sk-ant-...";
-export const models = Object.freeze(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"]);
+export const models = Object.freeze(["claude-haiku-5-5", "claude-sonnet-5-5"]);
 export const defaults = Object.freeze({ model: models[0], baseUrl: "https://api.anthropic.com" });
 
 const API_VERSION = "2023-06-01";
@@ -30,16 +30,16 @@ export async function translate({ text, settings, signal }) {
     };
     // The newer models think by default and take no temperature; low effort keeps a
     // translation from turning into a deliberation. Haiku 4.5 has no effort control at all.
-    if (!/^claude-haiku/i.test(model)) body.output_config = { effort: "low" };
+    if (!/^claude-haiku-4/i.test(model)) body.output_config = { effort: "low" };
 
     const headers = {
         "x-api-key": apiKey,
         "anthropic-version": API_VERSION,
         "anthropic-dangerous-direct-browser-access": "true",
     };
-    // Opus 5 can decline on its safety classifiers; the API then retries on the model it
+    // Sonnet 5.5 can decline on its safety classifiers; the API then retries on the model it
     // recommends for that kind of refusal instead of returning nothing.
-    if (model === "claude-opus-5") {
+    if (model === "claude-sonnet-5-5") {
         body.fallbacks = "default";
         headers["anthropic-beta"] = FALLBACK_BETA;
     }

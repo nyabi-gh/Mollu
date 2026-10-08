@@ -37,7 +37,7 @@ var LEGACY_NAMES = ["KoreanAutoTranslator"];
 var DEFAULT_SETTINGS = Object.freeze({
   provider: "deepseek",
   apiKey: "",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   baseUrl: "https://api.deepseek.com",
   allGuilds: false,
   guildIds: "",
@@ -239,10 +239,10 @@ var STRINGS = {
     "keySource.claude": "Get one at platform.claude.com → API Keys.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
     "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
-    "modelHint.gemini": "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
+    "modelHint.gemini": "flash-lite answers in about a second; flash reads better but is slower. Another Gemini model, 3.1 or later, can be typed in.",
     "modelHint.deepl": "DeepL has no model to pick.",
-    "modelHint.openai": "luna is cheap and fast with reasoning off; sol reads better; astra is more than a translation needs.",
-    "modelHint.claude": "haiku is the fastest and cheapest; sonnet and opus read better and cost more.",
+    "modelHint.openai": "luna is cheap and fast with reasoning off; sol reads better but always reasons a little.",
+    "modelHint.claude": "haiku is the fastest and cheapest; sonnet reads better and costs more.",
     "language.auto": "Match Discord"
   },
   ko: {
@@ -372,10 +372,10 @@ var STRINGS = {
     "keySource.claude": "platform.claude.com → API Keys 에서 발급합니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
     "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
-    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
+    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. flash 는 문장이 더 좋지만 느립니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
     "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
-    "modelHint.openai": "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋고, astra 는 번역에는 과합니다.",
-    "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 과 opus 는 문장이 더 좋지만 비쌉니다.",
+    "modelHint.openai": "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋지만 추론을 완전히 끄지는 못합니다.",
+    "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 은 문장이 더 좋지만 비쌉니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
 };
@@ -683,7 +683,7 @@ function outputBudget(text, language) {
 var id = "deepseek";
 var label = "DeepSeek";
 var keyHint = "sk-...";
-var models = Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]);
+var models = Object.freeze(["deepseek-flash", "deepseek-v4-pro"]);
 var defaults = Object.freeze({
   model: models[0],
   baseUrl: "https://api.deepseek.com"
@@ -715,7 +715,7 @@ __export(gemini_exports, {
 var id2 = "gemini";
 var label2 = "Google Gemini";
 var keyHint2 = "AIza...";
-var models2 = Object.freeze(["gemini-3.1-flash-lite"]);
+var models2 = Object.freeze(["gemini-3.5-flash-lite", "gemini-3.8-flash"]);
 var defaults2 = Object.freeze({
   model: models2[0],
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -723,8 +723,8 @@ var defaults2 = Object.freeze({
 function translate2(params) {
   return chatCompletion({ ...params, defaults: defaults2, extend: extend2 });
 }
-function extend2(body) {
-  body.reasoning_effort = "minimal";
+function extend2(body, { model }) {
+  body.reasoning_effort = /flash-lite/i.test(model) ? "minimal" : "low";
 }
 
 // src/translation/providers/openai.js
@@ -740,12 +740,12 @@ __export(openai_exports, {
 var id3 = "openai";
 var label3 = "OpenAI";
 var keyHint3 = "sk-proj-...";
-var models3 = Object.freeze(["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"]);
+var models3 = Object.freeze(["gpt-6-luna", "gpt-6.1-sol"]);
 var defaults3 = Object.freeze({
   model: models3[0],
   baseUrl: "https://api.openai.com/v1"
 });
-var LEAST_EFFORT = { "gpt-6-astra": "low" };
+var LEAST_EFFORT = { "gpt-6.1-sol": "low", "gpt-6-astra": "low" };
 function translate3(params) {
   return chatCompletion({ ...params, defaults: defaults3, extend: extend3 });
 }
@@ -769,7 +769,7 @@ __export(claude_exports, {
 var id4 = "claude";
 var label4 = "Anthropic Claude";
 var keyHint4 = "sk-ant-...";
-var models4 = Object.freeze(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"]);
+var models4 = Object.freeze(["claude-haiku-5-5", "claude-sonnet-5-5"]);
 var defaults4 = Object.freeze({ model: models4[0], baseUrl: "https://api.anthropic.com" });
 var API_VERSION = "2023-06-01";
 var FALLBACK_BETA = "server-side-fallback-2026-07-01";
@@ -784,13 +784,13 @@ async function translate4({ text, settings, signal }) {
     system: systemPrompt(getLanguage(settings.targetLanguage).name),
     messages: [{ role: "user", content: text }]
   };
-  if (!/^claude-haiku/i.test(model)) body.output_config = { effort: "low" };
+  if (!/^claude-haiku-4/i.test(model)) body.output_config = { effort: "low" };
   const headers = {
     "x-api-key": apiKey,
     "anthropic-version": API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true"
   };
-  if (model === "claude-opus-5") {
+  if (model === "claude-sonnet-5-5") {
     body.fallbacks = "default";
     headers["anthropic-beta"] = FALLBACK_BETA;
   }
@@ -1632,8 +1632,12 @@ function migrate(stored) {
   for (const field of ["hotkey", "outgoingHotkey"]) {
     if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
   }
+  for (const saved of [stored, ...Object.values(stored.profiles ?? {})]) {
+    if (saved && RENAMED_MODELS.has(saved.model)) saved.model = RENAMED_MODELS.get(saved.model);
+  }
   return stored;
 }
+var RENAMED_MODELS = /* @__PURE__ */ new Map([["deepseek-v4-flash", "deepseek-flash"]]);
 function normalize(values) {
   for (const field of TRIMMED_FIELDS) {
     if (typeof values[field] === "string") values[field] = values[field].trim();

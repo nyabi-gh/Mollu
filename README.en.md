@@ -44,7 +44,7 @@ Translation runs through an outside service, so you need **an API key**. Pick on
 | **Google Gemini** | Has a free tier | [aistudio.google.com](https://aistudio.google.com) |
 | **DeepSeek** | Paid, but very cheap | [platform.deepseek.com](https://platform.deepseek.com) |
 | **OpenAI** | Paid; the default `gpt-6-luna` is very cheap | [platform.openai.com](https://platform.openai.com) |
-| **Anthropic Claude** | Paid; the default is `claude-haiku-4-5` | [platform.claude.com](https://platform.claude.com) |
+| **Anthropic Claude** | Paid; the default is `claude-haiku-5-5` | [platform.claude.com](https://platform.claude.com) |
 
 **DeepL** is the easiest way to start for free. It is a dedicated translation service, so it is fast and there is no model to choose. DeepSeek, Gemini, OpenAI and Claude read more naturally, though, keeping tone and slang. Gemini is supported from 3.1 on.
 
