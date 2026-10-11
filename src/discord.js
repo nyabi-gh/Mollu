@@ -114,6 +114,22 @@ export function findMessageContent() {
     return null;
 }
 
+// Discord's modals hold focus through a stack of locks where only the top one is enforced.
+// The lock of a modal under ours sends any focus outside it back to its own first field.
+export function findFocusLock() {
+    try {
+        const { Filters } = BdApi.Webpack;
+        return (
+            BdApi.Webpack.getModule(Filters.byStrings("lock-", "focusin", "disableReturnRef"), {
+                searchExports: true,
+            }) ?? null
+        );
+    } catch (e) {
+        logger.warn("focus lock lookup threw", e);
+        return null;
+    }
+}
+
 // Discord only loads the chat chunk once a channel is opened, so a client that starts on the
 // friends list has no MessageContent to patch yet. Wait for the chunk instead of giving up.
 export function waitForMessageContent(signal) {

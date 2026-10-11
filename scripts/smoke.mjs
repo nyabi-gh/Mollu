@@ -145,7 +145,7 @@ check("plugin instance has the BetterDiscord lifecycle", () => {
 
 check("getSettingsPanel returns a panel spec with an onChange", () => {
     const instance = new Plugin({ name: meta.name });
-    const panel = instance.getSettingsPanel().type();
+    const [panel] = instance.getSettingsPanel().type().props.children;
     assert.ok(Array.isArray(panel.__spec.settings) && panel.__spec.settings.length > 0);
     assert.equal(typeof panel.__spec.onChange, "function");
 });
@@ -1409,12 +1409,36 @@ check("settings: the advanced section carries a working cache-clear button", () 
     assert.equal(cleared, 1);
 });
 
+check("settings: the modal joins Discord's focus locks, or the one under it takes every keystroke", () => {
+    const { getModule } = BdApi.Webpack;
+    const { useRef } = BdApi.React;
+    const locked = [];
+    const modal = { id: "modal" };
+    let field = { closest: (selector) => (selector === ".bd-modal-root" ? modal : null) };
+
+    BdApi.Webpack.getModule = () => (ref) => locked.push(ref);
+    BdApi.React.useRef = () => ({ current: field });
+    try {
+        const panel = new Settings().buildPanel();
+        panel.type();
+        assert.equal(locked.length, 1);
+        assert.equal(locked[0].current, modal, "the whole modal is locked, so Done stays reachable");
+
+        field = { closest: () => null };
+        panel.type();
+        assert.equal(locked[1].current, field, "outside a BetterDiscord modal the panel locks itself");
+    } finally {
+        BdApi.Webpack.getModule = getModule;
+        BdApi.React.useRef = useRef;
+    }
+});
+
 check("settings: the panel is a live component, not a one-shot spec", () => {
     const settings = new Settings();
     const panel = settings.buildPanel();
     assert.equal(typeof panel.type, "function", "a plain spec cannot react to a provider change");
 
-    const rendered = panel.type();
+    const [rendered] = panel.type().props.children;
     assert.ok(
         rendered.__spec.settings
             .flatMap((entry) => entry.settings ?? entry)
@@ -2612,6 +2636,7 @@ function installBdApiStub() {
             useEffect: noop,
             useLayoutEffect: noop,
             useRef: (v = null) => ({ current: v }),
+            useMemo: (fn) => fn(),
             Fragment: "Fragment",
         },
         Data: { load: () => null, save: noop, delete: noop },
@@ -2624,6 +2649,7 @@ function installBdApiStub() {
         Logger: { info: noop, warn: noop, error: noop },
         Net: { fetch: async () => new Response("{}", { status: 200 }) },
         Webpack: {
+            getModule: () => null,
             getStore: () => ({ getChannel: () => null, getCurrentUser: () => null }),
             *getWithKey() {
                 yield null;

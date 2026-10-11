@@ -1128,6 +1128,17 @@ function findMessageContent() {
   }
   return null;
 }
+function findFocusLock() {
+  try {
+    const { Filters } = BdApi.Webpack;
+    return BdApi.Webpack.getModule(Filters.byStrings("lock-", "focusin", "disableReturnRef"), {
+      searchExports: true
+    }) ?? null;
+  } catch (e) {
+    logger.warn("focus lock lookup threw", e);
+    return null;
+  }
+}
 function waitForMessageContent(signal) {
   return waitForLazyModule({
     label: "MessageContent",
@@ -1283,8 +1294,19 @@ var Settings = class {
   }
   buildPanel() {
     const settings = this;
+    const useFocusLock = findFocusLock();
     function MolluSettings() {
       const [revision, bump] = React.useState(0);
+      const root = React.useRef(null);
+      const modal = React.useMemo(
+        () => ({
+          get current() {
+            return root.current?.closest(".bd-modal-root") ?? root.current;
+          }
+        }),
+        []
+      );
+      useFocusLock?.(modal);
       React.useEffect(() => {
         let custom = settings.usesCustomModel;
         return settings.onChange((id6) => {
@@ -1295,7 +1317,11 @@ var Settings = class {
         });
       }, []);
       const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
-      return React.cloneElement(panel, { key: `panel-${revision}` });
+      return React.createElement(
+        "div",
+        { ref: root },
+        React.cloneElement(panel, { key: `panel-${revision}` })
+      );
     }
     return React.createElement(MolluSettings);
   }

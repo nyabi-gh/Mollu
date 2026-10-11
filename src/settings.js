@@ -9,7 +9,7 @@ import {
 import { LANGUAGE_OPTIONS } from "./languages.js";
 import { setLocale, t, UI_LANGUAGES, UI_LANGUAGE_NAMES } from "./i18n.js";
 import { keysFromString } from "./hotkey.js";
-import { React } from "./discord.js";
+import { React, findFocusLock } from "./discord.js";
 import { logger } from "./lib/logger.js";
 
 export class Settings {
@@ -109,8 +109,19 @@ export class Settings {
 
     buildPanel() {
         const settings = this;
+        const useFocusLock = findFocusLock();
         function MolluSettings() {
             const [revision, bump] = React.useState(0);
+            const root = React.useRef(null);
+            const modal = React.useMemo(
+                () => ({
+                    get current() {
+                        return root.current?.closest(".bd-modal-root") ?? root.current;
+                    },
+                }),
+                [],
+            );
+            useFocusLock?.(modal);
             React.useEffect(() => {
                 let custom = settings.usesCustomModel;
                 return settings.onChange((id) => {
@@ -124,7 +135,11 @@ export class Settings {
                 });
             }, []);
             const panel = BdApi.UI.buildSettingsPanel(settings._panelSpec());
-            return React.cloneElement(panel, { key: `panel-${revision}` });
+            return React.createElement(
+                "div",
+                { ref: root },
+                React.cloneElement(panel, { key: `panel-${revision}` }),
+            );
         }
         return React.createElement(MolluSettings);
     }
