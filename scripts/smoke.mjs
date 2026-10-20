@@ -727,7 +727,7 @@ await checkAsync("cache: a translation belongs to the model that made it", async
         assert.equal(translator.peek("hello there").status, "unknown", "another model has not answered");
         assert.equal((await translator.translate("hello there")).text, "안녕 2");
 
-        settings.current.model = "deepseek-v4-flash";
+        settings.current.model = "deepseek-flash";
         assert.equal(translator.peek("hello there").text, "안녕 1", "each model keeps its own answer");
 
         settings.current.model = "";
@@ -1015,6 +1015,33 @@ check("settings: a target saved before the split becomes Brazilian", () => {
     }
 });
 
+check("settings: a retired DeepSeek model name moves to its successor", () => {
+    const previous = BdApi.Data;
+    const store = new Map([
+        [
+            `${NAME}::settings`,
+            {
+                provider: "deepseek",
+                model: "deepseek-v4-flash",
+                profiles: { deepseek: { apiKey: "k", model: "deepseek-v4-flash", baseUrl: "" } },
+            },
+        ],
+    ]);
+    BdApi.Data = {
+        load: (name, key) => store.get(`${name}::${key}`) ?? null,
+        save: (name, key, value) => store.set(`${name}::${key}`, value),
+        delete: (name, key) => store.delete(`${name}::${key}`),
+    };
+    try {
+        const settings = new Settings();
+        assert.equal(settings.current.model, "deepseek-flash");
+        assert.equal(settings.current.profiles.deepseek.model, "deepseek-flash");
+        assert.ok(!settings.usesCustomModel, "it lands on the list, not in the text field");
+    } finally {
+        BdApi.Data = previous;
+    }
+});
+
 check("settings: the model field lists what is known and offers a way past the list", () => {
     const settings = new Settings();
     const field = (id) => panelFields(settings).find((entry) => entry.id === id);
@@ -1023,14 +1050,13 @@ check("settings: the model field lists what is known and offers a way past the l
     assert.equal(field("model").type, "dropdown");
     assert.deepEqual(
         field("model").options.map((option) => option.value),
-        ["deepseek-v4-flash", "deepseek-v4-pro", CUSTOM_MODEL],
+        ["deepseek-flash", "deepseek-v4-pro", CUSTOM_MODEL],
     );
 
     settings.set("provider", "gemini");
     assert.deepEqual(
         field("model").options.map((option) => option.value),
-        ["gemini-3.1-flash-lite", CUSTOM_MODEL],
-        "a single known model is still a choice once a name can be typed in",
+        ["gemini-3.5-flash-lite", "gemini-3.8-flash", CUSTOM_MODEL],
     );
 
     settings.set("provider", "deepl");
@@ -1058,7 +1084,7 @@ check("settings: a model too new for this build can be typed in", () => {
     settings.set("model", CUSTOM_MODEL);
     assert.equal(settings.current.model, "gemini-4-pro-preview", "re-picking it does not wipe the name");
 
-    settings.set("model", "gemini-3.1-flash-lite");
+    settings.set("model", "gemini-3.5-flash-lite");
     assert.equal(field("customModel"), undefined, "back on the list, the text field goes away");
 });
 
@@ -1068,7 +1094,7 @@ check("settings: a typed-in model survives switching backends and back", () => {
     settings.set("model", "deepseek-v5-turbo");
 
     settings.set("provider", "gemini");
-    assert.equal(settings.current.model, "gemini-3.1-flash-lite", "the other backend keeps its own model");
+    assert.equal(settings.current.model, "gemini-3.5-flash-lite", "the other backend keeps its own model");
 
     settings.set("provider", "deepseek");
     assert.equal(settings.current.model, "deepseek-v5-turbo", "the typed-in name was remembered");
@@ -1148,7 +1174,7 @@ check("settings: switching provider swaps defaults and keeps both keys", () => {
 
     settings.set("provider", "gemini");
     assert.equal(settings.current.baseUrl, "https://generativelanguage.googleapis.com/v1beta/openai");
-    assert.equal(settings.current.model, "gemini-3.1-flash-lite");
+    assert.equal(settings.current.model, "gemini-3.5-flash-lite");
     assert.equal(settings.current.apiKey, "", "a provider with no saved key starts empty");
 
     settings.set("apiKey", "gemini-key");
@@ -1189,6 +1215,10 @@ await checkAsync("gemini: request shape targets the OpenAI-compatible endpoint",
             "minimal",
             "Gemini cannot stop reasoning, only keep it to the least",
         );
+
+        settings.current.model = "gemini-3.8-flash";
+        await new Translator({ settings }).translate("hello again");
+        assert.equal(JSON.parse(seen.options.body).reasoning_effort, "low", "Flash has no minimal level");
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -1476,7 +1506,7 @@ check("settings: the panel rebuilds when its shape changes, and never mid-typing
         settings.set("model", "gemini-4-pro-preview");
         assert.equal(bumps, 2, "remounting the field being typed into would eat the cursor");
 
-        settings.set("model", "gemini-3.1-flash-lite");
+        settings.set("model", "gemini-3.5-flash-lite");
         assert.equal(bumps, 3, "picking from the list again takes the text field away");
     } finally {
         unmount?.();
@@ -1645,30 +1675,17 @@ await checkAsync(
     },
 );
 
-await checkAsync("outgoing: what you typed is handed back, so your own message costs nothing", async () => {
-    const remembered = [];
-    const inGuild = "1101573652786446417";
-    const translator = (text) => ({
-        translate: async () => ({ status: "done", text }),
-        remember: (...args) => remembered.push(args),
-    });
+await checkAsync(
+    "outgoing: the block under your own message is translated afresh, not what you typed",
+    async () => {
+        const translator = new Translator({ settings: stubSettings() });
+        translator.translate = async () => ({ status: "done", text: "that's not it" });
+        const patch = outgoingWith({ translateOutgoing: true }, "1101573652786446417", translator);
 
-    const typedInTarget = outgoingWith(
-        { translateOutgoing: true, outgoingLanguage: "en", targetLanguage: "ko" },
-        inGuild,
-        translator("hello everyone"),
-    );
-    await typedInTarget._onSend(null, ["c", { content: "안녕하세요 여러분" }], () => "sent");
-    assert.deepEqual(remembered, [["hello everyone", "안녕하세요 여러분", "ko"]]);
-
-    const typedInAnother = outgoingWith(
-        { translateOutgoing: true, outgoingLanguage: "ja", targetLanguage: "ko" },
-        inGuild,
-        translator("こんにちは"),
-    );
-    await typedInAnother._onSend(null, ["c", { content: "hello everyone" }], () => "sent");
-    assert.equal(remembered.length, 1, "what you typed was not the language the block asks for");
-});
+        await patch._onSend(null, ["c", { content: "그게아닌뒈~" }], () => "sent");
+        assert.equal(translator.peek("that's not it").status, "unknown");
+    },
+);
 
 check("outgoing: the gate is skipped without a promise when it does not apply", () => {
     const patch = outgoingWith({}, "1101573652786446417");
@@ -1961,9 +1978,9 @@ await checkAsync("openai: GPT-6 is asked with reasoning at its least and no temp
         assert.ok(!("max_tokens" in seen.body));
         assert.ok(seen.body.max_completion_tokens > 0);
 
-        settings.current.model = "gpt-6-astra";
+        settings.current.model = "gpt-6.1-sol";
         await new Translator({ settings }).translate("hello there");
-        assert.equal(seen.body.reasoning_effort, "low", "astra cannot switch reasoning off");
+        assert.equal(seen.body.reasoning_effort, "low", "GPT-6.1 Sol cannot switch reasoning off");
     } finally {
         BdApi.Net.fetch = previous;
     }
@@ -1991,6 +2008,11 @@ await checkAsync("claude: a Messages API request, answered by its text blocks", 
         assert.ok(!("temperature" in seen.body));
         assert.ok(!("fallbacks" in seen.body));
 
+        settings.current.model = "claude-haiku-5-5";
+        await new Translator({ settings }).translate("hello again");
+        assert.deepEqual(seen.body.output_config, { effort: "low" }, "Haiku 5.5 takes effort");
+        assert.ok(!("fallbacks" in seen.body), "Haiku has no server-side fallback");
+
         settings.current.model = "claude-sonnet-5";
         reply = {
             stop_reason: "end_turn",
@@ -2002,7 +2024,7 @@ await checkAsync("claude: a Messages API request, answered by its text blocks", 
         assert.equal((await new Translator({ settings }).translate("hi there")).text, "안녕하세요");
         assert.deepEqual(seen.body.output_config, { effort: "low" });
 
-        settings.current.model = "claude-opus-5";
+        settings.current.model = "claude-sonnet-5-5";
         await new Translator({ settings }).translate("good morning");
         assert.equal(seen.body.fallbacks, "default");
         assert.equal(seen.headers["anthropic-beta"], "server-side-fallback-2026-07-01");
@@ -2492,6 +2514,30 @@ await checkAsync("translator: a per-minute quota named in a 429 paces the reques
     }
 });
 
+await checkAsync("translator: a message scrolled away during a pause gives up its paced slot", async () => {
+    const previous = BdApi.Net.fetch;
+    let calls = 0;
+    BdApi.Net.fetch = async () => {
+        calls += 1;
+        return new Response(JSON.stringify({ choices: [{ message: { content: "안녕" } }] }), { status: 200 });
+    };
+    try {
+        const translator = new Translator({ settings: stubSettings() });
+        translator._spacing = 5000;
+        translator._nextSlot = 0;
+        translator._pausedUntil = Date.now() + 40;
+        let visible = true;
+        const pending = translator.translate("hello there", { shouldRun: () => visible });
+        visible = false;
+        const result = await pending;
+        assert.equal(result.status, "unknown", "nobody wants it once the pause ends");
+        assert.equal(calls, 0);
+        assert.equal(translator._nextSlot, 0, "no slot is reserved for it");
+    } finally {
+        BdApi.Net.fetch = previous;
+    }
+});
+
 console.log(failures === 0 ? "\nall checks passed" : `\n${failures} check(s) failed`);
 process.exit(failures === 0 ? 0 : 1);
 
@@ -2572,7 +2618,7 @@ function stubSettings() {
         current: {
             provider: "deepseek",
             apiKey: "test-key",
-            model: "deepseek-v4-flash",
+            model: "deepseek-flash",
             baseUrl: "https://api.deepseek.com",
             targetLanguage: "ko",
             maxChars: 3000,
@@ -2635,6 +2681,8 @@ function installBdApiStub() {
             useState: (init) => [typeof init === "function" ? init() : init, noop],
             useEffect: noop,
             useLayoutEffect: noop,
+            useMemo: (fn) => fn(),
+            useCallback: (fn) => fn,
             useRef: (v = null) => ({ current: v }),
             useMemo: (fn) => fn(),
             Fragment: "Fragment",

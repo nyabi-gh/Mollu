@@ -5,7 +5,7 @@ export const LEGACY_NAMES = ["KoreanAutoTranslator"];
 export const DEFAULT_SETTINGS = Object.freeze({
     provider: "deepseek",
     apiKey: "",
-    model: "deepseek-v4-flash",
+    model: "deepseek-flash",
     baseUrl: "https://api.deepseek.com",
     allGuilds: false,
     guildIds: "",

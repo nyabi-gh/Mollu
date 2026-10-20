@@ -8,6 +8,16 @@ import { t } from "../i18n.js";
 
 const DWELL_MS = 350;
 
+// A fresh object with the same content would still re-render the block and re-parse its Markdown.
+function sameResult(a, b) {
+    return (
+        a?.status === b?.status &&
+        a?.text === b?.text &&
+        a?.message === b?.message &&
+        a?.waiting === b?.waiting
+    );
+}
+
 function initialResult(translator, text) {
     const known = translator.peek(text);
     return known.status === "done" || known.status === "skip" ? known : { status: "idle" };
@@ -22,7 +32,11 @@ export function TranslationBlock({ text, messageId, translator, blocks, settings
     const triggerRef = React.useRef(null);
     const statusRef = React.useRef(null);
     const forcedRef = React.useRef(false);
-    const [result, setResult] = React.useState(() => initialResult(translator, text));
+    const [result, setStoredResult] = React.useState(() => initialResult(translator, text));
+    const setResult = React.useCallback(
+        (next) => setStoredResult((prev) => (sameResult(prev, next) ? prev : next)),
+        [],
+    );
     const [hidden, setHidden] = React.useState(() => blocks.isHidden(messageId));
     const [round, setRound] = React.useState(0);
 
@@ -149,6 +163,13 @@ export function TranslationBlock({ text, messageId, translator, blocks, settings
 
     const status = result && result.status;
     statusRef.current = status;
+    const content = React.useMemo(
+        () =>
+            status === "done"
+                ? renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId)
+                : null,
+        [result, stores, guildId],
+    );
 
     React.useLayoutEffect(() => {
         const height = blockHeight(bodyRef.current);
@@ -180,8 +201,7 @@ export function TranslationBlock({ text, messageId, translator, blocks, settings
             : renderBody(status, result, {
                   ref: bodyRef,
                   showPending,
-                  stores,
-                  guildId,
+                  content,
                   autoTranslate,
                   badge: badgeFor(targetLanguage),
                   language: targetLanguage,
@@ -203,7 +223,7 @@ function jitter() {
 }
 
 function renderBody(status, result, ctx) {
-    const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
+    const { ref, showPending, content, autoTranslate, onTrigger, badge, language } = ctx;
     if (status === "idle" && !autoTranslate) return renderTrigger(ref, onTrigger);
     if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
     if (status === "retry") return null;
@@ -234,11 +254,7 @@ function renderBody(status, result, ctx) {
         "div",
         { ref, className: "mollu-translation", lang: language },
         React.createElement("span", { className: "mollu-translation__badge" }, badge),
-        React.createElement(
-            "span",
-            { className: "mollu-translation__text" },
-            ...renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId),
-        ),
+        React.createElement("span", { className: "mollu-translation__text" }, ...content),
     );
 }
 

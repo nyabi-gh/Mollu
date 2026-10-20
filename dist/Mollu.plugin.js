@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.3.1
+ * @version 1.4.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyabi-gh/Mollu
  */
@@ -37,7 +37,7 @@ var LEGACY_NAMES = ["KoreanAutoTranslator"];
 var DEFAULT_SETTINGS = Object.freeze({
   provider: "deepseek",
   apiKey: "",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   baseUrl: "https://api.deepseek.com",
   allGuilds: false,
   guildIds: "",
@@ -239,10 +239,10 @@ var STRINGS = {
     "keySource.claude": "Get one at platform.claude.com → API Keys.",
     "keySource.deepl": "Get one at deepl.com/pro-api. The free plan allows 500,000 characters a month and needs no model.",
     "modelHint.deepseek": "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
-    "modelHint.gemini": "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
+    "modelHint.gemini": "flash-lite answers in about a second; flash reads better but is slower. Another Gemini model, 3.1 or later, can be typed in.",
     "modelHint.deepl": "DeepL has no model to pick.",
-    "modelHint.openai": "luna is cheap and fast with reasoning off; sol reads better; astra is more than a translation needs.",
-    "modelHint.claude": "haiku is the fastest and cheapest; sonnet and opus read better and cost more.",
+    "modelHint.openai": "luna is cheap and fast with reasoning off; sol reads better but always reasons a little.",
+    "modelHint.claude": "haiku is the fastest and cheapest; sonnet reads better and costs more.",
     "language.auto": "Match Discord"
   },
   ko: {
@@ -372,10 +372,10 @@ var STRINGS = {
     "keySource.claude": "platform.claude.com → API Keys 에서 발급합니다.",
     "keySource.deepl": "deepl.com/pro-api 에서 발급합니다. 무료 플랜은 월 50만 자이고 모델 선택이 없습니다.",
     "modelHint.deepseek": "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
-    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
+    "modelHint.gemini": "flash-lite 가 약 1초로 가장 빠릅니다. flash 는 문장이 더 좋지만 느립니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
     "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
-    "modelHint.openai": "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋고, astra 는 번역에는 과합니다.",
-    "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 과 opus 는 문장이 더 좋지만 비쌉니다.",
+    "modelHint.openai": "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋지만 추론을 완전히 끄지는 못합니다.",
+    "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 은 문장이 더 좋지만 비쌉니다.",
     "language.auto": "Discord 설정에 맞춤"
   }
 };
@@ -683,7 +683,7 @@ function outputBudget(text, language) {
 var id = "deepseek";
 var label = "DeepSeek";
 var keyHint = "sk-...";
-var models = Object.freeze(["deepseek-v4-flash", "deepseek-v4-pro"]);
+var models = Object.freeze(["deepseek-flash", "deepseek-v4-pro"]);
 var defaults = Object.freeze({
   model: models[0],
   baseUrl: "https://api.deepseek.com"
@@ -715,7 +715,7 @@ __export(gemini_exports, {
 var id2 = "gemini";
 var label2 = "Google Gemini";
 var keyHint2 = "AIza...";
-var models2 = Object.freeze(["gemini-3.1-flash-lite"]);
+var models2 = Object.freeze(["gemini-3.5-flash-lite", "gemini-3.8-flash"]);
 var defaults2 = Object.freeze({
   model: models2[0],
   baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai"
@@ -723,8 +723,8 @@ var defaults2 = Object.freeze({
 function translate2(params) {
   return chatCompletion({ ...params, defaults: defaults2, extend: extend2 });
 }
-function extend2(body) {
-  body.reasoning_effort = "minimal";
+function extend2(body, { model }) {
+  body.reasoning_effort = /flash-lite/i.test(model) ? "minimal" : "low";
 }
 
 // src/translation/providers/openai.js
@@ -740,12 +740,12 @@ __export(openai_exports, {
 var id3 = "openai";
 var label3 = "OpenAI";
 var keyHint3 = "sk-proj-...";
-var models3 = Object.freeze(["gpt-6-luna", "gpt-6-sol", "gpt-6-astra"]);
+var models3 = Object.freeze(["gpt-6-luna", "gpt-6.1-sol"]);
 var defaults3 = Object.freeze({
   model: models3[0],
   baseUrl: "https://api.openai.com/v1"
 });
-var LEAST_EFFORT = { "gpt-6-astra": "low" };
+var LEAST_EFFORT = { "gpt-6.1-sol": "low", "gpt-6-astra": "low" };
 function translate3(params) {
   return chatCompletion({ ...params, defaults: defaults3, extend: extend3 });
 }
@@ -769,7 +769,7 @@ __export(claude_exports, {
 var id4 = "claude";
 var label4 = "Anthropic Claude";
 var keyHint4 = "sk-ant-...";
-var models4 = Object.freeze(["claude-haiku-4-5", "claude-sonnet-5", "claude-opus-5"]);
+var models4 = Object.freeze(["claude-haiku-5-5", "claude-sonnet-5-5"]);
 var defaults4 = Object.freeze({ model: models4[0], baseUrl: "https://api.anthropic.com" });
 var API_VERSION = "2023-06-01";
 var FALLBACK_BETA = "server-side-fallback-2026-07-01";
@@ -784,13 +784,13 @@ async function translate4({ text, settings, signal }) {
     system: systemPrompt(getLanguage(settings.targetLanguage).name),
     messages: [{ role: "user", content: text }]
   };
-  if (!/^claude-haiku/i.test(model)) body.output_config = { effort: "low" };
+  if (!/^claude-haiku-4/i.test(model)) body.output_config = { effort: "low" };
   const headers = {
     "x-api-key": apiKey,
     "anthropic-version": API_VERSION,
     "anthropic-dangerous-direct-browser-access": "true"
   };
-  if (model === "claude-opus-5") {
+  if (model === "claude-sonnet-5-5") {
     body.fallbacks = "default";
     headers["anthropic-beta"] = FALLBACK_BETA;
   }
@@ -1658,8 +1658,12 @@ function migrate(stored) {
   for (const field of ["hotkey", "outgoingHotkey"]) {
     if (typeof stored[field] === "string") stored[field] = keysFromString(stored[field]);
   }
+  for (const saved of [stored, ...Object.values(stored.profiles ?? {})]) {
+    if (saved && RENAMED_MODELS.has(saved.model)) saved.model = RENAMED_MODELS.get(saved.model);
+  }
   return stored;
 }
+var RENAMED_MODELS = /* @__PURE__ */ new Map([["deepseek-v4-flash", "deepseek-flash"]]);
 function normalize(values) {
   for (const field of TRIMMED_FIELDS) {
     if (typeof values[field] === "string") values[field] = values[field].trim();
@@ -2060,6 +2064,7 @@ var Translator = class {
       async () => {
         if (!urgent) {
           await this._awaitResume();
+          if (!wanted()) throw skipped();
           await this._awaitSlot();
         }
         if (this._stopped) throw aborted();
@@ -2639,7 +2644,7 @@ function relativeTime(date) {
 }
 
 // src/ui/visibility.js
-var ROOT_MARGIN = "0px 0px 600px";
+var LOOKAHEAD = "0px 0px 600px";
 var observer = null;
 var callbacks = /* @__PURE__ */ new Map();
 function ensure() {
@@ -2651,7 +2656,7 @@ function ensure() {
         if (onChange) onChange(entry.isIntersecting);
       }
     },
-    { rootMargin: ROOT_MARGIN }
+    { rootMargin: LOOKAHEAD, scrollMargin: LOOKAHEAD }
   );
   return observer;
 }
@@ -2756,6 +2761,9 @@ function styleOf(node) {
 
 // src/ui/translation-block.js
 var DWELL_MS = 350;
+function sameResult(a, b) {
+  return a?.status === b?.status && a?.text === b?.text && a?.message === b?.message && a?.waiting === b?.waiting;
+}
 function initialResult(translator, text) {
   const known = translator.peek(text);
   return known.status === "done" || known.status === "skip" ? known : { status: "idle" };
@@ -2768,7 +2776,11 @@ function TranslationBlock({ text, messageId, translator, blocks, settings, store
   const triggerRef = React.useRef(null);
   const statusRef = React.useRef(null);
   const forcedRef = React.useRef(false);
-  const [result, setResult] = React.useState(() => initialResult(translator, text));
+  const [result, setStoredResult] = React.useState(() => initialResult(translator, text));
+  const setResult = React.useCallback(
+    (next) => setStoredResult((prev) => sameResult(prev, next) ? prev : next),
+    []
+  );
   const [hidden, setHidden] = React.useState(() => blocks.isHidden(messageId));
   const [round, setRound] = React.useState(0);
   React.useEffect(
@@ -2875,6 +2887,10 @@ function TranslationBlock({ text, messageId, translator, blocks, settings, store
   }, [text, autoTranslate, targetLanguage, maxChars, provider, model, round]);
   const status = result && result.status;
   statusRef.current = status;
+  const content = React.useMemo(
+    () => status === "done" ? renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId) : null,
+    [result, stores, guildId]
+  );
   React.useLayoutEffect(() => {
     const height = blockHeight(bodyRef.current);
     const previous = heightRef.current;
@@ -2896,8 +2912,7 @@ function TranslationBlock({ text, messageId, translator, blocks, settings, store
     hidden ? autoTranslate ? null : renderTrigger(bodyRef, reveal) : renderBody(status, result, {
       ref: bodyRef,
       showPending,
-      stores,
-      guildId,
+      content,
       autoTranslate,
       badge: badgeFor(targetLanguage),
       language: targetLanguage,
@@ -2916,7 +2931,7 @@ function jitter() {
   return Math.floor(Math.random() * 2e3);
 }
 function renderBody(status, result, ctx) {
-  const { ref, showPending, stores, guildId, autoTranslate, onTrigger, badge, language } = ctx;
+  const { ref, showPending, content, autoTranslate, onTrigger, badge, language } = ctx;
   if (status === "idle" && !autoTranslate) return renderTrigger(ref, onTrigger);
   if (!status || status === "idle" || status === "unknown" || status === "skip") return null;
   if (status === "retry") return null;
@@ -2944,11 +2959,7 @@ function renderBody(status, result, ctx) {
     "div",
     { ref, className: "mollu-translation", lang: language },
     React.createElement("span", { className: "mollu-translation__badge" }, badge),
-    React.createElement(
-      "span",
-      { className: "mollu-translation__text" },
-      ...renderSegments(result.segments || [{ type: "text", value: result.text }], stores, guildId)
-    )
+    React.createElement("span", { className: "mollu-translation__text" }, ...content)
   );
 }
 function useDisplaySettings(settings) {
@@ -3168,7 +3179,6 @@ var OutgoingPatch = class {
           return;
         }
         args[1] = { ...args[1], content: result.text };
-        this._remember(text, result.text);
       } else if (result.status === "retry") {
         this._onFailure(t("error.busy"));
       } else if (result.status === "error") {
@@ -3180,13 +3190,6 @@ var OutgoingPatch = class {
     } finally {
       clearTimeout(slow);
     }
-  }
-  // The message goes out already translated, so the block under it would pay for a round
-  // trip back to what was typed. Hand over the pair instead.
-  _remember(original, sent) {
-    const { targetLanguage } = this._settings.current;
-    if (this._detector.needsTranslation(original, targetLanguage)) return;
-    this._translator.remember?.(sent, original, targetLanguage);
   }
   _pick(args) {
     const settings = this._settings.current;

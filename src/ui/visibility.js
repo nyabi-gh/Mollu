@@ -1,7 +1,9 @@
 // Looks ahead below the fold only, far enough that a message is usually translated before it
 // is scrolled to: a request takes about a second, and the block then lands off screen
 // instead of in front of the reader. Nothing above the viewport is worth a request.
-const ROOT_MARGIN = "0px 0px 600px";
+// rootMargin alone grows only the viewport; the message scroller still clips at its own edge, so
+// scrollMargin has to grow that clip too.
+const LOOKAHEAD = "0px 0px 600px";
 
 let observer = null;
 const callbacks = new Map();
@@ -15,7 +17,7 @@ function ensure() {
                 if (onChange) onChange(entry.isIntersecting);
             }
         },
-        { rootMargin: ROOT_MARGIN },
+        { rootMargin: LOOKAHEAD, scrollMargin: LOOKAHEAD },
     );
     return observer;
 }

@@ -153,11 +153,11 @@ const STRINGS = {
         "modelHint.deepseek":
             "flash is cheap and fast; pro costs more and reads better. A newer one can be typed in.",
         "modelHint.gemini":
-            "flash-lite answers in about a second. Another Gemini model, 3.1 or later, can be typed in.",
+            "flash-lite answers in about a second; flash reads better but is slower. Another Gemini model, 3.1 or later, can be typed in.",
         "modelHint.deepl": "DeepL has no model to pick.",
         "modelHint.openai":
-            "luna is cheap and fast with reasoning off; sol reads better; astra is more than a translation needs.",
-        "modelHint.claude": "haiku is the fastest and cheapest; sonnet and opus read better and cost more.",
+            "luna is cheap and fast with reasoning off; sol reads better but always reasons a little.",
+        "modelHint.claude": "haiku is the fastest and cheapest; sonnet reads better and costs more.",
         "language.auto": "Match Discord",
     },
     ko: {
@@ -314,11 +314,11 @@ const STRINGS = {
         "modelHint.deepseek":
             "flash 는 빠르고 저렴합니다. pro 는 비싼 대신 번역이 자연스럽습니다. 새 모델은 직접 입력하세요.",
         "modelHint.gemini":
-            "flash-lite 가 약 1초로 가장 빠릅니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
+            "flash-lite 가 약 1초로 가장 빠릅니다. flash 는 문장이 더 좋지만 느립니다. 3.1 이후의 다른 Gemini 모델은 직접 입력하면 됩니다.",
         "modelHint.deepl": "DeepL 은 고를 모델이 없습니다.",
         "modelHint.openai":
-            "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋고, astra 는 번역에는 과합니다.",
-        "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 과 opus 는 문장이 더 좋지만 비쌉니다.",
+            "luna 는 추론을 끄고 싸고 빠르게 씁니다. sol 은 문장이 더 좋지만 추론을 완전히 끄지는 못합니다.",
+        "modelHint.claude": "haiku 가 가장 빠르고 쌉니다. sonnet 은 문장이 더 좋지만 비쌉니다.",
         "language.auto": "Discord 설정에 맞춤",
     },
 };
