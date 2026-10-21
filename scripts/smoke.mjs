@@ -2684,7 +2684,6 @@ function installBdApiStub() {
             useMemo: (fn) => fn(),
             useCallback: (fn) => fn,
             useRef: (v = null) => ({ current: v }),
-            useMemo: (fn) => fn(),
             Fragment: "Fragment",
         },
         Data: { load: () => null, save: noop, delete: noop },
