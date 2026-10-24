@@ -2,63 +2,49 @@
 
 # Undertone
 
-> Formerly **Mollu**. If you used Mollu, the automatic update switches it to Undertone and brings your settings, API keys and translation cache along.
+A BetterDiscord plugin that translates Discord messages and shows the translation right under the original.
 
-A BetterDiscord plugin that translates foreign-language messages and shows the translation right under the original.
+> Formerly **Mollu**. The automatic update switches you to Undertone and brings your settings and API keys along.
 
-It works in both directions — into your language, or out of it.
+## Features
 
-## What it does
-
-- Translates messages in the servers you pick (or every server) into a language you choose, shown under the original in grey.
-- Direct messages can be translated too, one-to-one and group alike. Off by default; one switch turns them on.
-- Pick from 15 languages. Messages already written in that language are left alone.
-- **Automatic mode** translates what is on screen by itself. **Manual mode** puts a `Translate` button under each message and only sends what you press.
-- Translations are remembered, so repeating the same sentence costs nothing extra.
-- Right-click a message to hide its translation, or to translate it again when it came out wrong.
-- **Your own outgoing messages** can be translated too — type in Korean, send in English. Off by default.
-- The things you turn on and off often have keyboard shortcuts.
-- When a new version is out, its signature is checked and Discord asks whether to install it.
+- Translates messages in the servers you pick (or every server), and in DMs, into any of 15 languages.
+- **Automatic mode** translates what is on screen. **Manual mode** translates only the messages whose `Translate` button you press.
+- Can translate your own messages before they are sent — type in Korean, send in English.
+- Translations are remembered, so the same sentence never costs twice.
+- New versions are checked for a signature, and you are asked before they install.
 
 ## Installing
 
-The plugin is a single file. There is nothing else to install.
-
-1. [**Download Undertone.plugin.js**](https://github.com/nyabi-gh/Undertone/releases/latest/download/Undertone.plugin.js) — always the newest release.
+1. Download [**Undertone.plugin.js**](https://github.com/nyabi-gh/Undertone/releases/latest/download/Undertone.plugin.js).
 2. In BetterDiscord, go to Settings → Plugins → **Open Plugins Folder** and drop the file in.
 3. Enable **Undertone** in the plugin list.
 
-To find the folder yourself:
-
-- Windows: `%AppData%\BetterDiscord\plugins`
-- macOS: `~/Library/Application Support/BetterDiscord/plugins`
-- Linux: `~/.config/BetterDiscord/plugins`
-
 BetterDiscord 1.14.0 or newer is required.
 
-## First-time setup
+## Getting started
 
-Translation runs through an outside service, so you need **an API key**. Pick one of the five.
+Translation goes through an outside service, so you need an API key from one of these:
 
 | Service | Cost | Where to get a key |
 | --- | --- | --- |
 | **DeepL** | 500,000 characters a month, free | [deepl.com/pro-api](https://www.deepl.com/pro-api) |
 | **Google Gemini** | Has a free tier | [aistudio.google.com](https://aistudio.google.com) |
-| **DeepSeek** | Paid, but very cheap | [platform.deepseek.com](https://platform.deepseek.com) |
-| **OpenAI** | Paid; the default `gpt-6-luna` is very cheap | [platform.openai.com](https://platform.openai.com) |
-| **Anthropic Claude** | Paid; the default is `claude-haiku-5-5` | [platform.claude.com](https://platform.claude.com) |
+| **DeepSeek** | Paid, very cheap | [platform.deepseek.com](https://platform.deepseek.com) |
+| **OpenAI** | Paid; the default model is cheap | [platform.openai.com](https://platform.openai.com) |
+| **Anthropic Claude** | Paid | [platform.claude.com](https://platform.claude.com) |
 
-**DeepL** is the easiest way to start for free. It is a dedicated translation service, so it is fast and there is no model to choose. DeepSeek, Gemini, OpenAI and Claude read more naturally, though, keeping tone and slang. Gemini is supported from 3.1 on.
+DeepL is the easiest free start. The others read more naturally and keep tone and slang.
 
-Once you have a key, in the plugin settings:
+Then, in the plugin settings:
 
-1. Choose your service under `Translation backend`.
-2. Paste the key into `API key`.
-3. Decide where to translate: turn on `Translate in every server`, or right-click a server icon → **Translate with Undertone**.
-   - To leave one channel out, right-click it → **Translate with Undertone** and switch it off. Threads follow their channel.
-   - To translate DMs as well, turn on `Translate direct messages`. It stands on its own, so you can leave every server off and translate only DMs.
+1. Choose your service under `Translation backend` and paste the key into `API key`.
+2. Right-click a server icon → **Translate with Undertone**, or turn on `Translate in every server`.
+3. To translate DMs as well, turn on `Translate direct messages`.
 
-> **A warning about Gemini's free tier**: what you send is used to improve Google's products. This plugin sends **other people's messages** from your servers, which means their conversations become training data. The paid tier is not affected.
+Every other setting explains itself in the panel.
+
+> **Gemini's free tier**: what you send is used to train Google's models. This plugin sends other people's messages, so their conversations become training data too.
 
 ## Shortcuts
 
@@ -67,93 +53,27 @@ Once you have a key, in the plugin settings:
 | `Ctrl+Shift+T` | Automatic translation on / off |
 | `Ctrl+Shift+O` | Outgoing translation on / off |
 
-Click the field in settings and press the keys you want. Clear it to use no shortcut.
+Change them under `Fine-tuning` in settings.
 
-## Settings
+## When nothing shows up
 
-The settings come in six sections. **Advanced** starts folded.
-
-**Translation service**
-
-| Setting | What it means |
-| --- | --- |
-| Translation backend | Which service to use. Switching fills in the rest, and each service's key is remembered separately |
-| API key | Required: nothing happens without it. Once saved only the last 4 characters are shown; type `-` to erase it |
-| Model | Which model translates. Pick `Type a name in…` for one the list does not carry, and write its id as the service documents it. DeepL has no model to choose |
-| Connection | `Test` translates a short sample with the key and model above |
-
-**Where to translate**
-
-| Setting | What it means |
-| --- | --- |
-| Translate in every server | Every server you are in becomes a target. Direct messages have their own switch |
-| Target server ids | The servers to translate. The right-click switch fills this in; ids can also be typed, separated by commas or spaces |
-| Channels left untranslated | Channels skipped inside the target servers, switched from a channel's right-click menu |
-| Translate direct messages | Translates one-to-one and group DMs, whatever the settings above say. Off by default |
-
-**Messages I receive**
-
-| Setting | What it means |
-| --- | --- |
-| Translate into | The language to translate messages into |
-| Automatic translation | Off is manual mode: only messages whose `Translate` button you press are sent |
-| Treat as already translated above | Skip a message when this share of it is already in the target language |
-| Maximum characters to translate | Longer messages are skipped, which keeps a wall of text from costing a lot at once |
-| Translate bot messages / Translate my own messages | What to include |
-
-**Messages I send**
-
-| Setting | What it means |
-| --- | --- |
-| Translate the messages I send | **Replaces what you type with its translation** before sending. Other people never see the original |
-| Send my messages in | The language your own messages are translated into |
-
-**Display**
-
-| Setting | What it means |
-| --- | --- |
-| Show while translating | Shows `Translating…` under a message while it is being translated |
-| Pop up a notice when a translation fails | A toast for every failure. The failure line under the message is always shown; a refused key or empty balance is always announced |
-| Plugin language | The language of the settings panel and the plugin's own messages |
-
-**Advanced**
-
-| Setting | What it means |
-| --- | --- |
-| API base URL | Filled in when you pick a service. You will rarely touch it |
-| Concurrent requests | How many translations to run at once. Lower it to 1–2 if you keep hitting a free-tier limit |
-| Check for updates automatically | Looks for a new version every few hours. Only a version carrying the publisher's signature is offered, and it installs only when you agree |
-| Updates | `Check` looks right now |
-| Translation cache | `Clear` deletes every saved translation. Use it after changing the API base URL; for one wrong translation, the message's right-click menu is enough |
-| Log why a message was skipped | Records the reason a message was not translated. For when nothing shows up and you cannot tell why |
-
-## Worth knowing
-
-- If no translations appear at all, it is usually because **the target language is the language the server already speaks**. Set it to Korean in a Korean server and there is nothing to translate.
-- Your own messages are not translated by default. Turn on `Translate my own messages` to test with your own typing.
-- Languages that share the Latin alphabet — English, Spanish, French — cannot be told apart before sending, so each sentence is sent once. The verdict is saved, so no sentence costs twice.
-- When a translation fails, click the failure line to try again.
-- To hide one message's translation, right-click it and switch off **Show Undertone translation**. In manual mode the `Translate` button comes back. Hidden translations show again when Discord restarts.
-- **Translate again with Undertone** in the same menu asks the service afresh. Use it on a translation that came out wrong, or on a message that got none because the service judged it already in your language. DeepL translates the same text the same way every time, so it does not offer this.
-- Editing a message re-translates it.
-- A large Discord update can stop translations from appearing. Wait for a plugin update.
+- If the target language is the language the server already speaks, there is nothing to translate.
+- Your own messages are skipped by default. Turn on `Translate my own messages` under `Fine-tuning` to test with your own typing.
+- For a translation that came out wrong, right-click the message → **Translate again with Undertone**.
+- Right after a large Discord update, translations may stop appearing. Wait for a plugin update.
 
 ## Privacy
 
-- The **text** of messages that need translating is sent to the service you configured. Messages outside your target servers, and messages already in the target language, are never sent.
-- With `Translate direct messages` on, **private conversations are sent too**, on the same terms as any other message. Leave it off if that is not what you want — especially on Gemini's free tier, where what you send becomes training data.
-- With `Translate the messages I send` on, **what you type is sent too**, just before it goes out.
-- Mentions, emoji, links and code are swapped for placeholders before sending, so user ids and addresses are never exposed to the translation service.
-- Translations and **your API key are stored in plain text** in the file below. Do not share it or put it on screen.
-  - Windows: `%AppData%\BetterDiscord\plugins\Undertone.config.json`
-  - macOS: `~/Library/Application Support/BetterDiscord/plugins/Undertone.config.json`
-  - Linux: `~/.config/BetterDiscord/plugins/Undertone.config.json`
-- To erase everything, disable the plugin and delete that file.
+- Only the text of messages that need translating is sent to the service. Mentions, emoji, links and code are swapped for placeholders first.
+- With `Translate direct messages` or `Translate the messages I send` on, DMs and what you type are sent too.
+- Your API key and translations are stored unencrypted in `Undertone.config.json` in the plugins folder. Do not share it. To erase everything, disable the plugin and delete that file.
 
 ## Releasing (maintainers)
 
 Automatic updates install only signed releases.
 
-1. Once, run `npm run keygen`. The private key goes to `~/.config/mollu/update-signing-key.pem` and the public key into `src/update-key.js`. Back the private key up somewhere safe: without it, builds that carry this public key cannot install any later version.
-2. Store the private key as a repository secret: `gh secret set MOLLU_SIGNING_KEY < ~/.config/mollu/update-signing-key.pem`
-3. Bump the version in `meta.json` and `package.json`, commit the built `dist/`, and push a matching tag (`v1.3.0`). The workflow checks, signs and publishes the release.
+1. Once, run `npm run keygen`. The private key goes to `~/.config/mollu/update-signing-key.pem`; back it up. Without it, builds already out there can never update again.
+2. Store it as a repository secret: `gh secret set MOLLU_SIGNING_KEY < ~/.config/mollu/update-signing-key.pem`
+3. Bump the version in `meta.json` and `package.json`, commit the built `dist/`, and push a matching tag (such as `v1.5.0`). The workflow checks, signs and publishes the release.
+
+`dist/Mollu.plugin.js` is what versions 1.4.1 and older update from, so keep it in every release.
