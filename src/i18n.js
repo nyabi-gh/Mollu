@@ -54,28 +54,26 @@ const STRINGS = {
         "toast.testFailed": "Connection failed · {message}",
 
         "settings.provider": "Translation backend",
-        "settings.provider.note":
-            "Switching fills in that backend's model and base URL. Each backend's API key is remembered separately.",
+        "settings.provider.note": "Each backend remembers its own API key.",
         "settings.apiKey": "{provider} API key",
         "settings.apiKey.note":
-            "The saved key is never shown. Type a new one to replace it, leave it blank to keep it, or type {clear} to erase it.",
+            "The saved key stays hidden. Type a new one to replace it, or {clear} to erase it.",
         "settings.apiKey.saved": "saved · {fingerprint}",
         "settings.model": "Model",
         "settings.model.custom": "Type a name in…",
         "settings.customModel": "Model name",
-        "settings.customModel.note":
-            "The model id exactly as the backend writes it, so a model released after this plugin was built can still be used. Blank falls back to {fallback}.",
+        "settings.customModel.note": "The model id exactly as the backend writes it. Blank uses {fallback}.",
         "settings.baseUrl": "API base URL",
-        "settings.baseUrl.note": "The backend's API address. Filled in when you pick a backend.",
+        "settings.baseUrl.note": "Filled in when you pick a backend.",
         "settings.allGuilds": "Translate in every server",
         "settings.allGuilds.note":
-            "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
+            "When off, only servers switched on from their right-click menu are translated.",
         "settings.guildIds": "Target server ids",
         "settings.guildIds.note":
-            "Easiest from a server icon's right-click menu → Translate with Undertone. Here, ids are separated by commas or spaces.",
+            "Filled in from a server's right-click menu. Not used while every server is on.",
         "settings.excludedChannelIds": "Channels left untranslated",
         "settings.excludedChannelIds.note":
-            "Right-click a channel → Translate with Undertone to switch one off. Threads follow their channel.",
+            "Filled in when you switch a channel off from its right-click menu. Threads follow their channel.",
         "settings.current": "Now: {names}",
         "menu.translateGuild": "Translate with Undertone",
         "menu.everyGuild": "Translate with Undertone (every server is on)",
@@ -83,58 +81,45 @@ const STRINGS = {
         "menu.showTranslation": "Show Undertone translation",
         "menu.retranslate": "Translate again with Undertone",
         "settings.translateDms": "Translate direct messages",
-        "settings.translateDms.note":
-            "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
+        "settings.translateDms.note": "Private conversations are sent to the backend too.",
         "settings.targetLanguage": "Translate into",
-        "settings.targetLanguage.note":
-            "Messages not already in this language are translated into it. For a language in the Latin alphabet, a message is skipped only when its common words clearly belong to it; anything unclear is sent once and hidden if it comes back unchanged.",
+        "settings.targetLanguage.note": "Messages already in this language are left alone.",
         "settings.uiLanguage": "Plugin language",
-        "settings.uiLanguage.note": "Language of this panel and the plugin's own messages.",
         "settings.threshold": "Treat as already translated above",
         "settings.threshold.note":
-            "A message is skipped when this share of its letters is already in the target language's script.",
+            "Skip a message when this share of it is already in the target language's script.",
         "settings.maxChars": "Maximum characters to translate",
         "settings.maxChars.note": "Longer messages are skipped.",
         "settings.maxConcurrent": "Concurrent requests",
-        "settings.maxConcurrent.note":
-            "How many translations run at once. Lower it to 1–2 if a free tier keeps limiting you.",
+        "settings.maxConcurrent.note": "Lower it to 1–2 if a free tier keeps limiting you.",
         "settings.testConnection": "Connection",
-        "settings.testConnection.note": "Translates a short sample with the key and model set here.",
         "settings.testConnection.action": "Test",
         "settings.autoTranslate": "Automatic translation",
         "settings.autoTranslate.note":
-            "Off is manual mode: a Translate button appears under each message and only what you press is sent. Use it to save tokens or stay inside a free-tier quota.",
+            "When off, a Translate button appears under each message and only what you press is sent.",
         "settings.hotkey": "Automatic translation shortcut",
-        "settings.hotkey.note":
-            "Toggles automatic translation without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
+        "settings.hotkey.note": "Click the field and press the keys. Clear it to use no shortcut.",
         "settings.translateOutgoing": "Translate the messages I send",
         "settings.translateOutgoing.note":
-            "Replaces what you type with its translation before it is sent, in the target servers and DMs only. Other people never see the original, so leave this off unless you mean it.",
+            "What you type is replaced by its translation. Other people never see the original.",
         "settings.outgoingLanguage": "Send my messages in",
-        "settings.outgoingLanguage.note":
-            "What you type is translated into this language. A message already written in it is sent untouched.",
         "settings.outgoingHotkey": "Outgoing translation shortcut",
-        "settings.outgoingHotkey.note":
-            "Toggles the switch above without opening this panel. Click the field and press the keys; clear it to use no shortcut.",
         "settings.translateBots": "Translate bot messages",
         "settings.translateOwnMessages": "Translate my own messages",
         "settings.showPending": "Show while translating",
         "settings.showErrors": "Pop up a notice when a translation fails",
+        "settings.section.translate": "Translation",
+        "settings.section.details": "Fine-tuning",
         "settings.section.connection": "Translation service",
-        "settings.section.scope": "Where to translate",
-        "settings.section.incoming": "Messages I receive",
         "settings.section.outgoing": "Messages I send",
-        "settings.section.display": "Display",
         "settings.section.advanced": "Advanced",
         "settings.autoUpdate": "Check for updates automatically",
-        "settings.autoUpdate.note":
-            "Checks the plugin's repository every few hours. A new version is installed only if its signature checks out, and only after you agree to it.",
+        "settings.autoUpdate.note": "Only a signed version is installed, and only after you agree.",
         "settings.checkUpdate": "Updates",
-        "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
         "settings.checkUpdate.action": "Check",
         "settings.clearCache": "Translation cache",
         "settings.clearCache.note":
-            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Undertone; clear this after changing the base URL.",
+            "Use it after changing the base URL. To redo one translation, right-click its message instead.",
         "settings.clearCache.action": "Clear",
         "clearCache.title": "Clear the translation cache?",
         "clearCache.body":
@@ -142,8 +127,7 @@ const STRINGS = {
         "clearCache.confirm": "Clear",
         "clearCache.cancel": "Cancel",
         "settings.debugLog": "Log why a message was skipped",
-        "settings.debugLog.note":
-            "Writes the reason a message was not translated to the console (Ctrl+Shift+I). Turn this on when nothing appears and you cannot tell why.",
+        "settings.debugLog.note": "Writes why a message was skipped to the console (Ctrl+Shift+I).",
 
         "keySource.deepseek": "Get one at platform.deepseek.com → API Keys.",
         "keySource.gemini": "Get one at aistudio.google.com → Get API key. It has a free tier.",
@@ -217,28 +201,25 @@ const STRINGS = {
         "toast.testFailed": "연결 실패 · {message}",
 
         "settings.provider": "번역 백엔드",
-        "settings.provider.note":
-            "바꾸면 모델·URL 이 그 백엔드의 기본값으로 맞춰집니다. 각 백엔드의 API 키는 따로 기억합니다.",
+        "settings.provider.note": "백엔드마다 API 키를 따로 기억합니다.",
         "settings.apiKey": "{provider} API 키",
         "settings.apiKey.note":
-            "저장된 키는 표시되지 않습니다. 새 키를 입력하면 교체되고, 비워 두면 유지됩니다. 지우려면 {clear} 를 입력하세요.",
+            "저장된 키는 보이지 않습니다. 새 키를 입력하면 바뀌고, {clear} 를 입력하면 지워집니다.",
         "settings.apiKey.saved": "저장됨 · {fingerprint}",
         "settings.model": "모델 이름",
         "settings.model.custom": "직접 입력…",
         "settings.customModel": "직접 입력한 모델 이름",
         "settings.customModel.note":
-            "백엔드가 쓰는 모델 ID 를 그대로 입력하세요. 플러그인이 모르는 새 모델도 이렇게 쓸 수 있습니다. 비워 두면 {fallback} 을 씁니다.",
+            "백엔드 문서에 적힌 모델 ID 를 그대로 적습니다. 비우면 {fallback} 을 씁니다.",
         "settings.baseUrl": "API Base URL",
-        "settings.baseUrl.note": "백엔드의 API 주소. 백엔드를 고르면 자동으로 채워집니다.",
+        "settings.baseUrl.note": "백엔드를 고르면 채워집니다.",
         "settings.allGuilds": "모든 서버에서 번역",
-        "settings.allGuilds.note":
-            "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
+        "settings.allGuilds.note": "끄면 서버 우클릭 메뉴에서 켠 서버만 번역합니다.",
         "settings.guildIds": "대상 서버 ID",
         "settings.guildIds.note":
-            "서버 아이콘 우클릭 → Undertone으로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
+            "서버 우클릭 메뉴에서 켜면 채워집니다. 모든 서버에서 번역이 켜져 있으면 쓰지 않습니다.",
         "settings.excludedChannelIds": "번역하지 않을 채널",
-        "settings.excludedChannelIds.note":
-            "채널 우클릭 → Undertone으로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
+        "settings.excludedChannelIds.note": "채널 우클릭 메뉴에서 끄면 채워집니다. 스레드는 채널을 따릅니다.",
         "settings.current": "현재: {names}",
         "menu.translateGuild": "Undertone으로 번역",
         "menu.everyGuild": "Undertone으로 번역 (모든 서버가 켜져 있음)",
@@ -246,57 +227,43 @@ const STRINGS = {
         "menu.showTranslation": "Undertone 번역 보이기",
         "menu.retranslate": "Undertone으로 다시 번역",
         "settings.translateDms": "DM 도 번역",
-        "settings.translateDms.note":
-            "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
+        "settings.translateDms.note": "사적인 대화도 번역 백엔드로 전송됩니다.",
         "settings.targetLanguage": "번역할 언어",
-        "settings.targetLanguage.note":
-            "이 언어가 아닌 메시지를 이 언어로 번역합니다. 라틴 문자를 쓰는 언어는 자주 쓰는 단어로 이 언어임이 분명할 때만 건너뛰고, 애매하면 한 번 전송한 뒤 원문 그대로 돌아오면 표시하지 않습니다.",
+        "settings.targetLanguage.note": "이미 이 언어로 쓰인 메시지는 번역하지 않습니다.",
         "settings.uiLanguage": "플러그인 언어",
-        "settings.uiLanguage.note": "이 설정 패널과 플러그인 표시 문구의 언어입니다.",
         "settings.threshold": "번역 생략 기준 비율",
-        "settings.threshold.note": "메시지의 글자 중 이 비율 이상이 대상 언어 문자면 번역하지 않습니다.",
+        "settings.threshold.note": "메시지에서 이 비율 이상이 이미 번역할 언어의 문자면 건너뜁니다.",
         "settings.maxChars": "번역할 최대 글자 수",
         "settings.maxChars.note": "이보다 긴 메시지는 건너뜁니다.",
         "settings.maxConcurrent": "동시 번역 요청 수",
-        "settings.maxConcurrent.note":
-            "한 번에 진행하는 번역 수입니다. 무료 등급에서 요청 제한에 자주 걸리면 1–2로 낮추세요.",
+        "settings.maxConcurrent.note": "무료 등급에서 요청 제한에 자주 걸리면 1–2로 낮추세요.",
         "settings.testConnection": "연결 확인",
-        "settings.testConnection.note": "여기 설정된 키와 모델로 짧은 문장을 번역해 봅니다.",
         "settings.testConnection.action": "테스트",
         "settings.autoTranslate": "자동 번역",
-        "settings.autoTranslate.note":
-            "끄면 수동 모드가 됩니다. 메시지 아래에 번역 버튼만 나오고, 누른 것만 전송합니다. 토큰을 아끼거나 무료 티어 한도를 지킬 때 쓰세요.",
+        "settings.autoTranslate.note": "끄면 메시지마다 번역 버튼이 나오고, 누른 것만 번역합니다.",
         "settings.hotkey": "자동 번역 단축키",
-        "settings.hotkey.note":
-            "설정 창을 열지 않고 자동 번역을 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 단축키를 쓰지 않습니다.",
+        "settings.hotkey.note": "칸을 누르고 원하는 키를 누르세요. 비우면 단축키를 쓰지 않습니다.",
         "settings.translateOutgoing": "보내는 메시지도 번역",
         "settings.translateOutgoing.note":
-            "대상 서버와 DM 에 한해, 입력한 글을 번역문으로 바꿔서 보냅니다. 상대는 원문을 볼 수 없으니 필요할 때만 켜세요.",
+            "입력한 글이 번역문으로 바뀌어 나갑니다. 상대는 원문을 볼 수 없습니다.",
         "settings.outgoingLanguage": "보낼 때 번역할 언어",
-        "settings.outgoingLanguage.note":
-            "입력한 글을 이 언어로 번역해 보냅니다. 이미 이 언어로 쓴 메시지는 그대로 나갑니다.",
         "settings.outgoingHotkey": "보내는 메시지 번역 단축키",
-        "settings.outgoingHotkey.note":
-            "설정 창을 열지 않고 위 스위치를 껐다 켭니다. 칸을 누른 뒤 원하는 키를 누르세요. 지우면 쓰지 않습니다.",
         "settings.translateBots": "봇 메시지도 번역",
         "settings.translateOwnMessages": "내 메시지도 번역",
         "settings.showPending": "번역 중 표시",
         "settings.showErrors": "번역 실패 시 알림 띄우기",
+        "settings.section.translate": "번역",
+        "settings.section.details": "세부 설정",
         "settings.section.connection": "번역 서비스",
-        "settings.section.scope": "번역할 곳",
-        "settings.section.incoming": "받는 메시지",
         "settings.section.outgoing": "보내는 메시지",
-        "settings.section.display": "표시",
         "settings.section.advanced": "고급",
         "settings.autoUpdate": "업데이트 자동 확인",
-        "settings.autoUpdate.note":
-            "몇 시간마다 플러그인 저장소를 확인합니다. 새 버전은 서명이 맞을 때만, 설치할지 물어본 뒤에 설치합니다.",
+        "settings.autoUpdate.note": "서명이 확인된 버전만, 물어본 뒤에 설치합니다.",
         "settings.checkUpdate": "업데이트",
-        "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
         "settings.checkUpdate.action": "확인",
         "settings.clearCache": "번역 캐시",
         "settings.clearCache.note":
-            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Undertone으로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
+            "Base URL 을 바꿨을 때 쓰세요. 번역 하나만 다시 하려면 메시지 우클릭 메뉴를 쓰면 됩니다.",
         "settings.clearCache.action": "비우기",
         "clearCache.title": "번역 캐시를 비울까요?",
         "clearCache.body":
@@ -304,8 +271,7 @@ const STRINGS = {
         "clearCache.confirm": "비우기",
         "clearCache.cancel": "취소",
         "settings.debugLog": "번역하지 않은 사유 기록",
-        "settings.debugLog.note":
-            "메시지를 번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다. 아무것도 안 나오는데 이유를 알 수 없을 때 켜세요.",
+        "settings.debugLog.note": "번역하지 않은 이유를 콘솔(Ctrl+Shift+I)에 남깁니다.",
 
         "keySource.deepseek": "platform.deepseek.com → API Keys 에서 발급합니다.",
         "keySource.gemini": "aistudio.google.com → Get API key 에서 발급합니다. 무료 티어가 있습니다.",

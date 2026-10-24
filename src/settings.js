@@ -146,286 +146,245 @@ export class Settings {
 
     _panelSpec() {
         const v = this._values;
+        const category = (id, shown, items) => ({
+            type: "category",
+            id,
+            name: t(`settings.section.${id}`),
+            collapsible: true,
+            shown,
+            settings: withChangeHandlers(this, items),
+        });
         return {
             onChange: (_categoryId, settingId, value) => this.set(settingId, value),
 
             onDrawerToggle: (id, shown) => DRAWERS.set(id, shown),
             getDrawerState: (id, fallback) => DRAWERS.get(id) ?? fallback,
             settings: [
-                {
-                    type: "category",
-                    id: "connection",
-                    name: t("settings.section.connection"),
-                    collapsible: true,
-                    shown: true,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "dropdown",
-                            id: "provider",
-                            name: t("settings.provider"),
-                            note: t("settings.provider.note"),
-                            value: v.provider,
-                            options: PROVIDER_OPTIONS,
-                        },
-                        {
-                            type: "text",
-                            id: "apiKey",
-                            name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
+                category("connection", true, [
+                    {
+                        type: "dropdown",
+                        id: "provider",
+                        name: t("settings.provider"),
+                        note: t("settings.provider.note"),
+                        value: v.provider,
+                        options: PROVIDER_OPTIONS,
+                    },
+                    {
+                        type: "text",
+                        id: "apiKey",
+                        name: t("settings.apiKey", { provider: getProvider(v.provider).label }),
 
-                            note: v.apiKey
-                                ? t("settings.apiKey.note", { clear: CLEAR_TOKEN })
-                                : t(`keySource.${v.provider}`),
-                            placeholder: v.apiKey
-                                ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) })
-                                : getProvider(v.provider).keyHint,
-                            value: "",
-                        },
-                        ...modelFields(v, this.usesCustomModel),
-                        {
-                            type: "button",
-                            id: "testConnection",
-                            name: t("settings.testConnection"),
-                            note: t("settings.testConnection.note"),
-                            children: t("settings.testConnection.action"),
-                            onClick: () => this._actions.testConnection?.(),
-                        },
-                    ]),
-                },
-                {
-                    type: "category",
-                    id: "scope",
-                    name: t("settings.section.scope"),
-                    collapsible: true,
-                    shown: true,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "switch",
-                            id: "allGuilds",
-                            name: t("settings.allGuilds"),
-                            note: t("settings.allGuilds.note"),
-                            value: v.allGuilds,
-                        },
-                        {
-                            type: "text",
-                            id: "guildIds",
-                            name: t("settings.guildIds"),
-                            note: withCurrent(
-                                t("settings.guildIds.note"),
-                                namesOf(this._guildIdSet, this._actions.guildName),
-                            ),
-                            value: v.guildIds,
-
-                            disableWith: "allGuilds",
-                        },
-                        {
-                            type: "text",
-                            id: "excludedChannelIds",
-                            name: t("settings.excludedChannelIds"),
-                            note: withCurrent(
-                                t("settings.excludedChannelIds.note"),
-                                namesOf(this._excludedChannelSet, this._actions.channelName),
-                            ),
-                            value: v.excludedChannelIds,
-                        },
-                        {
-                            type: "switch",
-                            id: "translateDms",
-                            name: t("settings.translateDms"),
-                            note: t("settings.translateDms.note"),
-                            value: v.translateDms,
-                        },
-                    ]),
-                },
-                {
-                    type: "category",
-                    id: "incoming",
-                    name: t("settings.section.incoming"),
-                    collapsible: true,
-                    shown: true,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "dropdown",
-                            id: "targetLanguage",
-                            name: t("settings.targetLanguage"),
-                            note: t("settings.targetLanguage.note"),
-                            value: v.targetLanguage,
-                            options: LANGUAGE_OPTIONS,
-                        },
-                        {
-                            type: "switch",
-                            id: "autoTranslate",
-                            name: t("settings.autoTranslate"),
-                            note: t("settings.autoTranslate.note"),
-                            value: v.autoTranslate,
-                        },
-                        {
-                            type: "keybind",
-                            id: "hotkey",
-                            name: t("settings.hotkey"),
-                            note: t("settings.hotkey.note"),
-                            value: v.hotkey,
-                            clearable: true,
-                        },
-                        {
-                            type: "slider",
-                            id: "skipThreshold",
-                            name: t("settings.threshold"),
-                            note: t("settings.threshold.note"),
-                            value: v.skipThreshold,
-                            min: 5,
-                            max: 95,
-                            step: 5,
-                            units: "%",
-                            markers: [10, 30, 50, 70, 90],
-                        },
-                        {
-                            type: "number",
-                            id: "maxChars",
-                            name: t("settings.maxChars"),
-                            note: t("settings.maxChars.note"),
-                            value: v.maxChars,
-                            min: 200,
-                            max: 8000,
-                            step: 100,
-                        },
-                        {
-                            type: "switch",
-                            id: "translateBots",
-                            name: t("settings.translateBots"),
-                            value: v.translateBots,
-                        },
-                        {
-                            type: "switch",
-                            id: "translateOwnMessages",
-                            name: t("settings.translateOwnMessages"),
-                            value: v.translateOwnMessages,
-                        },
-                    ]),
-                },
-                {
-                    type: "category",
-                    id: "outgoing",
-                    name: t("settings.section.outgoing"),
-                    collapsible: true,
-                    shown: true,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "switch",
-                            id: "translateOutgoing",
-                            name: t("settings.translateOutgoing"),
-                            note: t("settings.translateOutgoing.note"),
-                            value: v.translateOutgoing,
-                        },
-                        {
-                            type: "dropdown",
-                            id: "outgoingLanguage",
-                            name: t("settings.outgoingLanguage"),
-                            note: t("settings.outgoingLanguage.note"),
-                            value: v.outgoingLanguage,
-                            options: LANGUAGE_OPTIONS,
-                            enableWith: "translateOutgoing",
-                        },
-                        {
-                            type: "keybind",
-                            id: "outgoingHotkey",
-                            name: t("settings.outgoingHotkey"),
-                            note: t("settings.outgoingHotkey.note"),
-                            value: v.outgoingHotkey,
-                            clearable: true,
-                        },
-                    ]),
-                },
-                {
-                    type: "category",
-                    id: "display",
-                    name: t("settings.section.display"),
-                    collapsible: true,
-                    shown: true,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "switch",
-                            id: "showPending",
-                            name: t("settings.showPending"),
-                            value: v.showPending,
-                        },
-                        {
-                            type: "switch",
-                            id: "showErrors",
-                            name: t("settings.showErrors"),
-                            value: v.showErrors,
-                        },
-                        {
-                            type: "dropdown",
-                            id: "uiLanguage",
-                            name: t("settings.uiLanguage"),
-                            note: t("settings.uiLanguage.note"),
-                            value: v.uiLanguage,
-                            options: [
-                                { label: t("language.auto"), value: "auto" },
-                                ...UI_LANGUAGES.map((code) => ({
-                                    label: UI_LANGUAGE_NAMES[code] ?? code,
-                                    value: code,
-                                })),
-                            ],
-                        },
-                    ]),
-                },
-                {
-                    type: "category",
-                    id: "advanced",
-                    name: t("settings.section.advanced"),
-                    collapsible: true,
-                    shown: false,
-                    settings: withChangeHandlers(this, [
-                        {
-                            type: "text",
-                            id: "baseUrl",
-                            name: t("settings.baseUrl"),
-                            note: t("settings.baseUrl.note"),
-                            value: v.baseUrl,
-                        },
-                        {
-                            type: "number",
-                            id: "maxConcurrent",
-                            name: t("settings.maxConcurrent"),
-                            note: t("settings.maxConcurrent.note"),
-                            value: v.maxConcurrent,
-                            min: 1,
-                            max: 10,
-                        },
-                        {
-                            type: "switch",
-                            id: "debugLog",
-                            name: t("settings.debugLog"),
-                            note: t("settings.debugLog.note"),
-                            value: v.debugLog,
-                        },
-                        {
-                            type: "switch",
-                            id: "autoUpdate",
-                            name: t("settings.autoUpdate"),
-                            note: t("settings.autoUpdate.note"),
-                            value: v.autoUpdate,
-                        },
-                        {
-                            type: "button",
-                            id: "checkUpdate",
-                            name: t("settings.checkUpdate"),
-                            note: t("settings.checkUpdate.note"),
-                            children: t("settings.checkUpdate.action"),
-                            onClick: () => this._actions.checkUpdate?.(),
-                        },
-                        {
-                            type: "button",
-                            id: "clearCache",
-                            name: t("settings.clearCache"),
-                            note: t("settings.clearCache.note"),
-                            children: t("settings.clearCache.action"),
-                            color: "red",
-                            onClick: () => this._actions.clearCache?.(),
-                        },
-                    ]),
-                },
+                        note: v.apiKey
+                            ? t("settings.apiKey.note", { clear: CLEAR_TOKEN })
+                            : t(`keySource.${v.provider}`),
+                        placeholder: v.apiKey
+                            ? t("settings.apiKey.saved", { fingerprint: fingerprint(v.apiKey) })
+                            : getProvider(v.provider).keyHint,
+                        value: "",
+                    },
+                    ...modelFields(v, this.usesCustomModel),
+                    {
+                        type: "button",
+                        id: "testConnection",
+                        name: t("settings.testConnection"),
+                        children: t("settings.testConnection.action"),
+                        onClick: () => this._actions.testConnection?.(),
+                    },
+                ]),
+                category("translate", true, [
+                    {
+                        type: "dropdown",
+                        id: "targetLanguage",
+                        name: t("settings.targetLanguage"),
+                        note: t("settings.targetLanguage.note"),
+                        value: v.targetLanguage,
+                        options: LANGUAGE_OPTIONS,
+                    },
+                    {
+                        type: "switch",
+                        id: "autoTranslate",
+                        name: t("settings.autoTranslate"),
+                        note: t("settings.autoTranslate.note"),
+                        value: v.autoTranslate,
+                    },
+                    {
+                        type: "switch",
+                        id: "allGuilds",
+                        name: t("settings.allGuilds"),
+                        note: t("settings.allGuilds.note"),
+                        value: v.allGuilds,
+                    },
+                    {
+                        type: "switch",
+                        id: "translateDms",
+                        name: t("settings.translateDms"),
+                        note: t("settings.translateDms.note"),
+                        value: v.translateDms,
+                    },
+                ]),
+                category("outgoing", true, [
+                    {
+                        type: "switch",
+                        id: "translateOutgoing",
+                        name: t("settings.translateOutgoing"),
+                        note: t("settings.translateOutgoing.note"),
+                        value: v.translateOutgoing,
+                    },
+                    {
+                        type: "dropdown",
+                        id: "outgoingLanguage",
+                        name: t("settings.outgoingLanguage"),
+                        value: v.outgoingLanguage,
+                        options: LANGUAGE_OPTIONS,
+                        disabled: !v.translateOutgoing,
+                    },
+                ]),
+                category("details", false, [
+                    {
+                        type: "text",
+                        id: "guildIds",
+                        name: t("settings.guildIds"),
+                        note: withCurrent(
+                            t("settings.guildIds.note"),
+                            namesOf(this._guildIdSet, this._actions.guildName),
+                        ),
+                        value: v.guildIds,
+                        disabled: v.allGuilds,
+                    },
+                    {
+                        type: "text",
+                        id: "excludedChannelIds",
+                        name: t("settings.excludedChannelIds"),
+                        note: withCurrent(
+                            t("settings.excludedChannelIds.note"),
+                            namesOf(this._excludedChannelSet, this._actions.channelName),
+                        ),
+                        value: v.excludedChannelIds,
+                    },
+                    {
+                        type: "switch",
+                        id: "translateBots",
+                        name: t("settings.translateBots"),
+                        value: v.translateBots,
+                    },
+                    {
+                        type: "switch",
+                        id: "translateOwnMessages",
+                        name: t("settings.translateOwnMessages"),
+                        value: v.translateOwnMessages,
+                    },
+                    {
+                        type: "slider",
+                        id: "skipThreshold",
+                        name: t("settings.threshold"),
+                        note: t("settings.threshold.note"),
+                        value: v.skipThreshold,
+                        min: 5,
+                        max: 95,
+                        step: 5,
+                        units: "%",
+                        markers: [10, 30, 50, 70, 90],
+                    },
+                    {
+                        type: "number",
+                        id: "maxChars",
+                        name: t("settings.maxChars"),
+                        note: t("settings.maxChars.note"),
+                        value: v.maxChars,
+                        min: 200,
+                        max: 8000,
+                        step: 100,
+                    },
+                    {
+                        type: "keybind",
+                        id: "hotkey",
+                        name: t("settings.hotkey"),
+                        note: t("settings.hotkey.note"),
+                        value: v.hotkey,
+                        clearable: true,
+                    },
+                    {
+                        type: "keybind",
+                        id: "outgoingHotkey",
+                        name: t("settings.outgoingHotkey"),
+                        note: t("settings.hotkey.note"),
+                        value: v.outgoingHotkey,
+                        clearable: true,
+                    },
+                    {
+                        type: "switch",
+                        id: "showPending",
+                        name: t("settings.showPending"),
+                        value: v.showPending,
+                    },
+                    {
+                        type: "switch",
+                        id: "showErrors",
+                        name: t("settings.showErrors"),
+                        value: v.showErrors,
+                    },
+                    {
+                        type: "dropdown",
+                        id: "uiLanguage",
+                        name: t("settings.uiLanguage"),
+                        value: v.uiLanguage,
+                        options: [
+                            { label: t("language.auto"), value: "auto" },
+                            ...UI_LANGUAGES.map((code) => ({
+                                label: UI_LANGUAGE_NAMES[code] ?? code,
+                                value: code,
+                            })),
+                        ],
+                    },
+                ]),
+                category("advanced", false, [
+                    {
+                        type: "text",
+                        id: "baseUrl",
+                        name: t("settings.baseUrl"),
+                        note: t("settings.baseUrl.note"),
+                        value: v.baseUrl,
+                    },
+                    {
+                        type: "number",
+                        id: "maxConcurrent",
+                        name: t("settings.maxConcurrent"),
+                        note: t("settings.maxConcurrent.note"),
+                        value: v.maxConcurrent,
+                        min: 1,
+                        max: 10,
+                    },
+                    {
+                        type: "switch",
+                        id: "debugLog",
+                        name: t("settings.debugLog"),
+                        note: t("settings.debugLog.note"),
+                        value: v.debugLog,
+                    },
+                    {
+                        type: "switch",
+                        id: "autoUpdate",
+                        name: t("settings.autoUpdate"),
+                        note: t("settings.autoUpdate.note"),
+                        value: v.autoUpdate,
+                    },
+                    {
+                        type: "button",
+                        id: "checkUpdate",
+                        name: t("settings.checkUpdate"),
+                        children: t("settings.checkUpdate.action"),
+                        onClick: () => this._actions.checkUpdate?.(),
+                    },
+                    {
+                        type: "button",
+                        id: "clearCache",
+                        name: t("settings.clearCache"),
+                        note: t("settings.clearCache.note"),
+                        children: t("settings.clearCache.action"),
+                        color: "red",
+                        onClick: () => this._actions.clearCache?.(),
+                    },
+                ]),
             ],
         };
     }
@@ -463,7 +422,9 @@ function modelFields(v, custom) {
     ];
 }
 
-const PANEL_REBUILD = new Set(["provider", "uiLanguage"]);
+// BetterDiscord applies enableWith/disableWith inverted inside a category, so a field that
+// depends on a switch sets disabled itself and the panel rebuilds when that switch flips.
+const PANEL_REBUILD = new Set(["provider", "uiLanguage", "allGuilds", "translateOutgoing"]);
 
 const DRAWERS = new Map();
 

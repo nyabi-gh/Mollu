@@ -2416,22 +2416,40 @@ check("translation block: hidden leaves nothing in automatic mode and the button
     );
 });
 
-check("settings: every field sits in a section, and only the advanced one starts folded", () => {
+check("settings: the everyday sections are open, and the fine-tuning ones start folded", () => {
     const sections = new Settings()._panelSpec().settings;
     assert.ok(sections.every((entry) => entry.type === "category"));
     assert.deepEqual(
         sections.map((entry) => [entry.id, entry.shown]),
         [
             ["connection", true],
-            ["scope", true],
-            ["incoming", true],
+            ["translate", true],
             ["outgoing", true],
-            ["display", true],
+            ["details", false],
             ["advanced", false],
         ],
     );
-    const connection = sections[0].settings.map((entry) => entry.id);
-    assert.deepEqual(connection, ["provider", "apiKey", "model", "testConnection"]);
+    const ids = (index) => sections[index].settings.map((entry) => entry.id);
+    assert.deepEqual(ids(0), ["provider", "apiKey", "model", "testConnection"]);
+    assert.deepEqual(ids(1), ["targetLanguage", "autoTranslate", "allGuilds", "translateDms"]);
+    assert.deepEqual(ids(2), ["translateOutgoing", "outgoingLanguage"]);
+});
+
+check("settings: a field that depends on a switch is disabled the right way round", () => {
+    const settings = new Settings();
+    const field = (id) => panelFields(settings).find((entry) => entry.id === id);
+
+    settings.set("allGuilds", false);
+    settings.set("translateOutgoing", false);
+    assert.equal(field("guildIds").disabled, false, "the server list is what counts here");
+    assert.equal(field("outgoingLanguage").disabled, true);
+
+    settings.set("allGuilds", true);
+    settings.set("translateOutgoing", true);
+    assert.equal(field("guildIds").disabled, true, "every server is on, so the list is unused");
+    assert.equal(field("outgoingLanguage").disabled, false);
+
+    assert.ok(panelFields(settings).every((entry) => !entry.enableWith && !entry.disableWith));
 });
 
 await checkAsync(
