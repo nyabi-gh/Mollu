@@ -3,7 +3,7 @@
  * @author Nyabi
  * @version 1.5.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
- * @source https://github.com/nyabi-gh/Mollu
+ * @source https://github.com/nyabi-gh/Undertone
  */
 
 var __defProp = Object.defineProperty;
