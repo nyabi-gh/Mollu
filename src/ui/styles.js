@@ -1,5 +1,5 @@
 export const STYLES = `
-.mollu-translation__anchor {
+.undertone-translation__anchor {
     display: block;
     height: 0;
     margin: 0;
@@ -7,7 +7,7 @@ export const STYLES = `
     pointer-events: none;
     overflow-anchor: none;
 }
-.mollu-translation {
+.undertone-translation {
     overflow-anchor: none;
     contain: layout style;
     margin-top: 2px;
@@ -17,7 +17,7 @@ export const STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
 }
-.mollu-translation__badge {
+.undertone-translation__badge {
     display: inline-block;
     margin-right: 6px;
     padding: 0 5px;
@@ -29,20 +29,20 @@ export const STYLES = `
     color: var(--text-muted, #949ba4);
     background: var(--background-modifier-accent, rgba(148, 155, 164, 0.16));
 }
-.mollu-translation__emoji {
+.undertone-translation__emoji {
     width: 1.375em;
     height: 1.375em;
     margin: 0 1px;
     object-fit: contain;
     vertical-align: -0.3em;
 }
-.mollu-translation__mention {
+.undertone-translation__mention {
     padding: 0 2px;
     border-radius: 3px;
     color: var(--mention-foreground, #c9cdfb);
     background: var(--mention-background, rgba(88, 101, 242, 0.24));
 }
-.mollu-translation__code {
+.undertone-translation__code {
     padding: 0 3px;
     border-radius: 3px;
     font-family: var(--font-code, monospace);
@@ -50,62 +50,62 @@ export const STYLES = `
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
 }
-.mollu-md-h1,
-.mollu-md-h2,
-.mollu-md-h3,
-.mollu-md-subtext,
-.mollu-md-quote {
+.undertone-md-h1,
+.undertone-md-h2,
+.undertone-md-h3,
+.undertone-md-subtext,
+.undertone-md-quote {
     display: block;
 }
-.mollu-md-h1 {
+.undertone-md-h1 {
     font-size: 1.25em;
     font-weight: 700;
 }
-.mollu-md-h2 {
+.undertone-md-h2 {
     font-size: 1.15em;
     font-weight: 700;
 }
-.mollu-md-h3 {
+.undertone-md-h3 {
     font-size: 1.05em;
     font-weight: 700;
 }
-.mollu-md-subtext {
+.undertone-md-subtext {
     font-size: 0.8em;
 }
-.mollu-md-quote {
+.undertone-md-quote {
     margin: 2px 0;
     padding-left: 10px;
     border-left: 3px solid var(--background-modifier-accent, rgba(148, 155, 164, 0.4));
 }
-.mollu-md-link {
+.undertone-md-link {
     color: var(--text-link, #00a8fc);
     text-decoration: none;
 }
-.mollu-md-link:hover {
+.undertone-md-link:hover {
     text-decoration: underline;
 }
-.mollu-md-spoiler {
+.undertone-md-spoiler {
     padding: 0 2px;
     border-radius: 3px;
     color: transparent;
     background: var(--spoiler-hidden-background, #1e1f22);
     cursor: pointer;
 }
-.mollu-md-spoiler > * {
+.undertone-md-spoiler > * {
     opacity: 0;
 }
-.mollu-md-spoiler:focus-visible {
+.undertone-md-spoiler:focus-visible {
     outline: 2px solid var(--focus-primary, #00a8fc);
 }
-.mollu-md-spoiler--shown {
+.undertone-md-spoiler--shown {
     color: inherit;
     background: var(--spoiler-revealed-background, rgba(148, 155, 164, 0.16));
     cursor: auto;
 }
-.mollu-md-spoiler--shown > * {
+.undertone-md-spoiler--shown > * {
     opacity: 1;
 }
-.mollu-translation__trigger {
+.undertone-translation__trigger {
     display: inline-block;
     margin-top: 2px;
     padding: 0;
@@ -118,15 +118,15 @@ export const STYLES = `
     opacity: 0.75;
     cursor: pointer;
 }
-.mollu-translation__trigger:hover {
+.undertone-translation__trigger:hover {
     opacity: 1;
     text-decoration: underline;
 }
-.mollu-translation--pending {
+.undertone-translation--pending {
     opacity: 0.6;
     font-style: italic;
 }
-.mollu-translation--error {
+.undertone-translation--error {
     display: block;
     padding: 0;
     border: none;
@@ -138,8 +138,8 @@ export const STYLES = `
     opacity: 0.8;
     cursor: pointer;
 }
-.mollu-translation--error:hover,
-.mollu-translation--error:focus-visible {
+.undertone-translation--error:hover,
+.undertone-translation--error:focus-visible {
     opacity: 1;
     text-decoration: underline;
 }

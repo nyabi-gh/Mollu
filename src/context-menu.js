@@ -57,7 +57,7 @@ export class ContextMenus {
         append(api, tree, [
             {
                 type: "toggle",
-                id: "mollu-translate-guild",
+                id: "undertone-translate-guild",
                 label: t(allGuilds ? "menu.everyGuild" : "menu.translateGuild"),
                 checked: allGuilds || this._settings.guildIdSet.has(guildId),
                 disabled: allGuilds,
@@ -75,7 +75,7 @@ export class ContextMenus {
         append(api, tree, [
             {
                 type: "toggle",
-                id: "mollu-translate-channel",
+                id: "undertone-translate-channel",
                 label: t("menu.translateChannel"),
                 checked: !this._settings.excludedChannelSet.has(channel.id),
                 action: () => this._settings.toggleExcludedChannel(channel.id),
@@ -91,7 +91,7 @@ export class ContextMenus {
         if (menu.canHide) {
             items.push({
                 type: "toggle",
-                id: "mollu-show-translation",
+                id: "undertone-show-translation",
                 label: t("menu.showTranslation"),
                 checked: !menu.hidden,
                 action: () => this._blocks.setHidden(messageId, !menu.hidden),
@@ -100,7 +100,7 @@ export class ContextMenus {
         if (menu.canRetranslate && !getProvider(this._settings.current.provider).deterministic) {
             items.push({
                 type: "text",
-                id: "mollu-retranslate",
+                id: "undertone-retranslate",
                 label: t("menu.retranslate"),
                 action: () => this._blocks.retranslate(messageId),
             });

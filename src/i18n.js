@@ -14,6 +14,7 @@ const STRINGS = {
         "toast.needGuilds": "Add at least one target server id in the settings.",
         "toast.failed": "Translation failed · {message}",
         "toast.startFailed": "Could not start · {message}. Check the console log.",
+        "toast.renamed": "Mollu is now Undertone. Your settings and API keys came along.",
         "toast.autoOn": "Automatic translation on",
         "toast.autoOff": "Automatic translation off · manual mode",
         "toast.outgoingOn": "Your messages will be sent in {language}",
@@ -27,7 +28,7 @@ const STRINGS = {
         "toast.updateUnsigned": "v{version} is out but carries no signature, so it was not installed",
         "toast.updateBadSignature":
             "v{version} failed its signature check and was not installed. Download it only from the official repository.",
-        "update.title": "Mollu v{version} is available",
+        "update.title": "Undertone v{version} is available",
         "update.body": "Installed: v{current}. The signature checks out. What changed: {notes}",
         "update.confirm": "Install",
         "update.cancel": "Later",
@@ -71,16 +72,16 @@ const STRINGS = {
             "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
         "settings.guildIds": "Target server ids",
         "settings.guildIds.note":
-            "Easiest from a server icon's right-click menu → Translate with Mollu. Here, ids are separated by commas or spaces.",
+            "Easiest from a server icon's right-click menu → Translate with Undertone. Here, ids are separated by commas or spaces.",
         "settings.excludedChannelIds": "Channels left untranslated",
         "settings.excludedChannelIds.note":
-            "Right-click a channel → Translate with Mollu to switch one off. Threads follow their channel.",
+            "Right-click a channel → Translate with Undertone to switch one off. Threads follow their channel.",
         "settings.current": "Now: {names}",
-        "menu.translateGuild": "Translate with Mollu",
-        "menu.everyGuild": "Translate with Mollu (every server is on)",
-        "menu.translateChannel": "Translate with Mollu",
-        "menu.showTranslation": "Show Mollu translation",
-        "menu.retranslate": "Translate again with Mollu",
+        "menu.translateGuild": "Translate with Undertone",
+        "menu.everyGuild": "Translate with Undertone (every server is on)",
+        "menu.translateChannel": "Translate with Undertone",
+        "menu.showTranslation": "Show Undertone translation",
+        "menu.retranslate": "Translate again with Undertone",
         "settings.translateDms": "Translate direct messages",
         "settings.translateDms.note":
             "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
@@ -133,7 +134,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "Check",
         "settings.clearCache": "Translation cache",
         "settings.clearCache.note":
-            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Mollu; clear this after changing the base URL.",
+            "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Undertone; clear this after changing the base URL.",
         "settings.clearCache.action": "Clear",
         "clearCache.title": "Clear the translation cache?",
         "clearCache.body":
@@ -176,6 +177,7 @@ const STRINGS = {
         "toast.needGuilds": "설정에서 대상 서버 ID를 추가하세요.",
         "toast.failed": "번역 실패 · {message}",
         "toast.startFailed": "시작하지 못했습니다 · {message}. 콘솔 로그를 확인하세요.",
+        "toast.renamed": "Mollu가 Undertone으로 이름을 바꿨습니다. 설정과 API 키는 그대로 옮겨졌습니다.",
         "toast.autoOn": "자동 번역 켜짐",
         "toast.autoOff": "자동 번역 꺼짐 · 수동 모드",
         "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
@@ -189,7 +191,7 @@ const STRINGS = {
         "toast.updateUnsigned": "v{version} 이 나왔지만 서명이 없어 설치하지 않았습니다",
         "toast.updateBadSignature":
             "v{version} 의 서명이 맞지 않아 설치하지 않았습니다. 공식 저장소에서만 받으세요.",
-        "update.title": "Mollu v{version} 이 나왔습니다",
+        "update.title": "Undertone v{version} 이 나왔습니다",
         "update.body": "지금 버전: v{current}. 서명을 확인했습니다. 변경 내역: {notes}",
         "update.confirm": "설치",
         "update.cancel": "나중에",
@@ -233,16 +235,16 @@ const STRINGS = {
             "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
         "settings.guildIds": "대상 서버 ID",
         "settings.guildIds.note":
-            "서버 아이콘 우클릭 → Mollu로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
+            "서버 아이콘 우클릭 → Undertone으로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
         "settings.excludedChannelIds": "번역하지 않을 채널",
         "settings.excludedChannelIds.note":
-            "채널 우클릭 → Mollu로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
+            "채널 우클릭 → Undertone으로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
         "settings.current": "현재: {names}",
-        "menu.translateGuild": "Mollu로 번역",
-        "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
-        "menu.translateChannel": "Mollu로 번역",
-        "menu.showTranslation": "Mollu 번역 보이기",
-        "menu.retranslate": "Mollu로 다시 번역",
+        "menu.translateGuild": "Undertone으로 번역",
+        "menu.everyGuild": "Undertone으로 번역 (모든 서버가 켜져 있음)",
+        "menu.translateChannel": "Undertone으로 번역",
+        "menu.showTranslation": "Undertone 번역 보이기",
+        "menu.retranslate": "Undertone으로 다시 번역",
         "settings.translateDms": "DM 도 번역",
         "settings.translateDms.note":
             "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
@@ -294,7 +296,7 @@ const STRINGS = {
         "settings.checkUpdate.action": "확인",
         "settings.clearCache": "번역 캐시",
         "settings.clearCache.note":
-            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Mollu로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
+            "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Undertone으로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
         "settings.clearCache.action": "비우기",
         "clearCache.title": "번역 캐시를 비울까요?",
         "clearCache.body":

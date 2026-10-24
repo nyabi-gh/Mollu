@@ -1,6 +1,8 @@
 **한국어** · [English](README.en.md)
 
-# Mollu
+# Undertone
+
+> 이전 이름은 **Mollu** 입니다. Mollu 를 쓰고 있었다면 자동 업데이트가 Undertone 으로 바꿔 주고, 설정과 API 키, 번역 캐시도 그대로 옮겨집니다.
 
 디스코드에서 외국어 메시지를 자동으로 번역해 원문 아래에 붙여 주는 BetterDiscord 플러그인입니다.
 
@@ -22,9 +24,9 @@
 
 플러그인은 파일 하나입니다. 따로 설치할 프로그램은 없습니다.
 
-1. [**Mollu.plugin.js 다운로드**](https://github.com/nyabi-gh/Mollu/releases/latest/download/Mollu.plugin.js) — 항상 최신 릴리즈를 받습니다.
+1. [**Undertone.plugin.js 다운로드**](https://github.com/nyabi-gh/Mollu/releases/latest/download/Undertone.plugin.js) — 항상 최신 릴리즈를 받습니다.
 2. BetterDiscord 설정 → Plugins → **Open Plugins Folder** 를 눌러 열리는 폴더에 넣습니다.
-3. 플러그인 목록에서 **Mollu** 를 켭니다.
+3. 플러그인 목록에서 **Undertone** 을 켭니다.
 
 폴더를 직접 찾으려면:
 
@@ -52,8 +54,8 @@ API키를 받았으면 플러그인 설정에서:
 
 1. `번역 백엔드` 에서 쓸 서비스를 고릅니다.
 2. `API 키` 칸에 발급받은 키를 붙여 넣습니다.
-3. 번역할 서버를 정합니다. `모든 서버에서 번역` 을 켜거나, 서버 아이콘을 우클릭 → **Mollu로 번역** 을 켭니다.
-   - 특정 채널만 빼려면 채널을 우클릭 → **Mollu로 번역** 을 끄면 됩니다. 스레드는 채널을 따릅니다.
+3. 번역할 서버를 정합니다. `모든 서버에서 번역` 을 켜거나, 서버 아이콘을 우클릭 → **Undertone으로 번역** 을 켭니다.
+   - 특정 채널만 빼려면 채널을 우클릭 → **Undertone으로 번역** 을 끄면 됩니다. 스레드는 채널을 따릅니다.
    - DM 도 번역하려면 `DM 도 번역` 을 켭니다. 서버 설정과 별개라, 서버를 하나도 지정하지 않고 DM 만 번역할 수도 있습니다.
 
 > **Google Gemini 무료 사용량으로 쓸 때 주의**: 보낸 내용이 구글의 서비스 개선에 쓰입니다. 이 플러그인은 서버에 있는 **다른 사람의 메시지**를 보내므로, 그 대화가 학습에 쓰인다는 뜻입니다. 유료 사용량에는 해당하지 않습니다.
@@ -131,8 +133,8 @@ API키를 받았으면 플러그인 설정에서:
 - 내가 쓴 메시지는 기본적으로 번역하지 않습니다. 직접 써 보며 시험하려면 `내 메시지도 번역` 을 켜세요.
 - 영어·스페인어·프랑스어처럼 알파벳을 쓰는 언어끼리는 보내기 전에 구분할 수 없어서, 문장마다 한 번은 번역 서비스에 물어봅니다. 그 결과는 저장되니 같은 문장에 두 번 요금이 들지는 않습니다.
 - 번역에 실패하면 실패 표시를 눌러 다시 시도할 수 있습니다.
-- 메시지 하나의 번역만 숨기려면 메시지를 우클릭해 **Mollu 번역 보이기** 를 끄세요. 수동 모드에서는 `번역` 버튼으로 돌아갑니다. 숨긴 번역은 디스코드를 다시 시작하면 다시 보입니다.
-- 같은 메뉴의 **Mollu로 다시 번역** 은 번역 서비스에 새로 물어봅니다. 번역이 이상하게 나왔거나, 번역 서비스가 이미 번역할 언어라고 판단해 번역이 붙지 않은 메시지에 쓰세요. DeepL 은 같은 문장을 늘 똑같이 번역하므로 이 항목이 나오지 않습니다.
+- 메시지 하나의 번역만 숨기려면 메시지를 우클릭해 **Undertone 번역 보이기** 를 끄세요. 수동 모드에서는 `번역` 버튼으로 돌아갑니다. 숨긴 번역은 디스코드를 다시 시작하면 다시 보입니다.
+- 같은 메뉴의 **Undertone으로 다시 번역** 은 번역 서비스에 새로 물어봅니다. 번역이 이상하게 나왔거나, 번역 서비스가 이미 번역할 언어라고 판단해 번역이 붙지 않은 메시지에 쓰세요. DeepL 은 같은 문장을 늘 똑같이 번역하므로 이 항목이 나오지 않습니다.
 - 메시지를 수정하면 새 내용으로 다시 번역합니다.
 - 디스코드가 크게 업데이트되면 번역이 표시되지 않을 수 있습니다. 플러그인 업데이트를 기다려 주세요.
 
@@ -143,9 +145,9 @@ API키를 받았으면 플러그인 설정에서:
 - `보내는 메시지도 번역` 을 켜면 **내가 쓴 글도** 보내기 직전에 같은 곳으로 전송됩니다.
 - 보내기 전에 멘션·이모지·링크·코드는 다른 기호로 바꿔서 보내므로, 사용자 ID나 주소는 번역 서비스에 노출되지 않습니다.
 - 번역 결과와 **API 키는 아래 파일에 그대로 저장됩니다.** 이 파일을 남에게 보내거나 화면에 띄우지 마세요.
-  - Windows: `%AppData%\BetterDiscord\plugins\Mollu.config.json`
-  - macOS: `~/Library/Application Support/BetterDiscord/plugins/Mollu.config.json`
-  - Linux: `~/.config/BetterDiscord/plugins/Mollu.config.json`
+  - Windows: `%AppData%\BetterDiscord\plugins\Undertone.config.json`
+  - macOS: `~/Library/Application Support/BetterDiscord/plugins/Undertone.config.json`
+  - Linux: `~/.config/BetterDiscord/plugins/Undertone.config.json`
 - 저장된 걸 전부 지우려면 플러그인을 끈 뒤 이 파일을 삭제하면 됩니다.
 
 ## 배포 (관리자용)

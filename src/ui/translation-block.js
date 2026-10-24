@@ -191,7 +191,7 @@ export function TranslationBlock({ text, messageId, translator, blocks, settings
         null,
         React.createElement("div", {
             ref: anchorRef,
-            className: "mollu-translation__anchor",
+            className: "undertone-translation__anchor",
             "aria-hidden": "true",
         }),
         hidden
@@ -213,7 +213,7 @@ export function TranslationBlock({ text, messageId, translator, blocks, settings
 function renderTrigger(ref, onClick) {
     return React.createElement(
         "button",
-        { ref, type: "button", className: "mollu-translation__trigger", onClick },
+        { ref, type: "button", className: "undertone-translation__trigger", onClick },
         t("block.trigger"),
     );
 }
@@ -231,7 +231,7 @@ function renderBody(status, result, ctx) {
         return showPending
             ? React.createElement(
                   "div",
-                  { ref, className: "mollu-translation mollu-translation--pending" },
+                  { ref, className: "undertone-translation undertone-translation--pending" },
                   t(result?.waiting ? "block.waiting" : "block.pending"),
               )
             : null;
@@ -243,7 +243,7 @@ function renderBody(status, result, ctx) {
             {
                 ref,
                 type: "button",
-                className: "mollu-translation mollu-translation--error",
+                className: "undertone-translation undertone-translation--error",
                 title: t("block.errorTitle"),
                 onClick: onTrigger,
             },
@@ -252,9 +252,9 @@ function renderBody(status, result, ctx) {
     }
     return React.createElement(
         "div",
-        { ref, className: "mollu-translation", lang: language },
-        React.createElement("span", { className: "mollu-translation__badge" }, badge),
-        React.createElement("span", { className: "mollu-translation__text" }, ...content),
+        { ref, className: "undertone-translation", lang: language },
+        React.createElement("span", { className: "undertone-translation__badge" }, badge),
+        React.createElement("span", { className: "undertone-translation__text" }, ...content),
     );
 }
 

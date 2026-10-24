@@ -11,6 +11,7 @@ import { MessagePatch } from "./message-patch.js";
 import { Hotkey } from "./hotkey.js";
 import { OutgoingPatch, findMessageActions, waitForMessageActions } from "./outgoing-patch.js";
 import { Updater } from "./updater.js";
+import { isLegacyCopy, handOff, retireLegacy } from "./rename.js";
 import { ContextMenus } from "./context-menu.js";
 import { BlockControls } from "./ui/block-controls.js";
 import { findMessageContent, waitForMessageContent, createStores } from "./discord.js";
@@ -22,7 +23,7 @@ import { t } from "./i18n.js";
 import { getLanguage } from "./languages.js";
 import { logger } from "./lib/logger.js";
 
-export default class Mollu {
+export default class Undertone {
     constructor(meta) {
         this._meta = meta;
         this._stores = createStores();
@@ -75,7 +76,9 @@ export default class Mollu {
     }
 
     start() {
+        if (isLegacyCopy(this._meta)) return this._handOff();
         try {
+            retireLegacy();
             BdApi.DOM.addStyle(NAME, STYLES);
             this._translator.start();
 
@@ -116,6 +119,7 @@ export default class Mollu {
     }
 
     stop() {
+        if (isLegacyCopy(this._meta)) return;
         try {
             this._patch?.remove();
         } catch (e) {
@@ -143,6 +147,13 @@ export default class Mollu {
         this._patch = null;
         this._outgoing = null;
         logger.info("stopped");
+    }
+
+    _handOff() {
+        handOff(this._meta).then(
+            (done) => done && this._toast(t("toast.renamed"), "info"),
+            (e) => logger.error(`could not hand over to ${NAME}`, e),
+        );
     }
 
     _installMessagePatch(stores) {

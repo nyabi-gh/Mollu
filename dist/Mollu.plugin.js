@@ -1,7 +1,7 @@
 /**
  * @name Mollu
  * @author Nyabi
- * @version 1.4.1
+ * @version 1.5.0
  * @description Auto-translates messages in chosen Discord servers into the language you pick, shown under the original.
  * @source https://github.com/nyabi-gh/Mollu
  */
@@ -27,13 +27,13 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/index.js
 var index_exports = {};
 __export(index_exports, {
-  default: () => Mollu
+  default: () => Undertone
 });
 module.exports = __toCommonJS(index_exports);
 
 // src/constants.js
-var NAME = "Mollu";
-var LEGACY_NAMES = ["KoreanAutoTranslator"];
+var NAME = "Undertone";
+var LEGACY_NAMES = ["Mollu", "KoreanAutoTranslator"];
 var DEFAULT_SETTINGS = Object.freeze({
   provider: "deepseek",
   apiKey: "",
@@ -126,6 +126,7 @@ var STRINGS = {
     "toast.needGuilds": "Add at least one target server id in the settings.",
     "toast.failed": "Translation failed · {message}",
     "toast.startFailed": "Could not start · {message}. Check the console log.",
+    "toast.renamed": "Mollu is now Undertone. Your settings and API keys came along.",
     "toast.autoOn": "Automatic translation on",
     "toast.autoOff": "Automatic translation off · manual mode",
     "toast.outgoingOn": "Your messages will be sent in {language}",
@@ -138,7 +139,7 @@ var STRINGS = {
     "toast.updateFailed": "Could not check for updates · {message}",
     "toast.updateUnsigned": "v{version} is out but carries no signature, so it was not installed",
     "toast.updateBadSignature": "v{version} failed its signature check and was not installed. Download it only from the official repository.",
-    "update.title": "Mollu v{version} is available",
+    "update.title": "Undertone v{version} is available",
     "update.body": "Installed: v{current}. The signature checks out. What changed: {notes}",
     "update.confirm": "Install",
     "update.cancel": "Later",
@@ -175,15 +176,15 @@ var STRINGS = {
     "settings.allGuilds": "Translate in every server",
     "settings.allGuilds.note": "Ignores the list below and translates in every server you are in. Direct messages have their own switch below.",
     "settings.guildIds": "Target server ids",
-    "settings.guildIds.note": "Easiest from a server icon's right-click menu → Translate with Mollu. Here, ids are separated by commas or spaces.",
+    "settings.guildIds.note": "Easiest from a server icon's right-click menu → Translate with Undertone. Here, ids are separated by commas or spaces.",
     "settings.excludedChannelIds": "Channels left untranslated",
-    "settings.excludedChannelIds.note": "Right-click a channel → Translate with Mollu to switch one off. Threads follow their channel.",
+    "settings.excludedChannelIds.note": "Right-click a channel → Translate with Undertone to switch one off. Threads follow their channel.",
     "settings.current": "Now: {names}",
-    "menu.translateGuild": "Translate with Mollu",
-    "menu.everyGuild": "Translate with Mollu (every server is on)",
-    "menu.translateChannel": "Translate with Mollu",
-    "menu.showTranslation": "Show Mollu translation",
-    "menu.retranslate": "Translate again with Mollu",
+    "menu.translateGuild": "Translate with Undertone",
+    "menu.everyGuild": "Translate with Undertone (every server is on)",
+    "menu.translateChannel": "Translate with Undertone",
+    "menu.showTranslation": "Show Undertone translation",
+    "menu.retranslate": "Translate again with Undertone",
     "settings.translateDms": "Translate direct messages",
     "settings.translateDms.note": "Covers one-to-one DMs and group DMs, whatever the server settings above say. A private conversation is then sent to the translation backend like any other message, so turn this on only if that is fine with you.",
     "settings.targetLanguage": "Translate into",
@@ -225,7 +226,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "Check now, whether or not automatic updates are on.",
     "settings.checkUpdate.action": "Check",
     "settings.clearCache": "Translation cache",
-    "settings.clearCache.note": "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Mollu; clear this after changing the base URL.",
+    "settings.clearCache.note": "Translations are reused instead of being requested again. A translation is tied to the model that made it, so switching models already asks afresh. To redo one translation, right-click its message → Translate again with Undertone; clear this after changing the base URL.",
     "settings.clearCache.action": "Clear",
     "clearCache.title": "Clear the translation cache?",
     "clearCache.body": "{count} saved translations will be deleted. Messages already on screen will be sent to the API again, at the usual cost.",
@@ -259,6 +260,7 @@ var STRINGS = {
     "toast.needGuilds": "설정에서 대상 서버 ID를 추가하세요.",
     "toast.failed": "번역 실패 · {message}",
     "toast.startFailed": "시작하지 못했습니다 · {message}. 콘솔 로그를 확인하세요.",
+    "toast.renamed": "Mollu가 Undertone으로 이름을 바꿨습니다. 설정과 API 키는 그대로 옮겨졌습니다.",
     "toast.autoOn": "자동 번역 켜짐",
     "toast.autoOff": "자동 번역 꺼짐 · 수동 모드",
     "toast.outgoingOn": "보내는 메시지를 {language} 로 번역합니다",
@@ -271,7 +273,7 @@ var STRINGS = {
     "toast.updateFailed": "업데이트를 확인하지 못했습니다 · {message}",
     "toast.updateUnsigned": "v{version} 이 나왔지만 서명이 없어 설치하지 않았습니다",
     "toast.updateBadSignature": "v{version} 의 서명이 맞지 않아 설치하지 않았습니다. 공식 저장소에서만 받으세요.",
-    "update.title": "Mollu v{version} 이 나왔습니다",
+    "update.title": "Undertone v{version} 이 나왔습니다",
     "update.body": "지금 버전: v{current}. 서명을 확인했습니다. 변경 내역: {notes}",
     "update.confirm": "설치",
     "update.cancel": "나중에",
@@ -308,15 +310,15 @@ var STRINGS = {
     "settings.allGuilds": "모든 서버에서 번역",
     "settings.allGuilds.note": "아래 목록을 무시하고 참여 중인 모든 서버에서 번역합니다. DM 은 아래 스위치로 따로 켭니다.",
     "settings.guildIds": "대상 서버 ID",
-    "settings.guildIds.note": "서버 아이콘 우클릭 → Mollu로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
+    "settings.guildIds.note": "서버 아이콘 우클릭 → Undertone으로 번역 에서 켜는 게 가장 쉽습니다. 여기에는 ID를 쉼표나 공백으로 구분해 적습니다.",
     "settings.excludedChannelIds": "번역하지 않을 채널",
-    "settings.excludedChannelIds.note": "채널 우클릭 → Mollu로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
+    "settings.excludedChannelIds.note": "채널 우클릭 → Undertone으로 번역 을 끄면 여기에 추가됩니다. 스레드는 채널을 따릅니다.",
     "settings.current": "현재: {names}",
-    "menu.translateGuild": "Mollu로 번역",
-    "menu.everyGuild": "Mollu로 번역 (모든 서버가 켜져 있음)",
-    "menu.translateChannel": "Mollu로 번역",
-    "menu.showTranslation": "Mollu 번역 보이기",
-    "menu.retranslate": "Mollu로 다시 번역",
+    "menu.translateGuild": "Undertone으로 번역",
+    "menu.everyGuild": "Undertone으로 번역 (모든 서버가 켜져 있음)",
+    "menu.translateChannel": "Undertone으로 번역",
+    "menu.showTranslation": "Undertone 번역 보이기",
+    "menu.retranslate": "Undertone으로 다시 번역",
     "settings.translateDms": "DM 도 번역",
     "settings.translateDms.note": "위 서버 설정과 무관하게 1:1 DM 과 그룹 DM 에서 번역합니다. 사적인 대화도 다른 메시지와 똑같이 번역 백엔드로 전송되니, 괜찮을 때만 켜세요.",
     "settings.targetLanguage": "번역할 언어",
@@ -358,7 +360,7 @@ var STRINGS = {
     "settings.checkUpdate.note": "자동 업데이트와 무관하게 지금 바로 확인합니다.",
     "settings.checkUpdate.action": "확인",
     "settings.clearCache": "번역 캐시",
-    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Mollu로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
+    "settings.clearCache.note": "한 번 번역한 문장은 다시 요청하지 않고 캐시를 씁니다. 캐시는 모델별로 따로 쌓이므로 모델을 바꾸면 알아서 다시 번역합니다. 번역 하나만 다시 하려면 메시지 우클릭 → Undertone으로 다시 번역 을 쓰고, Base URL 을 바꿨을 때는 여기서 비우세요.",
     "settings.clearCache.action": "비우기",
     "clearCache.title": "번역 캐시를 비울까요?",
     "clearCache.body": "저장된 번역 {count}개가 삭제됩니다. 화면에 있는 메시지는 다시 API 로 전송되고 그만큼 비용이 듭니다.",
@@ -1295,7 +1297,7 @@ var Settings = class {
   buildPanel() {
     const settings = this;
     const useFocusLock = findFocusLock();
-    function MolluSettings() {
+    function UndertoneSettings() {
       const [revision, bump] = React.useState(0);
       const root = React.useRef(null);
       const modal = React.useMemo(
@@ -1323,7 +1325,7 @@ var Settings = class {
         React.cloneElement(panel, { key: `panel-${revision}` })
       );
     }
-    return React.createElement(MolluSettings);
+    return React.createElement(UndertoneSettings);
   }
   _panelSpec() {
     const v = this._values;
@@ -1682,9 +1684,9 @@ function fingerprint(key) {
 }
 function safeLoad() {
   try {
-    const loaded = BdApi.Data.load(NAME, "settings") || loadLegacy();
-    logger.info("settings loaded:", loaded ? `apiKey=${!!loaded.apiKey}` : "none stored");
-    return loaded || {};
+    const loaded2 = BdApi.Data.load(NAME, "settings") || loadLegacy();
+    logger.info("settings loaded:", loaded2 ? `apiKey=${!!loaded2.apiKey}` : "none stored");
+    return loaded2 || {};
   } catch (e) {
     logger.error("failed to load settings", e);
     return {};
@@ -2469,7 +2471,7 @@ function renderBlocks(source, ctx) {
     if (QUOTE_REST.test(line)) {
       flush(false);
       const rest = [line.replace(QUOTE_REST, ""), ...lines.slice(i + 1)].join("\n");
-      out.push(block("mollu-md-quote", rest, ctx));
+      out.push(block("undertone-md-quote", rest, ctx));
       return out;
     }
     if (QUOTE.test(line)) {
@@ -2477,7 +2479,7 @@ function renderBlocks(source, ctx) {
       const quoted = [];
       while (i < lines.length && QUOTE.test(lines[i])) quoted.push(QUOTE.exec(lines[i++])[1]);
       i -= 1;
-      out.push(block("mollu-md-quote", quoted.join("\n"), ctx));
+      out.push(block("undertone-md-quote", quoted.join("\n"), ctx));
       continue;
     }
     const heading = HEADING.exec(line);
@@ -2485,7 +2487,7 @@ function renderBlocks(source, ctx) {
     if (heading || subtext) {
       flush(false);
       out.push(
-        heading ? block(`mollu-md-h${heading[1].length}`, heading[2], ctx) : block("mollu-md-subtext", subtext[1], ctx)
+        heading ? block(`undertone-md-h${heading[1].length}`, heading[2], ctx) : block("undertone-md-subtext", subtext[1], ctx)
       );
       continue;
     }
@@ -2539,7 +2541,7 @@ function anchor(url, children, ctx) {
     "a",
     {
       key: ctx.key++,
-      className: "mollu-md-link",
+      className: "undertone-md-link",
       href: url,
       title: url,
       target: "_blank",
@@ -2558,8 +2560,8 @@ function Spoiler({ children }) {
   };
   return React.createElement(
     "span",
-    shown ? { className: "mollu-md-spoiler mollu-md-spoiler--shown" } : {
-      className: "mollu-md-spoiler",
+    shown ? { className: "undertone-md-spoiler undertone-md-spoiler--shown" } : {
+      className: "undertone-md-spoiler",
       role: "button",
       tabIndex: 0,
       "aria-label": t("block.spoiler"),
@@ -2577,7 +2579,7 @@ function renderToken(token, stores, guildId, key) {
     const [, animated, name, id6] = emoji;
     return React.createElement("img", {
       key,
-      className: "mollu-translation__emoji",
+      className: "undertone-translation__emoji",
       src: `${EMOJI_CDN}/${id6}.${animated ? "gif" : "webp"}?size=44&quality=lossless`,
       alt: `:${name}:`,
       title: `:${name}:`,
@@ -2593,17 +2595,21 @@ function renderToken(token, stores, guildId, key) {
   const timestamp = TIMESTAMP.exec(token);
   if (timestamp) {
     const formatted = formatTimestamp(Number(timestamp[1]), timestamp[2]);
-    return formatted == null ? token : React.createElement("span", { key, className: "mollu-translation__mention" }, formatted);
+    return formatted == null ? token : React.createElement("span", { key, className: "undertone-translation__mention" }, formatted);
   }
   const code = FENCED_CODE.exec(token) || INLINE_CODE.exec(token);
   if (code) {
-    return React.createElement("code", { key, className: "mollu-translation__code" }, code[1]);
+    return React.createElement("code", { key, className: "undertone-translation__code" }, code[1]);
   }
   return token;
 }
 function mention(key, name, sigil, fallback) {
   if (!name) return fallback;
-  return React.createElement("span", { key, className: "mollu-translation__mention" }, `${sigil}${name}`);
+  return React.createElement(
+    "span",
+    { key, className: "undertone-translation__mention" },
+    `${sigil}${name}`
+  );
 }
 var TIME_STYLES = {
   t: { timeStyle: "short" },
@@ -2906,7 +2912,7 @@ function TranslationBlock({ text, messageId, translator, blocks, settings, store
     null,
     React.createElement("div", {
       ref: anchorRef,
-      className: "mollu-translation__anchor",
+      className: "undertone-translation__anchor",
       "aria-hidden": "true"
     }),
     hidden ? autoTranslate ? null : renderTrigger(bodyRef, reveal) : renderBody(status, result, {
@@ -2923,7 +2929,7 @@ function TranslationBlock({ text, messageId, translator, blocks, settings, store
 function renderTrigger(ref, onClick) {
   return React.createElement(
     "button",
-    { ref, type: "button", className: "mollu-translation__trigger", onClick },
+    { ref, type: "button", className: "undertone-translation__trigger", onClick },
     t("block.trigger")
   );
 }
@@ -2938,7 +2944,7 @@ function renderBody(status, result, ctx) {
   if (status === "pending") {
     return showPending ? React.createElement(
       "div",
-      { ref, className: "mollu-translation mollu-translation--pending" },
+      { ref, className: "undertone-translation undertone-translation--pending" },
       t(result?.waiting ? "block.waiting" : "block.pending")
     ) : null;
   }
@@ -2948,7 +2954,7 @@ function renderBody(status, result, ctx) {
       {
         ref,
         type: "button",
-        className: "mollu-translation mollu-translation--error",
+        className: "undertone-translation undertone-translation--error",
         title: t("block.errorTitle"),
         onClick: onTrigger
       },
@@ -2957,9 +2963,9 @@ function renderBody(status, result, ctx) {
   }
   return React.createElement(
     "div",
-    { ref, className: "mollu-translation", lang: language },
-    React.createElement("span", { className: "mollu-translation__badge" }, badge),
-    React.createElement("span", { className: "mollu-translation__text" }, ...content)
+    { ref, className: "undertone-translation", lang: language },
+    React.createElement("span", { className: "undertone-translation__badge" }, badge),
+    React.createElement("span", { className: "undertone-translation__text" }, ...content)
   );
 }
 function useDisplaySettings(settings) {
@@ -3031,7 +3037,7 @@ var MessagePatch = class {
       return ret;
     }
     const block2 = React.createElement(TranslationBlock, {
-      key: "mollu-translation",
+      key: "undertone-translation",
       text: message.content,
       messageId: message.id,
       guildId,
@@ -3383,6 +3389,49 @@ function writePlugin(text) {
   fs.writeFileSync(path.join(BdApi.Plugins.folder, `${NAME}.plugin.js`), text);
 }
 
+// src/rename.js
+var POLL_MS = 500;
+function isLegacyCopy(meta) {
+  return LEGACY_NAMES.includes(meta?.name);
+}
+function asCurrent(text, legacyName) {
+  return renameBanner(text, legacyName, NAME);
+}
+async function handOff(meta, { fs = require("fs"), path = require("path"), timeoutMs = 3e4 } = {}) {
+  const folder = BdApi.Plugins.folder;
+  const own = path.join(folder, meta.filename || `${meta.name}.plugin.js`);
+  const target = path.join(folder, `${NAME}.plugin.js`);
+  if (!fs.existsSync(target)) fs.writeFileSync(target, asCurrent(fs.readFileSync(own, "utf8"), meta.name));
+  if (!await loaded(timeoutMs)) {
+    logger.warn(`${NAME} was written but BetterDiscord has not loaded it yet; trying again next start`);
+    return false;
+  }
+  BdApi.Plugins.enable(NAME);
+  fs.unlinkSync(own);
+  logger.info(`handed over from ${meta.name} to ${NAME}`);
+  return true;
+}
+function retireLegacy() {
+  for (const legacy of LEGACY_NAMES) {
+    try {
+      if (!BdApi.Plugins.isEnabled(legacy)) continue;
+      BdApi.Plugins.disable(legacy);
+      logger.info(`turned off ${legacy}; ${NAME} replaces it`);
+    } catch {
+    }
+  }
+}
+function renameBanner(text, from, to) {
+  return text.replace(new RegExp(`^( \\* @name )${from}$`, "m"), `$1${to}`);
+}
+async function loaded(timeoutMs) {
+  for (let waited = 0; ; waited += POLL_MS) {
+    if (BdApi.Plugins.get(NAME)) return true;
+    if (waited >= timeoutMs) return false;
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  }
+}
+
 // src/context-menu.js
 var CHANNEL_MENUS = ["channel-context", "thread-context"];
 var ContextMenus = class {
@@ -3433,7 +3482,7 @@ var ContextMenus = class {
     append(api, tree, [
       {
         type: "toggle",
-        id: "mollu-translate-guild",
+        id: "undertone-translate-guild",
         label: t(allGuilds ? "menu.everyGuild" : "menu.translateGuild"),
         checked: allGuilds || this._settings.guildIdSet.has(guildId),
         disabled: allGuilds,
@@ -3450,7 +3499,7 @@ var ContextMenus = class {
     append(api, tree, [
       {
         type: "toggle",
-        id: "mollu-translate-channel",
+        id: "undertone-translate-channel",
         label: t("menu.translateChannel"),
         checked: !this._settings.excludedChannelSet.has(channel.id),
         action: () => this._settings.toggleExcludedChannel(channel.id)
@@ -3465,7 +3514,7 @@ var ContextMenus = class {
     if (menu.canHide) {
       items.push({
         type: "toggle",
-        id: "mollu-show-translation",
+        id: "undertone-show-translation",
         label: t("menu.showTranslation"),
         checked: !menu.hidden,
         action: () => this._blocks.setHidden(messageId, !menu.hidden)
@@ -3474,7 +3523,7 @@ var ContextMenus = class {
     if (menu.canRetranslate && !getProvider(this._settings.current.provider).deterministic) {
       items.push({
         type: "text",
-        id: "mollu-retranslate",
+        id: "undertone-retranslate",
         label: t("menu.retranslate"),
         action: () => this._blocks.retranslate(messageId)
       });
@@ -3547,7 +3596,7 @@ var BlockControls = class {
 
 // src/ui/styles.js
 var STYLES = `
-.mollu-translation__anchor {
+.undertone-translation__anchor {
     display: block;
     height: 0;
     margin: 0;
@@ -3555,7 +3604,7 @@ var STYLES = `
     pointer-events: none;
     overflow-anchor: none;
 }
-.mollu-translation {
+.undertone-translation {
     overflow-anchor: none;
     contain: layout style;
     margin-top: 2px;
@@ -3565,7 +3614,7 @@ var STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
 }
-.mollu-translation__badge {
+.undertone-translation__badge {
     display: inline-block;
     margin-right: 6px;
     padding: 0 5px;
@@ -3577,20 +3626,20 @@ var STYLES = `
     color: var(--text-muted, #949ba4);
     background: var(--background-modifier-accent, rgba(148, 155, 164, 0.16));
 }
-.mollu-translation__emoji {
+.undertone-translation__emoji {
     width: 1.375em;
     height: 1.375em;
     margin: 0 1px;
     object-fit: contain;
     vertical-align: -0.3em;
 }
-.mollu-translation__mention {
+.undertone-translation__mention {
     padding: 0 2px;
     border-radius: 3px;
     color: var(--mention-foreground, #c9cdfb);
     background: var(--mention-background, rgba(88, 101, 242, 0.24));
 }
-.mollu-translation__code {
+.undertone-translation__code {
     padding: 0 3px;
     border-radius: 3px;
     font-family: var(--font-code, monospace);
@@ -3598,62 +3647,62 @@ var STYLES = `
     white-space: pre-wrap;
     background: var(--background-secondary, rgba(0, 0, 0, 0.2));
 }
-.mollu-md-h1,
-.mollu-md-h2,
-.mollu-md-h3,
-.mollu-md-subtext,
-.mollu-md-quote {
+.undertone-md-h1,
+.undertone-md-h2,
+.undertone-md-h3,
+.undertone-md-subtext,
+.undertone-md-quote {
     display: block;
 }
-.mollu-md-h1 {
+.undertone-md-h1 {
     font-size: 1.25em;
     font-weight: 700;
 }
-.mollu-md-h2 {
+.undertone-md-h2 {
     font-size: 1.15em;
     font-weight: 700;
 }
-.mollu-md-h3 {
+.undertone-md-h3 {
     font-size: 1.05em;
     font-weight: 700;
 }
-.mollu-md-subtext {
+.undertone-md-subtext {
     font-size: 0.8em;
 }
-.mollu-md-quote {
+.undertone-md-quote {
     margin: 2px 0;
     padding-left: 10px;
     border-left: 3px solid var(--background-modifier-accent, rgba(148, 155, 164, 0.4));
 }
-.mollu-md-link {
+.undertone-md-link {
     color: var(--text-link, #00a8fc);
     text-decoration: none;
 }
-.mollu-md-link:hover {
+.undertone-md-link:hover {
     text-decoration: underline;
 }
-.mollu-md-spoiler {
+.undertone-md-spoiler {
     padding: 0 2px;
     border-radius: 3px;
     color: transparent;
     background: var(--spoiler-hidden-background, #1e1f22);
     cursor: pointer;
 }
-.mollu-md-spoiler > * {
+.undertone-md-spoiler > * {
     opacity: 0;
 }
-.mollu-md-spoiler:focus-visible {
+.undertone-md-spoiler:focus-visible {
     outline: 2px solid var(--focus-primary, #00a8fc);
 }
-.mollu-md-spoiler--shown {
+.undertone-md-spoiler--shown {
     color: inherit;
     background: var(--spoiler-revealed-background, rgba(148, 155, 164, 0.16));
     cursor: auto;
 }
-.mollu-md-spoiler--shown > * {
+.undertone-md-spoiler--shown > * {
     opacity: 1;
 }
-.mollu-translation__trigger {
+.undertone-translation__trigger {
     display: inline-block;
     margin-top: 2px;
     padding: 0;
@@ -3666,15 +3715,15 @@ var STYLES = `
     opacity: 0.75;
     cursor: pointer;
 }
-.mollu-translation__trigger:hover {
+.undertone-translation__trigger:hover {
     opacity: 1;
     text-decoration: underline;
 }
-.mollu-translation--pending {
+.undertone-translation--pending {
     opacity: 0.6;
     font-style: italic;
 }
-.mollu-translation--error {
+.undertone-translation--error {
     display: block;
     padding: 0;
     border: none;
@@ -3686,15 +3735,15 @@ var STYLES = `
     opacity: 0.8;
     cursor: pointer;
 }
-.mollu-translation--error:hover,
-.mollu-translation--error:focus-visible {
+.undertone-translation--error:hover,
+.undertone-translation--error:focus-visible {
     opacity: 1;
     text-decoration: underline;
 }
 `;
 
 // src/index.js
-var Mollu = class {
+var Undertone = class {
   constructor(meta) {
     this._meta = meta;
     this._stores = createStores();
@@ -3744,7 +3793,9 @@ var Mollu = class {
     return this._settings.buildPanel();
   }
   start() {
+    if (isLegacyCopy(this._meta)) return this._handOff();
     try {
+      retireLegacy();
       BdApi.DOM.addStyle(NAME, STYLES);
       this._translator.start();
       for (const hotkey of this._hotkeys) hotkey.install();
@@ -3773,6 +3824,7 @@ var Mollu = class {
     }
   }
   stop() {
+    if (isLegacyCopy(this._meta)) return;
     try {
       this._patch?.remove();
     } catch (e) {
@@ -3797,6 +3849,12 @@ var Mollu = class {
     this._patch = null;
     this._outgoing = null;
     logger.info("stopped");
+  }
+  _handOff() {
+    handOff(this._meta).then(
+      (done2) => done2 && this._toast(t("toast.renamed"), "info"),
+      (e) => logger.error(`could not hand over to ${NAME}`, e)
+    );
   }
   _installMessagePatch(stores) {
     const target = findMessageContent();

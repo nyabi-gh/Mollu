@@ -1,6 +1,6 @@
-export const NAME = "Mollu";
+export const NAME = "Undertone";
 
-export const LEGACY_NAMES = ["KoreanAutoTranslator"];
+export const LEGACY_NAMES = ["Mollu", "KoreanAutoTranslator"];
 
 export const DEFAULT_SETTINGS = Object.freeze({
     provider: "deepseek",

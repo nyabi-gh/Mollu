@@ -53,7 +53,7 @@ export class MessagePatch {
         }
 
         const block = React.createElement(TranslationBlock, {
-            key: "mollu-translation",
+            key: "undertone-translation",
             text: message.content,
             messageId: message.id,
             guildId,

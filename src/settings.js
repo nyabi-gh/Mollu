@@ -110,7 +110,7 @@ export class Settings {
     buildPanel() {
         const settings = this;
         const useFocusLock = findFocusLock();
-        function MolluSettings() {
+        function UndertoneSettings() {
             const [revision, bump] = React.useState(0);
             const root = React.useRef(null);
             const modal = React.useMemo(
@@ -141,7 +141,7 @@ export class Settings {
                 React.cloneElement(panel, { key: `panel-${revision}` }),
             );
         }
-        return React.createElement(MolluSettings);
+        return React.createElement(UndertoneSettings);
     }
 
     _panelSpec() {

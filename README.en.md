@@ -1,6 +1,8 @@
 [한국어](README.md) · **English**
 
-# Mollu
+# Undertone
+
+> Formerly **Mollu**. If you used Mollu, the automatic update switches it to Undertone and brings your settings, API keys and translation cache along.
 
 A BetterDiscord plugin that translates foreign-language messages and shows the translation right under the original.
 
@@ -22,9 +24,9 @@ It works in both directions — into your language, or out of it.
 
 The plugin is a single file. There is nothing else to install.
 
-1. [**Download Mollu.plugin.js**](https://github.com/nyabi-gh/Mollu/releases/latest/download/Mollu.plugin.js) — always the newest release.
+1. [**Download Undertone.plugin.js**](https://github.com/nyabi-gh/Mollu/releases/latest/download/Undertone.plugin.js) — always the newest release.
 2. In BetterDiscord, go to Settings → Plugins → **Open Plugins Folder** and drop the file in.
-3. Enable **Mollu** in the plugin list.
+3. Enable **Undertone** in the plugin list.
 
 To find the folder yourself:
 
@@ -52,8 +54,8 @@ Once you have a key, in the plugin settings:
 
 1. Choose your service under `Translation backend`.
 2. Paste the key into `API key`.
-3. Decide where to translate: turn on `Translate in every server`, or right-click a server icon → **Translate with Mollu**.
-   - To leave one channel out, right-click it → **Translate with Mollu** and switch it off. Threads follow their channel.
+3. Decide where to translate: turn on `Translate in every server`, or right-click a server icon → **Translate with Undertone**.
+   - To leave one channel out, right-click it → **Translate with Undertone** and switch it off. Threads follow their channel.
    - To translate DMs as well, turn on `Translate direct messages`. It stands on its own, so you can leave every server off and translate only DMs.
 
 > **A warning about Gemini's free tier**: what you send is used to improve Google's products. This plugin sends **other people's messages** from your servers, which means their conversations become training data. The paid tier is not affected.
@@ -131,8 +133,8 @@ The settings come in six sections. **Advanced** starts folded.
 - Your own messages are not translated by default. Turn on `Translate my own messages` to test with your own typing.
 - Languages that share the Latin alphabet — English, Spanish, French — cannot be told apart before sending, so each sentence is sent once. The verdict is saved, so no sentence costs twice.
 - When a translation fails, click the failure line to try again.
-- To hide one message's translation, right-click it and switch off **Show Mollu translation**. In manual mode the `Translate` button comes back. Hidden translations show again when Discord restarts.
-- **Translate again with Mollu** in the same menu asks the service afresh. Use it on a translation that came out wrong, or on a message that got none because the service judged it already in your language. DeepL translates the same text the same way every time, so it does not offer this.
+- To hide one message's translation, right-click it and switch off **Show Undertone translation**. In manual mode the `Translate` button comes back. Hidden translations show again when Discord restarts.
+- **Translate again with Undertone** in the same menu asks the service afresh. Use it on a translation that came out wrong, or on a message that got none because the service judged it already in your language. DeepL translates the same text the same way every time, so it does not offer this.
 - Editing a message re-translates it.
 - A large Discord update can stop translations from appearing. Wait for a plugin update.
 
@@ -143,9 +145,9 @@ The settings come in six sections. **Advanced** starts folded.
 - With `Translate the messages I send` on, **what you type is sent too**, just before it goes out.
 - Mentions, emoji, links and code are swapped for placeholders before sending, so user ids and addresses are never exposed to the translation service.
 - Translations and **your API key are stored in plain text** in the file below. Do not share it or put it on screen.
-  - Windows: `%AppData%\BetterDiscord\plugins\Mollu.config.json`
-  - macOS: `~/Library/Application Support/BetterDiscord/plugins/Mollu.config.json`
-  - Linux: `~/.config/BetterDiscord/plugins/Mollu.config.json`
+  - Windows: `%AppData%\BetterDiscord\plugins\Undertone.config.json`
+  - macOS: `~/Library/Application Support/BetterDiscord/plugins/Undertone.config.json`
+  - Linux: `~/.config/BetterDiscord/plugins/Undertone.config.json`
 - To erase everything, disable the plugin and delete that file.
 
 ## Releasing (maintainers)

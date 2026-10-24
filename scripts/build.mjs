@@ -1,14 +1,17 @@
 import { build, context } from "esbuild";
-import { readFileSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { homedir, platform } from "node:os";
 import { fileURLToPath } from "node:url";
+import { asLegacy } from "../src/rename.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const meta = JSON.parse(readFileSync(join(root, "meta.json"), "utf8"));
 
 const outName = `${meta.name}.plugin.js`;
 const outfile = join(root, "dist", outName);
+// Releases from before the rename only update from this file name.
+const BRIDGES = ["Mollu"];
 
 const banner = `/**\n${Object.entries(meta)
     .map(([key, value]) => ` * @${key} ${value}`)
@@ -38,27 +41,37 @@ mkdirSync(join(root, "dist"), { recursive: true });
 if (watch) {
     const ctx = await context({
         ...options,
-        plugins: [installPlugin(install)],
+        plugins: [afterBuild(install)],
     });
     await ctx.watch();
     console.log(`watching src/ -> ${outfile}`);
 } else {
     await build(options);
     console.log(`built ${outfile}`);
+    writeBridges();
     if (install) installTo(pluginsDir());
 }
 
-function installPlugin(enabled) {
+function afterBuild(install) {
     return {
-        name: "install-to-betterdiscord",
+        name: "bridges-and-install",
         setup(pluginBuild) {
             pluginBuild.onEnd((result) => {
-                if (!enabled) return;
                 if (result.errors.length) return;
-                installTo(pluginsDir());
+                writeBridges();
+                if (install) installTo(pluginsDir());
             });
         },
     };
+}
+
+function writeBridges() {
+    const text = readFileSync(outfile, "utf8");
+    for (const name of BRIDGES) {
+        const bridge = join(root, "dist", `${name}.plugin.js`);
+        writeFileSync(bridge, asLegacy(text, name));
+        console.log(`built ${bridge}`);
+    }
 }
 
 function installTo(dir) {
